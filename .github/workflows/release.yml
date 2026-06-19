@@ -49,5 +49,28 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
+          $version = "$env:GITHUB_REF_NAME".TrimStart('v')
+          $lines = Get-Content CHANGELOG.md
+          $inSection = $false
+          $result = [System.Collections.Generic.List[string]]::new()
+          foreach ($line in $lines) {
+              if ($line -match "^##\s*\[?v?${version}\]?") {
+                  $inSection = $true
+                  continue
+              }
+              if ($inSection) {
+                  if ($line -match "^##\s+") {
+                      break
+                  }
+                  $result.Add($line)
+              }
+          }
+          $notes = ($result -join "`r`n").Trim()
+          if ($notes) {
+              $notes | Set-Content release_notes.txt
+          } else {
+              "No release notes found in CHANGELOG.md for version $version" | Set-Content release_notes.txt
+          }
+          
           $assets = Get-ChildItem dist -File | ForEach-Object { $_.FullName }
-          gh release create "$env:GITHUB_REF_NAME" @assets --title "$env:GITHUB_REF_NAME" --notes "Task Bar Trade Center $env:GITHUB_REF_NAME"
+          gh release create "$env:GITHUB_REF_NAME" @assets --title "$env:GITHUB_REF_NAME" --notes-file release_notes.txt
