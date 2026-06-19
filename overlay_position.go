@@ -146,11 +146,7 @@ func activeOverlayHeight() int32 {
 
 func placeOverlayByTooltipRect(tooltipRect RECT) RECT {
 	screen := virtualScreenRect()
-	tooltipWidth := tooltipRect.Right - tooltipRect.Left
 	tooltipHeight := tooltipRect.Bottom - tooltipRect.Top
-	if tooltipWidth <= 0 {
-		tooltipWidth = TooltipOverlayWidth
-	}
 	if tooltipHeight <= 0 {
 		tooltipHeight = TooltipOverlayReferenceHeight
 	}
@@ -161,7 +157,7 @@ func placeOverlayByTooltipRect(tooltipRect RECT) RECT {
 		localX = tooltipRect.Left - clientOrigin.X
 		localY = tooltipRect.Top - clientOrigin.Y
 	}
-	placement := overlayPlacementForTooltip(localY, tooltipWidth, tooltipHeight)
+	placement := overlayPlacementForTooltip(localY, tooltipHeight)
 	width := clampInt32(placement.PanelWidth, TooltipOverlayMinWidth, TooltipOverlayMaxWidth)
 	anchorOffsetX := findClosestXOffset(-localX)
 	anchorOffsetY := placement.OffsetY
@@ -202,35 +198,31 @@ func scaleByReference(value int32, referenceValue int32, referenceBase int32) in
 	return int32((int64(value)*int64(referenceValue) + int64(referenceBase)/2) / int64(referenceBase))
 }
 
-func overlayPlacementForTooltip(localY int32, width int32, height int32) OverlayPlacementCalibration {
+func overlayPlacementForTooltip(localY int32, height int32) OverlayPlacementCalibration {
 	GameLayoutMu.RLock()
 	calibrations := ActiveGameLayout.PlacementCalibrations
 	GameLayoutMu.RUnlock()
 	bestIndex := -1
-	bestSizeScore := int32(0)
+	bestHeightScore := int32(0)
 	bestYScore := int32(0)
 	for index, calibration := range calibrations {
-		sizeScore := absInt32(width-calibration.TooltipWidth) + absInt32(height-calibration.TooltipHeight)
+		heightScore := absInt32(height - calibration.TooltipHeight)
 		yScore := absInt32(localY - calibration.TooltipY)
-		if bestIndex < 0 || sizeScore < bestSizeScore || (sizeScore == bestSizeScore && yScore < bestYScore) {
+		if bestIndex < 0 || heightScore < bestHeightScore || (heightScore == bestHeightScore && yScore < bestYScore) {
 			bestIndex = index
-			bestSizeScore = sizeScore
+			bestHeightScore = heightScore
 			bestYScore = yScore
 		}
 	}
-	if bestIndex >= 0 && bestSizeScore <= 12 {
+	if bestIndex >= 0 && bestHeightScore <= 12 {
 		return calibrations[bestIndex]
 	}
 
-	panelWidth := scaleByReference(width, TooltipOverlayReferencePanelWidth, TooltipOverlayReferenceWidth)
-	panelWidth = clampInt32(panelWidth, TooltipOverlayMinWidth, TooltipOverlayMaxWidth)
-	referenceRightOverhang := int32(TooltipOverlayAnchorOffsetX + TooltipOverlayReferencePanelWidth - TooltipOverlayReferenceWidth)
 	return OverlayPlacementCalibration{
 		TooltipY:      localY,
-		TooltipWidth:  width,
 		TooltipHeight: height,
-		PanelWidth:    panelWidth,
-		OffsetX:       width + referenceRightOverhang - panelWidth,
+		PanelWidth:    TooltipOverlayReferencePanelWidth,
+		OffsetX:       TooltipOverlayAnchorOffsetX,
 		OffsetY:       scaleByReference(height, TooltipOverlayAnchorOffsetY, TooltipOverlayReferenceHeight),
 	}
 }

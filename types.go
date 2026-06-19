@@ -180,7 +180,6 @@ type WindowSearchState struct {
 
 type OverlayPlacementCalibration struct {
 	TooltipY      int32 `json:"tooltip_y"`
-	TooltipWidth  int32 `json:"tooltip_width"`
 	TooltipHeight int32 `json:"tooltip_height"`
 	PanelWidth    int32 `json:"panel_width"`
 	OffsetX       int32 `json:"offset_x"`

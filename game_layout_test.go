@@ -168,7 +168,7 @@ func TestParseGameLayoutValidatesOffsetsAndPlacementCalibrations(t *testing.T) {
 	ActiveGameLayout = layout
 	t.Cleanup(func() { ActiveGameLayout = previousLayout })
 	want := layout.PlacementCalibrations[0]
-	if got := overlayPlacementForTooltip(want.TooltipY, want.TooltipWidth, want.TooltipHeight); got != want {
+	if got := overlayPlacementForTooltip(want.TooltipY, want.TooltipHeight); got != want {
 		t.Fatalf("placement = %+v, want %+v", got, want)
 	}
 }
@@ -183,8 +183,38 @@ func TestOverlayPlacementMatchesCalibrationWhenTooltipYChanges(t *testing.T) {
 	ActiveGameLayout = layout
 	t.Cleanup(func() { ActiveGameLayout = previousLayout })
 	want := layout.PlacementCalibrations[0]
-	if got := overlayPlacementForTooltip(681, 308, 348); got != want {
+	if got := overlayPlacementForTooltip(681, 348); got != want {
 		t.Fatalf("placement = %+v, want %+v", got, want)
+	}
+}
+
+func TestOverlayPlacementUsesFixedTooltipWidth(t *testing.T) {
+	layout, err := parseGameLayout(embeddedGameLayoutJSON)
+	if err != nil {
+		t.Fatalf("parseGameLayout returned error: %v", err)
+	}
+
+	previousLayout := ActiveGameLayout
+	ActiveGameLayout = layout
+	t.Cleanup(func() { ActiveGameLayout = previousLayout })
+
+	want := layout.PlacementCalibrations[1]
+	if got := overlayPlacementForTooltip(want.TooltipY, want.TooltipHeight); got != want {
+		t.Fatalf("placement = %+v, want %+v", got, want)
+	}
+}
+
+func TestParseGameLayoutAcceptsLegacyWidthConfiguration(t *testing.T) {
+	legacyLayout := strings.Replace(
+		string(embeddedGameLayoutJSON),
+		`"height_pointer_base_offset":`,
+		`"width_pointer_base_offset": "0x05DCAEA0", "width_pointer_offsets": ["0x40"], "height_pointer_base_offset":`,
+		1,
+	)
+	legacyLayout = strings.Replace(legacyLayout, `"tooltip_height": 348`, `"tooltip_width": 308, "tooltip_height": 348`, 1)
+
+	if _, err := parseGameLayout([]byte(legacyLayout)); err != nil {
+		t.Fatalf("parseGameLayout rejected a legacy width configuration: %v", err)
 	}
 }
 
@@ -362,4 +392,3 @@ func TestUpdateGameLayoutConfigs(t *testing.T) {
 		t.Error("expected incompatibility state to be reset")
 	}
 }
-

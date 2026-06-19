@@ -10,20 +10,18 @@
     "x_pointer_offsets": ["0x40", "0xB8", "0x8", "0xD0", "0x60", "0x50", "0xC8"],
     "y_pointer_base_offset": "0x05DCFD70",
     "y_pointer_offsets": ["0xB8", "0x10", "0x30", "0x20", "0x90", "0x40", "0xAC"],
-    "width_pointer_base_offset": "0x05DCAEA0",
-    "width_pointer_offsets": ["0x40", "0xF0", "0x40", "0x618", "0x88", "0x10", "0xBC8"],
     "height_pointer_base_offset": "0x05D77D80",
     "height_pointer_offsets": ["0xB8", "0x0", "0xB0", "0x130", "0x300", "0x10", "0x614"]
   },
   "placement_calibrations": [
-    {"tooltip_y": 173, "tooltip_width": 308, "tooltip_height": 348, "panel_width": 200, "offset_y": 116},
-    {"tooltip_y": 199, "tooltip_width": 358, "tooltip_height": 398, "panel_width": 200, "offset_y": 66},
-    {"tooltip_y": 157, "tooltip_width": 274, "tooltip_height": 314, "panel_width": 200, "offset_y": 150},
-    {"tooltip_y": 207, "tooltip_width": 374, "tooltip_height": 414, "panel_width": 200, "offset_y": 49},
-    {"tooltip_y": 222, "tooltip_width": 405, "tooltip_height": 445, "panel_width": 200, "offset_y": 19},
-    {"tooltip_y": 274, "tooltip_width": 508, "tooltip_height": 548, "panel_width": 200, "offset_y": -153},
-    {"tooltip_y": 182, "tooltip_width": 324, "tooltip_height": 364, "panel_width": 200, "offset_y": 100},
-    {"tooltip_y": 132, "tooltip_width": 224, "tooltip_height": 264, "panel_width": 200, "offset_y": 200}
+    {"tooltip_y": 173, "tooltip_height": 348, "panel_width": 200, "offset_y": 116},
+    {"tooltip_y": 199, "tooltip_height": 398, "panel_width": 200, "offset_y": 66},
+    {"tooltip_y": 157, "tooltip_height": 314, "panel_width": 200, "offset_y": 150},
+    {"tooltip_y": 207, "tooltip_height": 414, "panel_width": 200, "offset_y": 49},
+    {"tooltip_y": 222, "tooltip_height": 445, "panel_width": 200, "offset_y": 19},
+    {"tooltip_y": 274, "tooltip_height": 548, "panel_width": 200, "offset_y": -153},
+    {"tooltip_y": 182, "tooltip_height": 364, "panel_width": 200, "offset_y": 100},
+    {"tooltip_y": 132, "tooltip_height": 264, "panel_width": 200, "offset_y": 200}
   ],
   "x_calibrations": [
     {"x": -310.0, "offset": -256},

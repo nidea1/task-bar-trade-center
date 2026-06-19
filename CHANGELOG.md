@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-06-19
+
+### Fixed
+- Removed the tooltip width memory pointer dependency; the HUD now uses the game's fixed tooltip width and selects placement calibrations by height and Y position.
+
 ## [0.3.3] - 2026-06-19
 
 ### Added

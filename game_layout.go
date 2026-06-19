@@ -47,8 +47,6 @@ type gameLayoutDocument struct {
 		XPointerOffsets         []string `json:"x_pointer_offsets"`
 		YPointerBaseOffset      string   `json:"y_pointer_base_offset"`
 		YPointerOffsets         []string `json:"y_pointer_offsets"`
-		WidthPointerBaseOffset  string   `json:"width_pointer_base_offset"`
-		WidthPointerOffsets     []string `json:"width_pointer_offsets"`
 		HeightPointerBaseOffset string   `json:"height_pointer_base_offset"`
 		HeightPointerOffsets    []string `json:"height_pointer_offsets"`
 	} `json:"tooltip"`
@@ -65,8 +63,6 @@ type GameLayout struct {
 	TooltipXPointerOffsets         []uintptr
 	TooltipYPointerBaseOffset      uintptr
 	TooltipYPointerOffsets         []uintptr
-	TooltipWidthPointerBaseOffset  uintptr
-	TooltipWidthPointerOffsets     []uintptr
 	TooltipHeightPointerBaseOffset uintptr
 	TooltipHeightPointerOffsets    []uintptr
 
@@ -214,14 +210,6 @@ func parseGameLayout(raw []byte) (GameLayout, error) {
 	if err != nil {
 		return GameLayout{}, err
 	}
-	widthBase, err := parseLayoutOffset("tooltip.width_pointer_base_offset", document.Tooltip.WidthPointerBaseOffset)
-	if err != nil {
-		return GameLayout{}, err
-	}
-	widthOffsets, err := parseLayoutOffsets("tooltip.width_pointer_offsets", document.Tooltip.WidthPointerOffsets)
-	if err != nil {
-		return GameLayout{}, err
-	}
 	heightBase, err := parseLayoutOffset("tooltip.height_pointer_base_offset", document.Tooltip.HeightPointerBaseOffset)
 	if err != nil {
 		return GameLayout{}, err
@@ -232,7 +220,7 @@ func parseGameLayout(raw []byte) (GameLayout, error) {
 	}
 
 	for index, calibration := range document.PlacementCalibrations {
-		if calibration.TooltipWidth <= 0 || calibration.TooltipHeight <= 0 || calibration.PanelWidth <= 0 {
+		if calibration.TooltipHeight <= 0 || calibration.PanelWidth <= 0 {
 			return GameLayout{}, fmt.Errorf("placement_calibrations[%d] has invalid dimensions", index)
 		}
 	}
@@ -245,8 +233,6 @@ func parseGameLayout(raw []byte) (GameLayout, error) {
 		TooltipXPointerOffsets:         xOffsets,
 		TooltipYPointerBaseOffset:      yBase,
 		TooltipYPointerOffsets:         yOffsets,
-		TooltipWidthPointerBaseOffset:  widthBase,
-		TooltipWidthPointerOffsets:     widthOffsets,
 		TooltipHeightPointerBaseOffset: heightBase,
 		TooltipHeightPointerOffsets:    heightOffsets,
 		PlacementCalibrations:          append([]OverlayPlacementCalibration(nil), document.PlacementCalibrations...),

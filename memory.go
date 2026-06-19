@@ -147,19 +147,16 @@ func readTooltipRectFromMemory() (RECT, bool) {
 	GameLayoutMu.RUnlock()
 	xBase := GameAssemblyBase + layout.TooltipXPointerBaseOffset
 	yBase := GameAssemblyBase + layout.TooltipYPointerBaseOffset
-	widthBase := GameAssemblyBase + layout.TooltipWidthPointerBaseOffset
 	heightBase := GameAssemblyBase + layout.TooltipHeightPointerBaseOffset
 
 	xAddress, xChainOK, xTrace := resolveTooltipPointerChain("x", xBase, layout.TooltipXPointerOffsets)
 	yAddress, yChainOK, yTrace := resolveTooltipPointerChain("y", yBase, layout.TooltipYPointerOffsets)
-	widthAddress, widthChainOK, widthTrace := resolveTooltipPointerChain("width", widthBase, layout.TooltipWidthPointerOffsets)
 	heightAddress, heightChainOK, heightTrace := resolveTooltipPointerChain("height", heightBase, layout.TooltipHeightPointerOffsets)
-	if !xChainOK || !yChainOK || !widthChainOK {
+	if !xChainOK || !yChainOK {
 		logTooltipDebugLines(
 			"pointer chain status:",
 			xTrace,
 			yTrace,
-			widthTrace,
 			heightTrace,
 		)
 		reportTooltipPointerRead(false)
@@ -178,12 +175,7 @@ func readTooltipRectFromMemory() (RECT, bool) {
 		reportTooltipPointerRead(false)
 		return RECT{}, false
 	}
-	width, ok := readFloat32(GameProcessHandle, widthAddress)
-	if !ok {
-		logTooltipDebug("width read failed: widthAddr=0x%X", widthAddress)
-		reportTooltipPointerRead(false)
-		return RECT{}, false
-	}
+	width := float32(TooltipOverlayReferenceWidth)
 	height := float32(TooltipOverlayReferenceHeight)
 	heightSource := "fallback"
 	if heightChainOK {
@@ -200,7 +192,7 @@ func readTooltipRectFromMemory() (RECT, bool) {
 	rawY := y
 	x = -x
 	y = -y
-	logTooltipDebug("base=0x%X xBase=0x%X yBase=0x%X widthBase=0x%X heightBase=0x%X | xAddr=0x%X yAddr=0x%X widthAddr=0x%X heightAddr=0x%X heightSource=%s | raw x=%.2f y=%.2f normalized x=%.2f y=%.2f w=%.2f h=%.2f", GameAssemblyBase, xBase, yBase, widthBase, heightBase, xAddress, yAddress, widthAddress, heightAddress, heightSource, rawX, rawY, x, y, width, height)
+	logTooltipDebug("base=0x%X xBase=0x%X yBase=0x%X heightBase=0x%X | xAddr=0x%X yAddr=0x%X heightAddr=0x%X heightSource=%s | raw x=%.2f y=%.2f normalized x=%.2f y=%.2f w=%.2f h=%.2f", GameAssemblyBase, xBase, yBase, heightBase, xAddress, yAddress, heightAddress, heightSource, rawX, rawY, x, y, width, height)
 	if width < 150 || width > 650 || height < 60 || height > 700 {
 		logTooltipDebug("values rejected by size range: x=%.2f y=%.2f w=%.2f h=%.2f", x, y, width, height)
 		reportTooltipPointerRead(false)
