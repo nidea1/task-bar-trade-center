@@ -50,11 +50,12 @@ jobs:
         shell: pwsh
         run: |
           $version = "$env:GITHUB_REF_NAME".TrimStart('v')
+          $escapedVersion = [regex]::Escape($version)
           $lines = Get-Content CHANGELOG.md
           $inSection = $false
           $result = [System.Collections.Generic.List[string]]::new()
           foreach ($line in $lines) {
-              if ($line -match "^##\s*\[?v?${version}\]?") {
+              if ($line -match "^##\s*\[?v?${escapedVersion}\]?") {
                   $inSection = $true
                   continue
               }
