@@ -73,5 +73,11 @@ jobs:
               "No release notes found in CHANGELOG.md for version $version" | Set-Content release_notes.txt
           }
           
+          # Delete existing release if it already exists to allow overwrite
+          gh release view "$env:GITHUB_REF_NAME" >$null 2>&1
+          if ($LASTEXITCODE -eq 0) {
+              gh release delete "$env:GITHUB_REF_NAME" --yes
+          }
+          
           $assets = Get-ChildItem dist -File | ForEach-Object { $_.FullName }
           gh release create "$env:GITHUB_REF_NAME" @assets --title "$env:GITHUB_REF_NAME" --notes-file release_notes.txt
