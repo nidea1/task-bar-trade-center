@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-06-19
+
+### Fixed
+- Auto-update no longer leaves the old process running: shutdown requests from background goroutines now post `WM_CLOSE` to the UI thread instead of calling `PostQuitMessage` on the wrong thread, ensuring the main message loop exits and the single-instance mutex is released before the updated executable starts.
+
 ## [0.3.0] - 2026-06-19
 
 ### Added

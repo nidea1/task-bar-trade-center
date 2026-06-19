@@ -38,6 +38,7 @@ var (
 	procEndPaint                   = user32.NewProc("EndPaint")
 	procPostMessageW               = user32.NewProc("PostMessageW")
 	procPostQuitMessage            = user32.NewProc("PostQuitMessage")
+	procDestroyWindow              = user32.NewProc("DestroyWindow")
 	procDefWindowProcW             = user32.NewProc("DefWindowProcW")
 	procGetCursorPos               = user32.NewProc("GetCursorPos")
 	procGetDC                      = user32.NewProc("GetDC")

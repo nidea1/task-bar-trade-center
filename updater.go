@@ -209,7 +209,7 @@ func performUpdate(downloadURL, releasePageURL string) {
 		return
 	}
 
-	shutdownApp()
+	requestAppShutdown()
 }
 
 func startRestartAfterUpdateHelper(executablePath string, parentPID uint32) error {

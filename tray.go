@@ -171,6 +171,17 @@ func appWndProc(hWnd uintptr, msg uint32, wParam uintptr, lParam uintptr) uintpt
 	case WM_COMMAND:
 		handleTrayCommand(uint32(wParam & 0xffff))
 		return 0
+	case WM_CLOSE:
+		ShowOverlay.Store(false)
+		if OverlayHWND != 0 {
+			procShowWindow.Call(OverlayHWND, SW_HIDE)
+		}
+		if GameProcessHandle != 0 {
+			procCloseHandle.Call(GameProcessHandle)
+			GameProcessHandle = 0
+		}
+		procDestroyWindow.Call(hWnd)
+		return 0
 	case WM_DESTROY:
 		removeTrayIcon()
 		procPostQuitMessage.Call(0)
@@ -276,21 +287,18 @@ func handleTrayCommand(commandID uint32) {
 	case MenuCheckForUpdates:
 		go runManualUpdateCheck()
 	case MenuExit:
-		shutdownApp()
+		requestAppShutdown()
 	}
 }
 
-func shutdownApp() {
-	removeTrayIcon()
-	ShowOverlay.Store(false)
-	if OverlayHWND != 0 {
-		procShowWindow.Call(OverlayHWND, SW_HIDE)
+// requestAppShutdown posts WM_CLOSE to the application window. It is safe to
+// call from any goroutine. The message is dispatched on the UI thread where
+// appWndProc handles cleanup, DestroyWindow, and PostQuitMessage — ensuring
+// the main message loop exits and the single-instance mutex is released.
+func requestAppShutdown() {
+	if AppHWND != 0 {
+		procPostMessageW.Call(AppHWND, WM_CLOSE, 0, 0)
 	}
-	if GameProcessHandle != 0 {
-		procCloseHandle.Call(GameProcessHandle)
-		GameProcessHandle = 0
-	}
-	procPostQuitMessage.Call(0)
 }
 
 func copyUTF16(destination []uint16, value string) {

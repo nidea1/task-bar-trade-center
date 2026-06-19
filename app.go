@@ -208,7 +208,7 @@ func handleGameClosed() bool {
 	if !showYesNoMessageBox("TaskBarHero Closed", "TaskBarHero was closed. Do you want to close Task Bar Trade Center too?") {
 		return false
 	}
-	shutdownApp()
+	requestAppShutdown()
 	return true
 }
 
