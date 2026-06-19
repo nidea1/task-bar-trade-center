@@ -79,8 +79,10 @@ func loadGameLayout() error {
 		if err != nil {
 			return fmt.Errorf("local development game layout %q: %w", localLayoutPath, err)
 		}
+		GameLayoutMu.Lock()
 		ActiveGameLayout = layout
 		GameLayoutSource = gameLayoutSourceLocalDevelopment
+		GameLayoutMu.Unlock()
 		fmt.Printf("Game layout loaded from %s: %s\n", gameLayoutSourceLocalDevelopment, localLayoutPath)
 		return nil
 	}
@@ -90,8 +92,10 @@ func loadGameLayout() error {
 		return err
 	}
 
+	GameLayoutMu.Lock()
 	ActiveGameLayout = layout
 	GameLayoutSource = source
+	GameLayoutMu.Unlock()
 	fmt.Printf("Game layout loaded from %s.\n", source)
 	return nil
 }
@@ -391,4 +395,33 @@ func reportTooltipPointerRead(success bool) {
 	if ShowOverlay.Load() {
 		recordPointerReadResult(pointerReadTooltip, success)
 	}
+}
+
+// updateGameLayoutConfigs reloads the game layout configuration from remote.
+// It appends a cache-busting timestamp parameter to the URL to bypass GitHub raw CDN cache,
+// resets the layout pointer read health, and updates the app status.
+func updateGameLayoutConfigs() {
+	bustedURL := fmt.Sprintf("%s?nocache=%d", gameLayoutURL, time.Now().UnixNano())
+	layout, source, err := resolveGameLayout(bustedURL, GameLayoutCacheFilePath, gameLayoutHTTPClient, embeddedGameLayoutJSON)
+	if err != nil {
+		showErrorMessageBox("Update Configs Failed", fmt.Sprintf("Failed to update configurations:\n%v", err))
+		return
+	}
+
+	GameLayoutMu.Lock()
+	ActiveGameLayout = layout
+	GameLayoutSource = source
+	GameLayoutMu.Unlock()
+
+	GameLayoutReadHealth.reset()
+	if GameReady.Load() {
+		setAppStatus(AppStatusReady)
+	} else {
+		setAppStatus(AppStatusWaitingForGame)
+	}
+	if ShowOverlay.Load() {
+		redrawOverlay()
+	}
+
+	showInfoMessageBox("Update Configs", fmt.Sprintf("Configurations updated successfully from %s.", source))
 }

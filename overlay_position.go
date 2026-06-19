@@ -201,7 +201,9 @@ func scaleByReference(value int32, referenceValue int32, referenceBase int32) in
 }
 
 func overlayPlacementForTooltip(localY int32, width int32, height int32) OverlayPlacementCalibration {
+	GameLayoutMu.RLock()
 	calibrations := ActiveGameLayout.PlacementCalibrations
+	GameLayoutMu.RUnlock()
 	bestIndex := -1
 	bestSizeScore := int32(0)
 	bestYScore := int32(0)

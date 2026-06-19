@@ -131,10 +131,6 @@ func configureGameProcess(pid uint32, processHandle uintptr, gameAssemblyBase ui
 }
 
 func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
-	layout := ActiveGameLayout
-	baseAddress := gameAssemblyBase + layout.HoveredItemPointerBaseOffset
-	offsets := layout.HoveredItemPointerOffsets
-
 	var lastID int32 = 0
 	lastReadFailed := false
 	var lastUnknownRaw int32 = 0
@@ -143,6 +139,13 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 		if hasProcessExited(pHandle) {
 			return
 		}
+
+		GameLayoutMu.RLock()
+		layout := ActiveGameLayout
+		GameLayoutMu.RUnlock()
+
+		baseAddress := gameAssemblyBase + layout.HoveredItemPointerBaseOffset
+		offsets := layout.HoveredItemPointerOffsets
 
 		currentItemID, readMode, rawValue, ok := readHoveredItemID(pHandle, baseAddress, offsets, layout.HoveredItemKeyOffset)
 		if !ok {

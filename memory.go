@@ -142,7 +142,9 @@ func readTooltipRectFromMemory() (RECT, bool) {
 		return RECT{}, false
 	}
 
+	GameLayoutMu.RLock()
 	layout := ActiveGameLayout
+	GameLayoutMu.RUnlock()
 	xBase := GameAssemblyBase + layout.TooltipXPointerBaseOffset
 	yBase := GameAssemblyBase + layout.TooltipYPointerBaseOffset
 	widthBase := GameAssemblyBase + layout.TooltipWidthPointerBaseOffset

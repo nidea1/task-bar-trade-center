@@ -225,6 +225,7 @@ func showTrayMenu() {
 	}
 	appendTrayMenuItem(menu, MF_STRING, MenuToggleOverlayMode, overlayModeText)
 	appendTrayMenuItem(menu, MF_STRING, MenuCheckForUpdates, "Check for updates...")
+	appendTrayMenuItem(menu, MF_STRING, MenuUpdateConfigs, "Update configurations")
 	appendTraySeparator(menu)
 	appendTrayMenuItem(menu, MF_STRING|MF_GRAYED, 0, "v"+AppVersion+" - Created by "+AppCreatorName)
 	appendTrayMenuItem(menu, MF_STRING, MenuExit, "Exit")
@@ -286,6 +287,8 @@ func handleTrayCommand(commandID uint32) {
 		}
 	case MenuCheckForUpdates:
 		go runManualUpdateCheck()
+	case MenuUpdateConfigs:
+		go updateGameLayoutConfigs()
 	case MenuExit:
 		requestAppShutdown()
 	}

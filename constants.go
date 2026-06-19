@@ -117,6 +117,7 @@ const (
 	MenuExit              = 1003
 	MenuToggleOverlayMode = 1004
 	MenuCheckForUpdates   = 1005
+	MenuUpdateConfigs     = 1006
 
 	OverlayModeDetail  = 0
 	OverlayModeCompact = 1

@@ -295,3 +295,71 @@ func TestPointerReadWarningIsShownOnlyOncePerSession(t *testing.T) {
 		t.Fatalf("status = %d, want layout incompatible after second failure", AppStatus.Load())
 	}
 }
+
+func TestUpdateGameLayoutConfigs(t *testing.T) {
+	// Setup test server
+	remoteLayout := []byte(strings.Replace(string(embeddedGameLayoutJSON), "0x05DCFD70", "0x00000030", 1))
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if !strings.Contains(request.URL.RawQuery, "nocache=") {
+			t.Errorf("expected query parameter 'nocache', got query %q", request.URL.RawQuery)
+		}
+		_, _ = writer.Write(remoteLayout)
+	}))
+	defer server.Close()
+
+	// Backup and restore globals
+	oldURL := gameLayoutURL
+	gameLayoutURL = server.URL
+	previousLayout := ActiveGameLayout
+	previousSource := GameLayoutSource
+	oldShowInfo := showInfoMessageBoxMock
+	oldShowError := showErrorMessageBoxMock
+
+	t.Cleanup(func() {
+		gameLayoutURL = oldURL
+		ActiveGameLayout = previousLayout
+		GameLayoutSource = previousSource
+		showInfoMessageBoxMock = oldShowInfo
+		showErrorMessageBoxMock = oldShowError
+	})
+
+	var infoCalled bool
+	showInfoMessageBoxMock = func(title, message string) {
+		infoCalled = true
+		if title != "Update Configs" {
+			t.Errorf("expected title 'Update Configs', got %q", title)
+		}
+	}
+
+	showErrorMessageBoxMock = func(title, message string) {
+		t.Errorf("error dialog shown: %s - %s", title, message)
+	}
+
+	// Put layout health into incompatible state to verify it resets
+	GameLayoutReadHealth.mu.Lock()
+	GameLayoutReadHealth.incompatible = true
+	GameLayoutReadHealth.mu.Unlock()
+
+	updateGameLayoutConfigs()
+
+	if !infoCalled {
+		t.Error("expected info box to be called on successful update")
+	}
+
+	GameLayoutMu.RLock()
+	currentOffset := ActiveGameLayout.HoveredItemPointerBaseOffset
+	GameLayoutMu.RUnlock()
+
+	if currentOffset != 0x30 {
+		t.Errorf("ActiveGameLayout offset = 0x%X, want 0x30", currentOffset)
+	}
+
+	GameLayoutReadHealth.mu.Lock()
+	incomp := GameLayoutReadHealth.incompatible
+	GameLayoutReadHealth.mu.Unlock()
+
+	if incomp {
+		t.Error("expected incompatibility state to be reset")
+	}
+}
+
