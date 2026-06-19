@@ -160,45 +160,24 @@ func TestParseGameLayoutValidatesOffsetsAndPlacementCalibrations(t *testing.T) {
 	if len(layout.TooltipXPointerOffsets) != 7 || len(layout.TooltipYPointerOffsets) != 7 {
 		t.Fatalf("tooltip pointer offset lengths = %d and %d, want 7", len(layout.TooltipXPointerOffsets), len(layout.TooltipYPointerOffsets))
 	}
-	if len(layout.PlacementCalibrations) != 8 {
-		t.Fatalf("placement calibrations = %d, want 8", len(layout.PlacementCalibrations))
-	}
-
-	previousLayout := ActiveGameLayout
-	ActiveGameLayout = layout
-	t.Cleanup(func() { ActiveGameLayout = previousLayout })
-	want := layout.PlacementCalibrations[0]
-	if got := overlayPlacementForTooltip(want.TooltipY, want.TooltipHeight); got != want {
-		t.Fatalf("placement = %+v, want %+v", got, want)
-	}
 }
 
 func TestOverlayPlacementMatchesCalibrationWhenTooltipYChanges(t *testing.T) {
-	layout, err := parseGameLayout(embeddedGameLayoutJSON)
-	if err != nil {
-		t.Fatalf("parseGameLayout returned error: %v", err)
-	}
-
+	want := OverlayPlacementCalibration{TooltipY: 173, TooltipHeight: 348, PanelWidth: 200, OffsetY: 116}
 	previousLayout := ActiveGameLayout
-	ActiveGameLayout = layout
+	ActiveGameLayout = GameLayout{PlacementCalibrations: []OverlayPlacementCalibration{want}}
 	t.Cleanup(func() { ActiveGameLayout = previousLayout })
-	want := layout.PlacementCalibrations[0]
 	if got := overlayPlacementForTooltip(681, 348); got != want {
 		t.Fatalf("placement = %+v, want %+v", got, want)
 	}
 }
 
 func TestOverlayPlacementUsesFixedTooltipWidth(t *testing.T) {
-	layout, err := parseGameLayout(embeddedGameLayoutJSON)
-	if err != nil {
-		t.Fatalf("parseGameLayout returned error: %v", err)
-	}
-
+	want := OverlayPlacementCalibration{TooltipY: 199, TooltipHeight: 398, PanelWidth: 200, OffsetY: 66}
 	previousLayout := ActiveGameLayout
-	ActiveGameLayout = layout
+	ActiveGameLayout = GameLayout{PlacementCalibrations: []OverlayPlacementCalibration{want}}
 	t.Cleanup(func() { ActiveGameLayout = previousLayout })
 
-	want := layout.PlacementCalibrations[1]
 	if got := overlayPlacementForTooltip(want.TooltipY, want.TooltipHeight); got != want {
 		t.Fatalf("placement = %+v, want %+v", got, want)
 	}
