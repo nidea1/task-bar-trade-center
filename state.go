@@ -82,18 +82,9 @@ var (
 	PriceCache   = make(map[string]MarketData)
 	PriceCacheMu sync.RWMutex
 
-	TooltipXPointerOffsets       = []uintptr{0x590, 0x818, 0x7F8, 0x40, 0xF0, 0x40}
-	TooltipHeightOffsets         = []uintptr{0xB8, 0x0, 0x220, 0x130, 0x230, 0x68, 0x444}
-	TooltipWidthOffsets          = []uintptr{0x5C4, 0x98, 0x80, 0x10, 0x198, 0x0, 0xB8}
-	OverlayPlacementCalibrations = []OverlayPlacementCalibration{
-		{TooltipY: 154, TooltipWidth: 308, TooltipHeight: 348, PanelWidth: 200, OffsetX: 248, OffsetY: 136},
-		{TooltipY: 179, TooltipWidth: 358, TooltipHeight: 398, PanelWidth: 200, OffsetX: 248, OffsetY: 86},
-		{TooltipY: 137, TooltipWidth: 274, TooltipHeight: 314, PanelWidth: 200, OffsetX: 248, OffsetY: 170},
-		{TooltipY: 187, TooltipWidth: 374, TooltipHeight: 414, PanelWidth: 200, OffsetX: 248, OffsetY: 69},
-		{TooltipY: 203, TooltipWidth: 405, TooltipHeight: 445, PanelWidth: 200, OffsetX: 248, OffsetY: 39},
-		{TooltipY: 162, TooltipWidth: 324, TooltipHeight: 364, PanelWidth: 200, OffsetX: 248, OffsetY: 120},
-		{TooltipY: 112, TooltipWidth: 224, TooltipHeight: 264, PanelWidth: 200, OffsetX: 248, OffsetY: 220},
-	}
+	ActiveGameLayout     GameLayout
+	GameLayoutSource     string
+	GameLayoutReadHealth pointerReadHealth
 
 	CurrentPriceText      = "Loading market..."
 	CurrentItemName       = ""

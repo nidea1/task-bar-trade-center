@@ -150,6 +150,8 @@ func trayTooltipText() string {
 		return AppName
 	case AppStatusAttachFailed:
 		return AppName + " - Administrator permission required"
+	case AppStatusGameLayoutIncompatible:
+		return AppName + " - Game memory layout needs update"
 	default:
 		return AppName
 	}

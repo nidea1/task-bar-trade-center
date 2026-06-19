@@ -38,8 +38,8 @@ func TestIsNewerVersion(t *testing.T) {
 func TestCheckForUpdates_UpToDate(t *testing.T) {
 	// Setup test server
 	mockRelease := GitHubRelease{
-		TagName: "v0.1.0", // Same as current AppVersion
-		HTMLURL: "https://github.com/nidea1/task-bar-trade-center/releases/tag/v0.1.0",
+		TagName: "v" + AppVersion,
+		HTMLURL: "https://github.com/nidea1/task-bar-trade-center/releases/tag/v" + AppVersion,
 		Body:    "Bug fixes.",
 		Assets:  []GitHubAsset{},
 	}
@@ -75,8 +75,8 @@ func TestCheckForUpdates_UpToDate(t *testing.T) {
 func TestCheckForUpdates_NewVersion_Rejected(t *testing.T) {
 	// Setup test server
 	mockRelease := GitHubRelease{
-		TagName: "v0.2.0", // Newer than current AppVersion (0.1.0)
-		HTMLURL: "https://github.com/nidea1/task-bar-trade-center/releases/tag/v0.2.0",
+		TagName: "v99.0.0",
+		HTMLURL: "https://github.com/nidea1/task-bar-trade-center/releases/tag/v99.0.0",
 		Body:    "Cool new features.",
 		Assets:  []GitHubAsset{},
 	}

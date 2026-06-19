@@ -58,11 +58,22 @@ Release builds write logs, settings, and cache under the user's local app data f
 
 ```text
 %LOCALAPPDATA%\Task Bar Trade Center\config\settings.json      - Persists user preferences (e.g., overlay mode)
+%LOCALAPPDATA%\Task Bar Trade Center\config\game-layout-cache.json - Last valid game memory layout downloaded from GitHub
 %LOCALAPPDATA%\Task Bar Trade Center\logs\tbtc.log - Debug logs (automatically capped at 5MB)
 %LOCALAPPDATA%\Task Bar Trade Center\cache\price-cache.json    - Persisted price cache
 ```
 
 If a user reports a bug, ask for the log file. The cache and refresh menu actions are disabled until the app attaches to `TaskBarHero.exe`.
+
+## Game memory layout configuration
+
+Pointer chains and tooltip placement calibrations are published in [game-layout.json](https://raw.githubusercontent.com/nidea1/task-bar-trade-center/main/game-layout.json). On startup, the app uses the first valid source in this order:
+
+1. The GitHub JSON file (with a 5-second timeout).
+2. The locally cached valid JSON file.
+3. The layout embedded in the executable.
+
+If the required game memory pointers fail continuously for 3 seconds while the HUD is active, the app hides the HUD, updates its tray status, and shows a one-time message. This usually means a TaskBarHero update changed the memory layout. Connect to the internet and restart the app to download the latest layout; update the app if the problem continues.
 
 ## Build
 

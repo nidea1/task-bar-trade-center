@@ -5,7 +5,7 @@ const (
 	AppShortName    = "TBTC"
 	AppProcessName  = "tbtc"
 	AppCreatorName  = "nidea1"
-	AppVersion      = "0.1.0"
+	AppVersion      = "0.2.0"
 	GameProcessName = "TaskBarHero.exe"
 
 	EnablePriceHUD           = true
@@ -24,9 +24,6 @@ const (
 	TooltipOverlayMinWidth            = 244
 	TooltipOverlayMaxWidth            = 420
 	TooltipScanStep                   = 8
-	TooltipXPointerBaseOffset         = 0x05DC8278
-	TooltipHeightBaseOffset           = 0x05DED3F0
-	TooltipWidthBaseOffset            = 0x05DECA40
 
 	PROCESS_VM_READ           = 0x0010
 	PROCESS_QUERY_INFORMATION = 0x0400
@@ -128,4 +125,5 @@ const (
 	AppStatusWaitingForGameAssembly
 	AppStatusReady
 	AppStatusAttachFailed
+	AppStatusGameLayoutIncompatible
 )

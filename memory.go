@@ -7,9 +7,7 @@ import (
 	"unsafe"
 )
 
-func readHoveredItemID(processHandle uintptr, baseAddress uintptr, offsets []uintptr) (int32, string, int32, bool) {
-	const itemKeyOffset uintptr = 0x1A4
-
+func readHoveredItemID(processHandle uintptr, baseAddress uintptr, offsets []uintptr, itemKeyOffset uintptr) (int32, string, int32, bool) {
 	itemObjectPointerAddress, ok := resolvePointerChainAddress(processHandle, baseAddress, offsets)
 	if !ok {
 		return 0, "", 0, false
@@ -28,10 +26,36 @@ func readHoveredItemID(processHandle uintptr, baseAddress uintptr, offsets []uin
 		return 0, "", 0, false
 	}
 	if _, exists := AllItemMap[int(itemKey)]; exists {
-		return itemKey, "object+0x1A4", 0, true
+		return itemKey, fmt.Sprintf("object+0x%X", itemKeyOffset), 0, true
 	}
 
-	return 0, "object+0x1A4", itemKey, true
+	return 0, fmt.Sprintf("object+0x%X", itemKeyOffset), itemKey, true
+}
+
+func describePointerChainFailure(processHandle uintptr, baseAddress uintptr, offsets []uintptr, itemKeyOffset uintptr) string {
+	currentAddress := baseAddress
+	for index, offset := range offsets {
+		nextAddress, ok := readUintptr(processHandle, currentAddress)
+		if !ok {
+			return fmt.Sprintf("hovered-item chain: base=0x%X step=%d read[0x%X] failed offset=0x%X offsets=%s", baseAddress, index+1, currentAddress, offset, formatPointerOffsets(offsets))
+		}
+		if nextAddress == 0 {
+			return fmt.Sprintf("hovered-item chain: base=0x%X step=%d read[0x%X]=NULL offset=0x%X offsets=%s", baseAddress, index+1, currentAddress, offset, formatPointerOffsets(offsets))
+		}
+		currentAddress = nextAddress + offset
+	}
+
+	itemObject, ok := readUintptr(processHandle, currentAddress)
+	if !ok {
+		return fmt.Sprintf("hovered-item object read failed: address=0x%X keyOffset=0x%X", currentAddress, itemKeyOffset)
+	}
+	if itemObject == 0 {
+		return fmt.Sprintf("hovered-item object pointer is NULL: address=0x%X keyOffset=0x%X", currentAddress, itemKeyOffset)
+	}
+	if _, ok := readInt32(processHandle, itemObject+itemKeyOffset); !ok {
+		return fmt.Sprintf("hovered-item key read failed: object=0x%X keyAddress=0x%X", itemObject, itemObject+itemKeyOffset)
+	}
+	return fmt.Sprintf("hovered-item chain recovered during diagnostic: base=0x%X offsets=%s", baseAddress, formatPointerOffsets(offsets))
 }
 
 func resolvePointerChainAddress(processHandle uintptr, baseAddress uintptr, offsets []uintptr) (uintptr, bool) {
@@ -118,52 +142,67 @@ func readTooltipRectFromMemory() (RECT, bool) {
 		return RECT{}, false
 	}
 
-	xBase := GameAssemblyBase + TooltipXPointerBaseOffset
-	widthBase := GameAssemblyBase + TooltipWidthBaseOffset
-	heightBase := GameAssemblyBase + TooltipHeightBaseOffset
+	layout := ActiveGameLayout
+	positionBase := GameAssemblyBase + layout.TooltipPositionPointerBaseOffset
+	widthBase := GameAssemblyBase + layout.TooltipWidthPointerBaseOffset
+	heightBase := GameAssemblyBase + layout.TooltipHeightPointerBaseOffset
 
-	xAddress, xChainOK, xTrace := resolveTooltipPointerChain("x/y", xBase, TooltipXPointerOffsets)
-	widthAddress, widthChainOK, widthTrace := resolveTooltipPointerChain("width", widthBase, TooltipWidthOffsets)
-	heightAddress, heightChainOK, heightTrace := resolveTooltipPointerChain("height", heightBase, TooltipHeightOffsets)
-	if !xChainOK || !widthChainOK || !heightChainOK {
+	positionAddress, positionChainOK, positionTrace := resolveTooltipPointerChain("position", positionBase, layout.TooltipPositionPointerOffsets)
+	widthAddress, widthChainOK, widthTrace := resolveTooltipPointerChain("width", widthBase, layout.TooltipWidthPointerOffsets)
+	heightAddress, heightChainOK, heightTrace := resolveTooltipPointerChain("height", heightBase, layout.TooltipHeightPointerOffsets)
+	if !positionChainOK || !widthChainOK {
 		logTooltipDebugLines(
 			"pointer chain status:",
-			xTrace,
+			positionTrace,
 			widthTrace,
 			heightTrace,
 		)
+		reportTooltipPointerRead(false)
 		return RECT{}, false
 	}
 
-	x, ok := readFloat32(GameProcessHandle, xAddress)
+	y, ok := readFloat32(GameProcessHandle, positionAddress)
 	if !ok {
-		logTooltipDebug("x read failed: xAddr=0x%X yAddr=0x%X", xAddress, xAddress+4)
+		logTooltipDebug("y read failed: yAddr=0x%X", positionAddress)
+		reportTooltipPointerRead(false)
 		return RECT{}, false
 	}
-	y, ok := readFloat32(GameProcessHandle, xAddress+4)
+	xAddress := positionAddress + layout.TooltipXOffsetFromPosition
+	x, ok := readFloat32(GameProcessHandle, xAddress)
 	if !ok {
-		logTooltipDebug("y read failed: xAddr=0x%X yAddr=0x%X", xAddress, xAddress+4)
+		logTooltipDebug("x read failed: xAddr=0x%X yAddr=0x%X", xAddress, positionAddress)
+		reportTooltipPointerRead(false)
 		return RECT{}, false
 	}
 	width, ok := readFloat32(GameProcessHandle, widthAddress)
 	if !ok {
 		logTooltipDebug("width read failed: widthAddr=0x%X", widthAddress)
+		reportTooltipPointerRead(false)
 		return RECT{}, false
 	}
-	height, ok := readFloat32(GameProcessHandle, heightAddress)
-	if !ok {
-		logTooltipDebug("height read failed: heightAddr=0x%X", heightAddress)
-		return RECT{}, false
+	height := float32(TooltipOverlayReferenceHeight)
+	heightSource := "fallback"
+	if heightChainOK {
+		if value, ok := readFloat32(GameProcessHandle, heightAddress); ok && value >= 60 && value <= 700 {
+			height = value
+			heightSource = "memory"
+		} else {
+			logTooltipDebug("height read invalid: heightAddr=0x%X; using fallback=%.2f", heightAddress, height)
+		}
+	} else {
+		logTooltipDebug("height pointer unavailable; using fallback=%.2f", height)
 	}
 	rawX := x
 	rawY := y
 	x = -x
 	y = -y
-	logTooltipDebug("base=0x%X xBase=0x%X widthBase=0x%X heightBase=0x%X | xAddr=0x%X yAddr=0x%X widthAddr=0x%X heightAddr=0x%X | raw x=%.2f y=%.2f inverted x=%.2f y=%.2f w=%.2f h=%.2f", GameAssemblyBase, xBase, widthBase, heightBase, xAddress, xAddress+4, widthAddress, heightAddress, rawX, rawY, x, y, width, height)
+	logTooltipDebug("base=0x%X positionBase=0x%X widthBase=0x%X heightBase=0x%X | xAddr=0x%X yAddr=0x%X widthAddr=0x%X heightAddr=0x%X heightSource=%s | raw x=%.2f y=%.2f normalized x=%.2f y=%.2f w=%.2f h=%.2f", GameAssemblyBase, positionBase, widthBase, heightBase, xAddress, positionAddress, widthAddress, heightAddress, heightSource, rawX, rawY, x, y, width, height)
 	if width < 150 || width > 650 || height < 60 || height > 700 {
 		logTooltipDebug("values rejected by size range: x=%.2f y=%.2f w=%.2f h=%.2f", x, y, width, height)
+		reportTooltipPointerRead(false)
 		return RECT{}, false
 	}
+	reportTooltipPointerRead(true)
 
 	clientOrigin, ok := gameClientScreenOrigin()
 	if !ok {

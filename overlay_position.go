@@ -6,6 +6,9 @@ func marketOverlayRect() (RECT, bool) {
 		HasLastOverlayRect = true
 		return LastOverlayRect, true
 	}
+	if !ShowOverlay.Load() {
+		return RECT{}, false
+	}
 	if HasLastOverlayRect {
 		return LastOverlayRect, true
 	}
@@ -198,9 +201,10 @@ func scaleByReference(value int32, referenceValue int32, referenceBase int32) in
 }
 
 func overlayPlacementForTooltip(localY int32, width int32, height int32) OverlayPlacementCalibration {
+	calibrations := ActiveGameLayout.PlacementCalibrations
 	bestIndex := -1
 	bestScore := int32(0)
-	for index, calibration := range OverlayPlacementCalibrations {
+	for index, calibration := range calibrations {
 		score := absInt32(localY-calibration.TooltipY) + absInt32(width-calibration.TooltipWidth) + absInt32(height-calibration.TooltipHeight)
 		if bestIndex < 0 || score < bestScore {
 			bestIndex = index
@@ -208,7 +212,7 @@ func overlayPlacementForTooltip(localY int32, width int32, height int32) Overlay
 		}
 	}
 	if bestIndex >= 0 && bestScore <= 12 {
-		return OverlayPlacementCalibrations[bestIndex]
+		return calibrations[bestIndex]
 	}
 
 	panelWidth := scaleByReference(width, TooltipOverlayReferencePanelWidth, TooltipOverlayReferenceWidth)

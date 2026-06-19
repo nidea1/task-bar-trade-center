@@ -28,6 +28,11 @@ func runApp() {
 	GameReady.Store(false)
 	AppStatus.Store(AppStatusWaitingForGame)
 	loadItemsJSON()
+	if err := loadGameLayout(); err != nil {
+		fmt.Printf("Game layout could not be loaded: %v\n", err)
+		showErrorMessageBox("Game Layout Configuration Error", fmt.Sprintf("Task Bar Trade Center could not load its embedded game layout configuration.\n\n%v", err))
+		return
+	}
 	loadPriceCacheFromDisk()
 	loadSettingsFromDisk()
 	createAppWindow()
@@ -106,21 +111,24 @@ func configureGameProcess(pid uint32, processHandle uintptr, gameAssemblyBase ui
 	GameProcessHandle = processHandle
 	GameProcessID = pid
 	GameAssemblyBase = gameAssemblyBase
+	GameLayoutReadHealth.reset()
 }
 
 func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
-	baseAddress := gameAssemblyBase + 0x05D59190
-	offsets := []uintptr{0x20, 0x80, 0x30, 0xB8, 0x8, 0x40, 0x338}
+	layout := ActiveGameLayout
+	baseAddress := gameAssemblyBase + layout.HoveredItemPointerBaseOffset
+	offsets := layout.HoveredItemPointerOffsets
 
 	var lastID int32 = 0
 	lastReadFailed := false
 	var lastUnknownRaw int32 = 0
 
 	for {
-		currentItemID, readMode, rawValue, ok := readHoveredItemID(pHandle, baseAddress, offsets)
+		currentItemID, readMode, rawValue, ok := readHoveredItemID(pHandle, baseAddress, offsets, layout.HoveredItemKeyOffset)
 		if !ok {
+			recordPointerReadResult(pointerReadHoveredItem, false)
 			if !lastReadFailed {
-				fmt.Println("Memory read failed. The pointer/offset chain may be outdated.")
+				fmt.Printf("Memory read failed. The pointer/offset chain may be outdated. %s\n", describePointerChainFailure(pHandle, baseAddress, offsets, layout.HoveredItemKeyOffset))
 				lastReadFailed = true
 			}
 			ActiveItemID.Store(0)
@@ -131,6 +139,7 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 			time.Sleep(200 * time.Millisecond)
 			continue
 		}
+		recordPointerReadResult(pointerReadHoveredItem, true)
 		lastReadFailed = false
 		if currentItemID == 0 && rawValue > 0 && rawValue != lastUnknownRaw {
 			lastUnknownRaw = rawValue

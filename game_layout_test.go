@@ -1,0 +1,230 @@
+package main
+
+import (
+	"bytes"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestResolveGameLayoutUsesRemoteAndCachesIt(t *testing.T) {
+	remoteLayout := []byte(strings.Replace(string(embeddedGameLayoutJSON), "0x05DCFD70", "0x00000020", 1))
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if got := request.Header.Get("User-Agent"); got != userAgent {
+			t.Errorf("User-Agent = %q, want %q", got, userAgent)
+		}
+		_, _ = writer.Write(remoteLayout)
+	}))
+	defer server.Close()
+
+	cacheFilePath := filepath.Join(t.TempDir(), "game-layout-cache.json")
+	if err := os.WriteFile(cacheFilePath, []byte(`stale layout`), 0600); err != nil {
+		t.Fatalf("write stale cache: %v", err)
+	}
+	layout, source, err := resolveGameLayout(server.URL, cacheFilePath, server.Client(), embeddedGameLayoutJSON)
+	if err != nil {
+		t.Fatalf("resolveGameLayout returned error: %v", err)
+	}
+	if source != gameLayoutSourceRemote {
+		t.Fatalf("source = %q, want %q", source, gameLayoutSourceRemote)
+	}
+	if layout.HoveredItemPointerBaseOffset != 0x20 {
+		t.Fatalf("hovered pointer base = 0x%X, want 0x20", layout.HoveredItemPointerBaseOffset)
+	}
+
+	cached, err := os.ReadFile(cacheFilePath)
+	if err != nil {
+		t.Fatalf("read cache: %v", err)
+	}
+	if !bytes.Equal(cached, remoteLayout) {
+		t.Fatal("cache did not contain the validated remote layout")
+	}
+}
+
+func TestResolveGameLayoutUsesCacheWhenRemoteIsUnavailable(t *testing.T) {
+	cacheFilePath := filepath.Join(t.TempDir(), "game-layout-cache.json")
+	cachedLayout := []byte(strings.Replace(string(embeddedGameLayoutJSON), "0x05DCFD70", "0x00000030", 1))
+	if err := os.WriteFile(cacheFilePath, cachedLayout, 0600); err != nil {
+		t.Fatalf("write cache: %v", err)
+	}
+
+	server := httptest.NewServer(http.NotFoundHandler())
+	server.Close()
+	layout, source, err := resolveGameLayout(server.URL, cacheFilePath, &http.Client{Timeout: time.Second}, embeddedGameLayoutJSON)
+	if err != nil {
+		t.Fatalf("resolveGameLayout returned error: %v", err)
+	}
+	if source != gameLayoutSourceCache {
+		t.Fatalf("source = %q, want %q", source, gameLayoutSourceCache)
+	}
+	if layout.HoveredItemPointerBaseOffset != 0x30 {
+		t.Fatalf("hovered pointer base = 0x%X, want 0x30", layout.HoveredItemPointerBaseOffset)
+	}
+}
+
+func TestResolveGameLayoutUsesEmbeddedDefaultWhenRemoteAndCacheAreInvalid(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		_, _ = writer.Write([]byte(`{"schema_version": 99}`))
+	}))
+	defer server.Close()
+
+	cacheFilePath := filepath.Join(t.TempDir(), "game-layout-cache.json")
+	if err := os.WriteFile(cacheFilePath, []byte(`not json`), 0600); err != nil {
+		t.Fatalf("write invalid cache: %v", err)
+	}
+
+	layout, source, err := resolveGameLayout(server.URL, cacheFilePath, server.Client(), embeddedGameLayoutJSON)
+	if err != nil {
+		t.Fatalf("resolveGameLayout returned error: %v", err)
+	}
+	if source != gameLayoutSourceEmbeddedDefault {
+		t.Fatalf("source = %q, want %q", source, gameLayoutSourceEmbeddedDefault)
+	}
+	if layout.HoveredItemPointerBaseOffset != 0x05DCFD70 {
+		t.Fatalf("hovered pointer base = 0x%X, want 0x05DCFD70", layout.HoveredItemPointerBaseOffset)
+	}
+
+	cached, err := os.ReadFile(cacheFilePath)
+	if err != nil {
+		t.Fatalf("read cache: %v", err)
+	}
+	if string(cached) != "not json" {
+		t.Fatal("invalid remote layout overwrote the existing cache")
+	}
+}
+
+func TestParseGameLayoutValidatesOffsetsAndPlacementCalibrations(t *testing.T) {
+	layout, err := parseGameLayout(embeddedGameLayoutJSON)
+	if err != nil {
+		t.Fatalf("parseGameLayout returned error: %v", err)
+	}
+	if layout.HoveredItemKeyOffset != 0x1A4 {
+		t.Fatalf("hovered item key offset = 0x%X, want 0x1A4", layout.HoveredItemKeyOffset)
+	}
+	if len(layout.TooltipPositionPointerOffsets) != 7 {
+		t.Fatalf("position pointer offsets = %d, want 7", len(layout.TooltipPositionPointerOffsets))
+	}
+	if len(layout.PlacementCalibrations) != 8 {
+		t.Fatalf("placement calibrations = %d, want 8", len(layout.PlacementCalibrations))
+	}
+
+	previousLayout := ActiveGameLayout
+	ActiveGameLayout = layout
+	t.Cleanup(func() { ActiveGameLayout = previousLayout })
+	want := layout.PlacementCalibrations[0]
+	if got := overlayPlacementForTooltip(want.TooltipY, want.TooltipWidth, want.TooltipHeight); got != want {
+		t.Fatalf("placement = %+v, want %+v", got, want)
+	}
+}
+
+func TestParseGameLayoutRejectsUnsupportedAndIncompleteDocuments(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  []byte
+	}{
+		{
+			name: "unsupported schema",
+			raw:  []byte(strings.Replace(string(embeddedGameLayoutJSON), `"schema_version": 1`, `"schema_version": 2`, 1)),
+		},
+		{
+			name: "missing pointer value",
+			raw:  []byte(strings.Replace(string(embeddedGameLayoutJSON), `"key_offset": "0x1A4"`, `"key_offset": ""`, 1)),
+		},
+		{
+			name: "empty pointer chain",
+			raw: []byte(strings.Replace(
+				string(embeddedGameLayoutJSON),
+				`"pointer_offsets": ["0x40", "0x88", "0x10", "0xB8", "0x8", "0x20", "0x338"]`,
+				`"pointer_offsets": []`,
+				1,
+			)),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := parseGameLayout(tt.raw); err == nil {
+				t.Fatal("parseGameLayout succeeded for an invalid document")
+			}
+		})
+	}
+}
+
+func TestPointerReadHealthRequiresContinuousFailureAndRecovers(t *testing.T) {
+	var health pointerReadHealth
+	start := time.Unix(1_700_000_000, 0)
+
+	if incompatible, notified, recovered := health.record(start, pointerReadHoveredItem, false); incompatible || notified || recovered {
+		t.Fatalf("first failure = incompatible:%v notified:%v recovered:%v", incompatible, notified, recovered)
+	}
+	if incompatible, notified, recovered := health.record(start.Add(2*time.Second), pointerReadHoveredItem, true); incompatible || notified || recovered {
+		t.Fatalf("short failure recovery = incompatible:%v notified:%v recovered:%v", incompatible, notified, recovered)
+	}
+	if incompatible, notified, recovered := health.record(start.Add(3*time.Second), pointerReadHoveredItem, false); incompatible || notified || recovered {
+		t.Fatalf("new failure = incompatible:%v notified:%v recovered:%v", incompatible, notified, recovered)
+	}
+	if incompatible, notified, recovered := health.record(start.Add(6*time.Second), pointerReadHoveredItem, false); !incompatible || !notified || recovered {
+		t.Fatalf("continuous failure = incompatible:%v notified:%v recovered:%v", incompatible, notified, recovered)
+	}
+	if incompatible, notified, recovered := health.record(start.Add(7*time.Second), pointerReadHoveredItem, true); incompatible || notified || !recovered {
+		t.Fatalf("successful read = incompatible:%v notified:%v recovered:%v", incompatible, notified, recovered)
+	}
+}
+
+func TestPointerReadWarningIsShownOnlyOncePerSession(t *testing.T) {
+	GameLayoutReadHealth.reset()
+	originalStatus := AppStatus.Load()
+	originalShowOverlay := ShowOverlay.Load()
+	originalErrorMessageBoxMock := showErrorMessageBoxMock
+	t.Cleanup(func() {
+		GameLayoutReadHealth.reset()
+		AppStatus.Store(originalStatus)
+		ShowOverlay.Store(originalShowOverlay)
+		showErrorMessageBoxMock = originalErrorMessageBoxMock
+	})
+
+	messageCount := 0
+	showErrorMessageBoxMock = func(title, message string) {
+		messageCount++
+		if title != "Game Memory Layout Update Required" {
+			t.Errorf("title = %q", title)
+		}
+		if !strings.Contains(message, "restart Task Bar Trade Center") {
+			t.Errorf("message did not explain how to recover: %q", message)
+		}
+	}
+
+	ShowOverlay.Store(true)
+	AppStatus.Store(AppStatusReady)
+	start := time.Unix(1_700_000_000, 0)
+	recordPointerReadResultAt(start, pointerReadHoveredItem, false)
+	recordPointerReadResultAt(start.Add(3*time.Second), pointerReadHoveredItem, false)
+	if messageCount != 1 {
+		t.Fatalf("message count = %d, want 1", messageCount)
+	}
+	if ShowOverlay.Load() {
+		t.Fatal("overlay remained visible after sustained pointer failure")
+	}
+	if AppStatus.Load() != AppStatusGameLayoutIncompatible {
+		t.Fatalf("status = %d, want layout incompatible", AppStatus.Load())
+	}
+
+	recordPointerReadResultAt(start.Add(4*time.Second), pointerReadHoveredItem, true)
+	if AppStatus.Load() != AppStatusReady {
+		t.Fatalf("status = %d, want ready after successful read", AppStatus.Load())
+	}
+
+	ShowOverlay.Store(true)
+	recordPointerReadResultAt(start.Add(5*time.Second), pointerReadHoveredItem, false)
+	recordPointerReadResultAt(start.Add(8*time.Second), pointerReadHoveredItem, false)
+	if messageCount != 1 {
+		t.Fatalf("message count after second failure = %d, want 1", messageCount)
+	}
+	if AppStatus.Load() != AppStatusGameLayoutIncompatible {
+		t.Fatalf("status = %d, want layout incompatible after second failure", AppStatus.Load())
+	}
+}

@@ -11,11 +11,12 @@ import (
 )
 
 var (
-	AppDataDir         string
-	LogFilePath        string
-	PriceCacheFilePath string
-	SettingsFilePath   string
-	AppLogFile         *os.File
+	AppDataDir              string
+	LogFilePath             string
+	PriceCacheFilePath      string
+	SettingsFilePath        string
+	GameLayoutCacheFilePath string
+	AppLogFile              *os.File
 )
 
 func initAppStorage() {
@@ -45,6 +46,7 @@ func initAppStorage() {
 	LogFilePath = filepath.Join(logDir, AppProcessName+".log")
 	PriceCacheFilePath = filepath.Join(cacheDir, "price-cache.json")
 	SettingsFilePath = filepath.Join(configDir, "settings.json")
+	GameLayoutCacheFilePath = filepath.Join(configDir, "game-layout-cache.json")
 
 	// Limit log file size to 5MB (5 * 1024 * 1024 bytes)
 	if info, err := os.Stat(LogFilePath); err == nil && info.Size() > 5*1024*1024 {
@@ -68,6 +70,7 @@ func initAppStorage() {
 	fmt.Printf("Created by: %s\n", AppCreatorName)
 	fmt.Printf("Log file: %s\n", LogFilePath)
 	fmt.Printf("Price cache file: %s\n", PriceCacheFilePath)
+	fmt.Printf("Game layout cache file: %s\n", GameLayoutCacheFilePath)
 	fmt.Printf("Runtime: go=%s os=%s arch=%s pid=%d\n", runtime.Version(), runtime.GOOS, runtime.GOARCH, os.Getpid())
 	if workingDir, err := os.Getwd(); err == nil {
 		fmt.Printf("Working directory: %s\n", workingDir)
