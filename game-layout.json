@@ -21,7 +21,8 @@
     {"tooltip_y": 222, "tooltip_height": 445, "panel_width": 200, "offset_y": 19},
     {"tooltip_y": 274, "tooltip_height": 548, "panel_width": 200, "offset_y": -153},
     {"tooltip_y": 182, "tooltip_height": 364, "panel_width": 200, "offset_y": 100},
-    {"tooltip_y": 132, "tooltip_height": 264, "panel_width": 200, "offset_y": 200}
+    {"tooltip_y": 132, "tooltip_height": 264, "panel_width": 200, "offset_y": 200},
+    {"tooltip_y": 216, "tooltip_height": 431, "panel_width": 200, "offset_y": 32}
   ],
   "x_calibrations": [
     {"x": -310.0, "offset": -256},
