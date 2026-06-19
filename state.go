@@ -18,6 +18,7 @@ var (
 	procProcess32FirstW          = kernel32.NewProc("Process32FirstW")
 	procProcess32NextW           = kernel32.NewProc("Process32NextW")
 	procCloseHandle              = kernel32.NewProc("CloseHandle")
+	procWaitForSingleObject      = kernel32.NewProc("WaitForSingleObject")
 	procGetConsoleWindow         = kernel32.NewProc("GetConsoleWindow")
 	procGetConsoleProcessList    = kernel32.NewProc("GetConsoleProcessList")
 	procCreateMutexW             = kernel32.NewProc("CreateMutexW")

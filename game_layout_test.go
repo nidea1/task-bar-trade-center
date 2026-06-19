@@ -45,6 +45,58 @@ func TestResolveGameLayoutUsesRemoteAndCachesIt(t *testing.T) {
 	}
 }
 
+func TestLoadGameLayoutFromFile(t *testing.T) {
+	layoutPath := filepath.Join(t.TempDir(), "game-layout.json")
+	if err := os.WriteFile(layoutPath, embeddedGameLayoutJSON, 0600); err != nil {
+		t.Fatalf("write layout: %v", err)
+	}
+
+	layout, err := loadGameLayoutFromFile(layoutPath)
+	if err != nil {
+		t.Fatalf("loadGameLayoutFromFile returned error: %v", err)
+	}
+	if layout.HoveredItemPointerBaseOffset != 0x05DCFD70 {
+		t.Fatalf("hovered pointer base = 0x%X, want 0x05DCFD70", layout.HoveredItemPointerBaseOffset)
+	}
+}
+
+func TestLoadGameLayoutFromFileRejectsInvalidLayout(t *testing.T) {
+	layoutPath := filepath.Join(t.TempDir(), "game-layout.json")
+	if err := os.WriteFile(layoutPath, []byte(`not json`), 0600); err != nil {
+		t.Fatalf("write layout: %v", err)
+	}
+
+	if _, err := loadGameLayoutFromFile(layoutPath); err == nil {
+		t.Fatal("loadGameLayoutFromFile succeeded for invalid JSON")
+	}
+}
+
+func TestLoadGameLayoutPrefersLocalDevelopmentFile(t *testing.T) {
+	layoutPath := filepath.Join(t.TempDir(), "game-layout.json")
+	localLayout := []byte(strings.Replace(string(embeddedGameLayoutJSON), "0x05DCFD70", "0x00000020", 1))
+	if err := os.WriteFile(layoutPath, localLayout, 0600); err != nil {
+		t.Fatalf("write layout: %v", err)
+	}
+	t.Setenv(gameLayoutPathEnvironment, layoutPath)
+
+	previousLayout := ActiveGameLayout
+	previousSource := GameLayoutSource
+	t.Cleanup(func() {
+		ActiveGameLayout = previousLayout
+		GameLayoutSource = previousSource
+	})
+
+	if err := loadGameLayout(); err != nil {
+		t.Fatalf("loadGameLayout returned error: %v", err)
+	}
+	if GameLayoutSource != gameLayoutSourceLocalDevelopment {
+		t.Fatalf("source = %q, want %q", GameLayoutSource, gameLayoutSourceLocalDevelopment)
+	}
+	if ActiveGameLayout.HoveredItemPointerBaseOffset != 0x20 {
+		t.Fatalf("hovered pointer base = 0x%X, want 0x20", ActiveGameLayout.HoveredItemPointerBaseOffset)
+	}
+}
+
 func TestResolveGameLayoutUsesCacheWhenRemoteIsUnavailable(t *testing.T) {
 	cacheFilePath := filepath.Join(t.TempDir(), "game-layout-cache.json")
 	cachedLayout := []byte(strings.Replace(string(embeddedGameLayoutJSON), "0x05DCFD70", "0x00000030", 1))
@@ -105,8 +157,8 @@ func TestParseGameLayoutValidatesOffsetsAndPlacementCalibrations(t *testing.T) {
 	if layout.HoveredItemKeyOffset != 0x1A4 {
 		t.Fatalf("hovered item key offset = 0x%X, want 0x1A4", layout.HoveredItemKeyOffset)
 	}
-	if len(layout.TooltipPositionPointerOffsets) != 7 {
-		t.Fatalf("position pointer offsets = %d, want 7", len(layout.TooltipPositionPointerOffsets))
+	if len(layout.TooltipXPointerOffsets) != 7 || len(layout.TooltipYPointerOffsets) != 7 {
+		t.Fatalf("tooltip pointer offset lengths = %d and %d, want 7", len(layout.TooltipXPointerOffsets), len(layout.TooltipYPointerOffsets))
 	}
 	if len(layout.PlacementCalibrations) != 8 {
 		t.Fatalf("placement calibrations = %d, want 8", len(layout.PlacementCalibrations))
@@ -121,6 +173,21 @@ func TestParseGameLayoutValidatesOffsetsAndPlacementCalibrations(t *testing.T) {
 	}
 }
 
+func TestOverlayPlacementMatchesCalibrationWhenTooltipYChanges(t *testing.T) {
+	layout, err := parseGameLayout(embeddedGameLayoutJSON)
+	if err != nil {
+		t.Fatalf("parseGameLayout returned error: %v", err)
+	}
+
+	previousLayout := ActiveGameLayout
+	ActiveGameLayout = layout
+	t.Cleanup(func() { ActiveGameLayout = previousLayout })
+	want := layout.PlacementCalibrations[0]
+	if got := overlayPlacementForTooltip(681, 308, 348); got != want {
+		t.Fatalf("placement = %+v, want %+v", got, want)
+	}
+}
+
 func TestParseGameLayoutRejectsUnsupportedAndIncompleteDocuments(t *testing.T) {
 	tests := []struct {
 		name string
@@ -128,7 +195,7 @@ func TestParseGameLayoutRejectsUnsupportedAndIncompleteDocuments(t *testing.T) {
 	}{
 		{
 			name: "unsupported schema",
-			raw:  []byte(strings.Replace(string(embeddedGameLayoutJSON), `"schema_version": 1`, `"schema_version": 2`, 1)),
+			raw:  []byte(strings.Replace(string(embeddedGameLayoutJSON), `"schema_version": 2`, `"schema_version": 3`, 1)),
 		},
 		{
 			name: "missing pointer value",

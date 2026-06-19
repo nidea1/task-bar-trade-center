@@ -15,13 +15,16 @@ import (
 )
 
 const (
-	gameLayoutSchemaVersion       = 1
+	gameLayoutSchemaVersion       = 2
 	gameLayoutRequestTimeout      = 5 * time.Second
 	gameLayoutPointerFailureAfter = 3 * time.Second
 
-	gameLayoutSourceRemote          = "remote"
-	gameLayoutSourceCache           = "cache"
-	gameLayoutSourceEmbeddedDefault = "embedded-default"
+	gameLayoutSourceRemote           = "remote"
+	gameLayoutSourceCache            = "cache"
+	gameLayoutSourceEmbeddedDefault  = "embedded-default"
+	gameLayoutSourceLocalDevelopment = "local-development"
+
+	gameLayoutPathEnvironment = "TBTC_GAME_LAYOUT_PATH"
 )
 
 var (
@@ -40,13 +43,14 @@ type gameLayoutDocument struct {
 		KeyOffset         string   `json:"key_offset"`
 	} `json:"hovered_item"`
 	Tooltip struct {
-		PositionPointerBaseOffset string   `json:"position_pointer_base_offset"`
-		PositionPointerOffsets    []string `json:"position_pointer_offsets"`
-		XOffsetFromPosition       string   `json:"x_offset_from_position"`
-		WidthPointerBaseOffset    string   `json:"width_pointer_base_offset"`
-		WidthPointerOffsets       []string `json:"width_pointer_offsets"`
-		HeightPointerBaseOffset   string   `json:"height_pointer_base_offset"`
-		HeightPointerOffsets      []string `json:"height_pointer_offsets"`
+		XPointerBaseOffset      string   `json:"x_pointer_base_offset"`
+		XPointerOffsets         []string `json:"x_pointer_offsets"`
+		YPointerBaseOffset      string   `json:"y_pointer_base_offset"`
+		YPointerOffsets         []string `json:"y_pointer_offsets"`
+		WidthPointerBaseOffset  string   `json:"width_pointer_base_offset"`
+		WidthPointerOffsets     []string `json:"width_pointer_offsets"`
+		HeightPointerBaseOffset string   `json:"height_pointer_base_offset"`
+		HeightPointerOffsets    []string `json:"height_pointer_offsets"`
 	} `json:"tooltip"`
 	PlacementCalibrations []OverlayPlacementCalibration `json:"placement_calibrations"`
 }
@@ -56,18 +60,31 @@ type GameLayout struct {
 	HoveredItemPointerOffsets    []uintptr
 	HoveredItemKeyOffset         uintptr
 
-	TooltipPositionPointerBaseOffset uintptr
-	TooltipPositionPointerOffsets    []uintptr
-	TooltipXOffsetFromPosition       uintptr
-	TooltipWidthPointerBaseOffset    uintptr
-	TooltipWidthPointerOffsets       []uintptr
-	TooltipHeightPointerBaseOffset   uintptr
-	TooltipHeightPointerOffsets      []uintptr
+	TooltipXPointerBaseOffset      uintptr
+	TooltipXPointerOffsets         []uintptr
+	TooltipYPointerBaseOffset      uintptr
+	TooltipYPointerOffsets         []uintptr
+	TooltipWidthPointerBaseOffset  uintptr
+	TooltipWidthPointerOffsets     []uintptr
+	TooltipHeightPointerBaseOffset uintptr
+	TooltipHeightPointerOffsets    []uintptr
 
 	PlacementCalibrations []OverlayPlacementCalibration
 }
 
 func loadGameLayout() error {
+	localLayoutPath := strings.TrimSpace(os.Getenv(gameLayoutPathEnvironment))
+	if localLayoutPath != "" {
+		layout, err := loadGameLayoutFromFile(localLayoutPath)
+		if err != nil {
+			return fmt.Errorf("local development game layout %q: %w", localLayoutPath, err)
+		}
+		ActiveGameLayout = layout
+		GameLayoutSource = gameLayoutSourceLocalDevelopment
+		fmt.Printf("Game layout loaded from %s: %s\n", gameLayoutSourceLocalDevelopment, localLayoutPath)
+		return nil
+	}
+
 	layout, source, err := resolveGameLayout(gameLayoutURL, GameLayoutCacheFilePath, gameLayoutHTTPClient, embeddedGameLayoutJSON)
 	if err != nil {
 		return err
@@ -77,6 +94,14 @@ func loadGameLayout() error {
 	GameLayoutSource = source
 	fmt.Printf("Game layout loaded from %s.\n", source)
 	return nil
+}
+
+func loadGameLayoutFromFile(filePath string) (GameLayout, error) {
+	raw, err := os.ReadFile(filePath)
+	if err != nil {
+		return GameLayout{}, err
+	}
+	return parseGameLayout(raw)
 }
 
 func resolveGameLayout(remoteURL, cacheFilePath string, client *http.Client, embeddedDefaults []byte) (GameLayout, string, error) {
@@ -167,15 +192,19 @@ func parseGameLayout(raw []byte) (GameLayout, error) {
 		return GameLayout{}, err
 	}
 
-	positionBase, err := parseLayoutOffset("tooltip.position_pointer_base_offset", document.Tooltip.PositionPointerBaseOffset)
+	xBase, err := parseLayoutOffset("tooltip.x_pointer_base_offset", document.Tooltip.XPointerBaseOffset)
 	if err != nil {
 		return GameLayout{}, err
 	}
-	positionOffsets, err := parseLayoutOffsets("tooltip.position_pointer_offsets", document.Tooltip.PositionPointerOffsets)
+	xOffsets, err := parseLayoutOffsets("tooltip.x_pointer_offsets", document.Tooltip.XPointerOffsets)
 	if err != nil {
 		return GameLayout{}, err
 	}
-	xOffset, err := parseLayoutOffset("tooltip.x_offset_from_position", document.Tooltip.XOffsetFromPosition)
+	yBase, err := parseLayoutOffset("tooltip.y_pointer_base_offset", document.Tooltip.YPointerBaseOffset)
+	if err != nil {
+		return GameLayout{}, err
+	}
+	yOffsets, err := parseLayoutOffsets("tooltip.y_pointer_offsets", document.Tooltip.YPointerOffsets)
 	if err != nil {
 		return GameLayout{}, err
 	}
@@ -203,17 +232,18 @@ func parseGameLayout(raw []byte) (GameLayout, error) {
 	}
 
 	return GameLayout{
-		HoveredItemPointerBaseOffset:     hoveredBase,
-		HoveredItemPointerOffsets:        hoveredOffsets,
-		HoveredItemKeyOffset:             hoveredKeyOffset,
-		TooltipPositionPointerBaseOffset: positionBase,
-		TooltipPositionPointerOffsets:    positionOffsets,
-		TooltipXOffsetFromPosition:       xOffset,
-		TooltipWidthPointerBaseOffset:    widthBase,
-		TooltipWidthPointerOffsets:       widthOffsets,
-		TooltipHeightPointerBaseOffset:   heightBase,
-		TooltipHeightPointerOffsets:      heightOffsets,
-		PlacementCalibrations:            append([]OverlayPlacementCalibration(nil), document.PlacementCalibrations...),
+		HoveredItemPointerBaseOffset:   hoveredBase,
+		HoveredItemPointerOffsets:      hoveredOffsets,
+		HoveredItemKeyOffset:           hoveredKeyOffset,
+		TooltipXPointerBaseOffset:      xBase,
+		TooltipXPointerOffsets:         xOffsets,
+		TooltipYPointerBaseOffset:      yBase,
+		TooltipYPointerOffsets:         yOffsets,
+		TooltipWidthPointerBaseOffset:  widthBase,
+		TooltipWidthPointerOffsets:     widthOffsets,
+		TooltipHeightPointerBaseOffset: heightBase,
+		TooltipHeightPointerOffsets:    heightOffsets,
+		PlacementCalibrations:          append([]OverlayPlacementCalibration(nil), document.PlacementCalibrations...),
 	}, nil
 }
 

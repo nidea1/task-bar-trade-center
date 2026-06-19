@@ -27,6 +27,27 @@ func findProcessID(processName string) uint32 {
 	return 0
 }
 
+func waitForProcessExit(pid uint32) {
+	if pid == 0 {
+		return
+	}
+
+	processHandle, _, _ := procOpenProcess.Call(SYNCHRONIZE, 0, uintptr(pid))
+	if processHandle == 0 {
+		return
+	}
+	defer procCloseHandle.Call(processHandle)
+	procWaitForSingleObject.Call(processHandle, INFINITE)
+}
+
+func hasProcessExited(processHandle uintptr) bool {
+	if processHandle == 0 {
+		return true
+	}
+	result, _, _ := procWaitForSingleObject.Call(processHandle, 0)
+	return result == WAIT_OBJECT_0
+}
+
 func gameClientScreenOrigin() (POINT, bool) {
 	if GameProcessID == 0 {
 		return POINT{}, false

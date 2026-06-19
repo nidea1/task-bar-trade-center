@@ -143,17 +143,20 @@ func readTooltipRectFromMemory() (RECT, bool) {
 	}
 
 	layout := ActiveGameLayout
-	positionBase := GameAssemblyBase + layout.TooltipPositionPointerBaseOffset
+	xBase := GameAssemblyBase + layout.TooltipXPointerBaseOffset
+	yBase := GameAssemblyBase + layout.TooltipYPointerBaseOffset
 	widthBase := GameAssemblyBase + layout.TooltipWidthPointerBaseOffset
 	heightBase := GameAssemblyBase + layout.TooltipHeightPointerBaseOffset
 
-	positionAddress, positionChainOK, positionTrace := resolveTooltipPointerChain("position", positionBase, layout.TooltipPositionPointerOffsets)
+	xAddress, xChainOK, xTrace := resolveTooltipPointerChain("x", xBase, layout.TooltipXPointerOffsets)
+	yAddress, yChainOK, yTrace := resolveTooltipPointerChain("y", yBase, layout.TooltipYPointerOffsets)
 	widthAddress, widthChainOK, widthTrace := resolveTooltipPointerChain("width", widthBase, layout.TooltipWidthPointerOffsets)
 	heightAddress, heightChainOK, heightTrace := resolveTooltipPointerChain("height", heightBase, layout.TooltipHeightPointerOffsets)
-	if !positionChainOK || !widthChainOK {
+	if !xChainOK || !yChainOK || !widthChainOK {
 		logTooltipDebugLines(
 			"pointer chain status:",
-			positionTrace,
+			xTrace,
+			yTrace,
 			widthTrace,
 			heightTrace,
 		)
@@ -161,16 +164,15 @@ func readTooltipRectFromMemory() (RECT, bool) {
 		return RECT{}, false
 	}
 
-	y, ok := readFloat32(GameProcessHandle, positionAddress)
+	x, ok := readFloat32(GameProcessHandle, xAddress)
 	if !ok {
-		logTooltipDebug("y read failed: yAddr=0x%X", positionAddress)
+		logTooltipDebug("x read failed: xAddr=0x%X", xAddress)
 		reportTooltipPointerRead(false)
 		return RECT{}, false
 	}
-	xAddress := positionAddress + layout.TooltipXOffsetFromPosition
-	x, ok := readFloat32(GameProcessHandle, xAddress)
+	y, ok := readFloat32(GameProcessHandle, yAddress)
 	if !ok {
-		logTooltipDebug("x read failed: xAddr=0x%X yAddr=0x%X", xAddress, positionAddress)
+		logTooltipDebug("y read failed: yAddr=0x%X", yAddress)
 		reportTooltipPointerRead(false)
 		return RECT{}, false
 	}
@@ -196,7 +198,7 @@ func readTooltipRectFromMemory() (RECT, bool) {
 	rawY := y
 	x = -x
 	y = -y
-	logTooltipDebug("base=0x%X positionBase=0x%X widthBase=0x%X heightBase=0x%X | xAddr=0x%X yAddr=0x%X widthAddr=0x%X heightAddr=0x%X heightSource=%s | raw x=%.2f y=%.2f normalized x=%.2f y=%.2f w=%.2f h=%.2f", GameAssemblyBase, positionBase, widthBase, heightBase, xAddress, positionAddress, widthAddress, heightAddress, heightSource, rawX, rawY, x, y, width, height)
+	logTooltipDebug("base=0x%X xBase=0x%X yBase=0x%X widthBase=0x%X heightBase=0x%X | xAddr=0x%X yAddr=0x%X widthAddr=0x%X heightAddr=0x%X heightSource=%s | raw x=%.2f y=%.2f normalized x=%.2f y=%.2f w=%.2f h=%.2f", GameAssemblyBase, xBase, yBase, widthBase, heightBase, xAddress, yAddress, widthAddress, heightAddress, heightSource, rawX, rawY, x, y, width, height)
 	if width < 150 || width > 650 || height < 60 || height > 700 {
 		logTooltipDebug("values rejected by size range: x=%.2f y=%.2f w=%.2f h=%.2f", x, y, width, height)
 		reportTooltipPointerRead(false)

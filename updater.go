@@ -29,7 +29,15 @@ type GitHubRelease struct {
 var githubReleaseURL = "https://api.github.com/repos/nidea1/task-bar-trade-center/releases/latest"
 
 const (
-	userAgent = "TaskBarTradeCenter-Updater"
+	userAgent                  = "TaskBarTradeCenter-Updater"
+	restartAfterUpdateArgument = "--restart-after-update"
+)
+
+var (
+	startExecutableProcess = func(executablePath string, args ...string) error {
+		return exec.Command(executablePath, args...).Start()
+	}
+	waitForUpdateParentExit = waitForProcessExit
 )
 
 // cleanOldVersion deletes the temporary .old file left behind from self-update.
@@ -189,15 +197,50 @@ func performUpdate(downloadURL, releasePageURL string) {
 		return
 	}
 
-	// Successful update! Launch the new executable and shut down.
+	// Start the replacement executable in helper mode before shutting down. The
+	// helper waits for this process to release the single-instance mutex.
 	exePath, err := os.Executable()
-	if err == nil {
-		cmd := exec.Command(exePath)
-		_ = cmd.Start()
+	if err != nil {
+		showErrorMessageBox("Update Installed", fmt.Sprintf("The update was installed, but Task Bar Trade Center could not restart automatically:\n%v\n\nPlease start it manually.", err))
+		return
+	}
+	if err := startRestartAfterUpdateHelper(exePath, uint32(os.Getpid())); err != nil {
+		showErrorMessageBox("Update Installed", fmt.Sprintf("The update was installed, but Task Bar Trade Center could not restart automatically:\n%v\n\nPlease start it manually.", err))
+		return
 	}
 
-	// Shutdown current app instance
 	shutdownApp()
+}
+
+func startRestartAfterUpdateHelper(executablePath string, parentPID uint32) error {
+	return startExecutableProcess(executablePath, restartAfterUpdateArgument, strconv.FormatUint(uint64(parentPID), 10))
+}
+
+func runRestartAfterUpdateHelper() bool {
+	if len(os.Args) != 3 || os.Args[1] != restartAfterUpdateArgument {
+		return false
+	}
+
+	parentPID, err := strconv.ParseUint(os.Args[2], 10, 32)
+	if err != nil || parentPID == 0 {
+		showErrorMessageBox("Update Restart Failed", "Task Bar Trade Center could not restart after the update. Please start it manually.")
+		return true
+	}
+
+	executablePath, err := os.Executable()
+	if err != nil {
+		showErrorMessageBox("Update Restart Failed", fmt.Sprintf("Task Bar Trade Center could not restart after the update:\n%v\n\nPlease start it manually.", err))
+		return true
+	}
+	if err := restartUpdatedApplication(uint32(parentPID), executablePath); err != nil {
+		showErrorMessageBox("Update Restart Failed", fmt.Sprintf("Task Bar Trade Center could not restart after the update:\n%v\n\nPlease start it manually.", err))
+	}
+	return true
+}
+
+func restartUpdatedApplication(parentPID uint32, executablePath string) error {
+	waitForUpdateParentExit(parentPID)
+	return startExecutableProcess(executablePath)
 }
 
 func downloadAndSwapExecutable(downloadURL string) error {

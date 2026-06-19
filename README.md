@@ -9,6 +9,7 @@ Task Bar Trade Center is a Windows tray utility for TaskBarHero, created by nide
 - Runs from the Windows notification area.
 - Waits in the background until `TaskBarHero.exe` is launched.
 - Shows `Waiting for TaskBarHero` in the tray tooltip while waiting for the game.
+- When TaskBarHero closes, asks whether Task Bar Trade Center should exit; choosing No returns to the waiting state.
 - Shows a compact market price overlay for marketable items (supports **Detail** and **Compact** modes).
 - Opens the active item's Steam Market listing with middle mouse button while the price overlay is visible.
 - Uses `assets/icon.png` as the Windows application and tray icon.
@@ -82,6 +83,8 @@ Console build for debugging:
 ```powershell
 go build -o .tmp/tbtc-dev.exe .
 ```
+
+`dev.ps1` starts the development build with the repository's `game-layout.json` as its only game-layout source. It also restarts the app when that file changes, so local placement calibration changes do not require a GitHub update.
 
 Release-style GUI build:
 

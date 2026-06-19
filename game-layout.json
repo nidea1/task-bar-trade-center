@@ -1,14 +1,15 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "hovered_item": {
     "pointer_base_offset": "0x05DCFD70",
     "pointer_offsets": ["0x40", "0x88", "0x10", "0xB8", "0x8", "0x20", "0x338"],
     "key_offset": "0x1A4"
   },
   "tooltip": {
-    "position_pointer_base_offset": "0x05D77540",
-    "position_pointer_offsets": ["0xB8", "0x10", "0x70", "0xD8", "0x140", "0x808", "0x828"],
-    "x_offset_from_position": "0x38",
+    "x_pointer_base_offset": "0x05DCFD70",
+    "x_pointer_offsets": ["0x40", "0xB8", "0x8", "0xD0", "0x60", "0x50", "0xC8"],
+    "y_pointer_base_offset": "0x05DCFD70",
+    "y_pointer_offsets": ["0xB8", "0x10", "0x30", "0x20", "0x90", "0x40", "0xAC"],
     "width_pointer_base_offset": "0x05DCAEA0",
     "width_pointer_offsets": ["0x40", "0xF0", "0x40", "0x618", "0x88", "0x10", "0xBC8"],
     "height_pointer_base_offset": "0x05D77D80",

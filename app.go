@@ -30,7 +30,7 @@ func runApp() {
 	loadItemsJSON()
 	if err := loadGameLayout(); err != nil {
 		fmt.Printf("Game layout could not be loaded: %v\n", err)
-		showErrorMessageBox("Game Layout Configuration Error", fmt.Sprintf("Task Bar Trade Center could not load its embedded game layout configuration.\n\n%v", err))
+		showErrorMessageBox("Game Layout Configuration Error", fmt.Sprintf("Task Bar Trade Center could not load its game layout configuration.\n\n%v", err))
 		return
 	}
 	loadPriceCacheFromDisk()
@@ -55,20 +55,33 @@ func runApp() {
 }
 
 func attachGameAndWatchHoveredItems() {
-	setAppStatus(AppStatusWaitingForGame)
-	pid := waitForGameProcess()
-	pHandle, ok := openGameProcess(pid)
-	if !ok {
-		setAppStatus(AppStatusAttachFailed)
-		return
-	}
+	for {
+		setAppStatus(AppStatusWaitingForGame)
+		pid := waitForGameProcess()
+		pHandle, ok := openGameProcess(pid)
+		if !ok {
+			setAppStatus(AppStatusAttachFailed)
+			return
+		}
 
-	setAppStatus(AppStatusWaitingForGameAssembly)
-	gameAssemblyBase := waitForGameAssembly(pHandle)
-	configureGameProcess(pid, pHandle, gameAssemblyBase)
-	GameReady.Store(true)
-	setAppStatus(AppStatusReady)
-	watchHoveredItems(pHandle, gameAssemblyBase)
+		setAppStatus(AppStatusWaitingForGameAssembly)
+		gameAssemblyBase, gameStillRunning := waitForGameAssembly(pHandle)
+		if !gameStillRunning {
+			procCloseHandle.Call(pHandle)
+			if handleGameClosed() {
+				return
+			}
+			continue
+		}
+
+		configureGameProcess(pid, pHandle, gameAssemblyBase)
+		GameReady.Store(true)
+		setAppStatus(AppStatusReady)
+		watchHoveredItems(pHandle, gameAssemblyBase)
+		if handleGameClosed() {
+			return
+		}
+	}
 }
 
 func waitForGameProcess() uint32 {
@@ -85,7 +98,7 @@ func waitForGameProcess() uint32 {
 }
 
 func openGameProcess(pid uint32) (uintptr, bool) {
-	pHandle, _, _ := procOpenProcess.Call(PROCESS_VM_READ|PROCESS_QUERY_INFORMATION, 0, uintptr(pid))
+	pHandle, _, _ := procOpenProcess.Call(PROCESS_VM_READ|PROCESS_QUERY_INFORMATION|SYNCHRONIZE, 0, uintptr(pid))
 	if pHandle == 0 {
 		fmt.Println("Could not attach to game memory. Please run the command prompt as administrator.")
 		return 0, false
@@ -94,9 +107,12 @@ func openGameProcess(pid uint32) (uintptr, bool) {
 	return pHandle, true
 }
 
-func waitForGameAssembly(processHandle uintptr) uintptr {
+func waitForGameAssembly(processHandle uintptr) (uintptr, bool) {
 	var gameAssemblyBase uintptr
 	for gameAssemblyBase == 0 {
+		if hasProcessExited(processHandle) {
+			return 0, false
+		}
 		gameAssemblyBase = getModuleBaseAddress(processHandle, "GameAssembly.dll")
 		if gameAssemblyBase == 0 {
 			fmt.Println("Waiting for GameAssembly.dll to load into memory...")
@@ -104,7 +120,7 @@ func waitForGameAssembly(processHandle uintptr) uintptr {
 		}
 	}
 	fmt.Printf("GameAssembly.dll address verified: 0x%X\n", gameAssemblyBase)
-	return gameAssemblyBase
+	return gameAssemblyBase, true
 }
 
 func configureGameProcess(pid uint32, processHandle uintptr, gameAssemblyBase uintptr) {
@@ -124,6 +140,10 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 	var lastUnknownRaw int32 = 0
 
 	for {
+		if hasProcessExited(pHandle) {
+			return
+		}
+
 		currentItemID, readMode, rawValue, ok := readHoveredItemID(pHandle, baseAddress, offsets, layout.HoveredItemKeyOffset)
 		if !ok {
 			recordPointerReadResult(pointerReadHoveredItem, false)
@@ -181,6 +201,33 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
+}
+
+func handleGameClosed() bool {
+	resetGameProcess()
+	if !showYesNoMessageBox("TaskBarHero Closed", "TaskBarHero was closed. Do you want to close Task Bar Trade Center too?") {
+		return false
+	}
+	shutdownApp()
+	return true
+}
+
+func resetGameProcess() {
+	GameReady.Store(false)
+	ActiveItemID.Store(0)
+	setCurrentItemName("")
+	ShowOverlay.Store(false)
+	HasLastOverlayRect = false
+	redrawOverlay()
+	if GameProcessHandle != 0 {
+		procCloseHandle.Call(GameProcessHandle)
+		GameProcessHandle = 0
+	}
+	GameProcessID = 0
+	GameAssemblyBase = 0
+	GameWindowHWND = 0
+	GameLayoutReadHealth.reset()
+	setAppStatus(AppStatusWaitingForGame)
 }
 
 func runOverlayMessageLoop() {
