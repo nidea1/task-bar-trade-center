@@ -53,6 +53,7 @@ type gameLayoutDocument struct {
 		HeightPointerOffsets    []string `json:"height_pointer_offsets"`
 	} `json:"tooltip"`
 	PlacementCalibrations []OverlayPlacementCalibration `json:"placement_calibrations"`
+	XCalibrations         []OverlayXCalibration         `json:"x_calibrations"`
 }
 
 type GameLayout struct {
@@ -70,6 +71,7 @@ type GameLayout struct {
 	TooltipHeightPointerOffsets    []uintptr
 
 	PlacementCalibrations []OverlayPlacementCalibration
+	XCalibrations         []OverlayXCalibration
 }
 
 func loadGameLayout() error {
@@ -248,6 +250,7 @@ func parseGameLayout(raw []byte) (GameLayout, error) {
 		TooltipHeightPointerBaseOffset: heightBase,
 		TooltipHeightPointerOffsets:    heightOffsets,
 		PlacementCalibrations:          append([]OverlayPlacementCalibration(nil), document.PlacementCalibrations...),
+		XCalibrations:                  append([]OverlayXCalibration(nil), document.XCalibrations...),
 	}, nil
 }
 

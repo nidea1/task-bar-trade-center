@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-06-19
+
+### Added
+- Added column/X coordinate-based calibration mapping (`x_calibrations` in `game-layout.json`) to dynamically adjust the overlay horizontal position by matching the nearest game X coordinate.
+
+### Changed
+- Removed `offset_x` from `placement_calibrations` in the game layout, delegating horizontal offset calculation entirely to the new X-coordinate calibration mapping.
+
 ## [0.3.2] - 2026-06-19
 
 ### Added

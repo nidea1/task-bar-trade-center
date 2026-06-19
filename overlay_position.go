@@ -155,13 +155,15 @@ func placeOverlayByTooltipRect(tooltipRect RECT) RECT {
 		tooltipHeight = TooltipOverlayReferenceHeight
 	}
 
+	localX := tooltipRect.Left
 	localY := tooltipRect.Top
 	if clientOrigin, ok := gameClientScreenOrigin(); ok {
+		localX = tooltipRect.Left - clientOrigin.X
 		localY = tooltipRect.Top - clientOrigin.Y
 	}
 	placement := overlayPlacementForTooltip(localY, tooltipWidth, tooltipHeight)
 	width := clampInt32(placement.PanelWidth, TooltipOverlayMinWidth, TooltipOverlayMaxWidth)
-	anchorOffsetX := placement.OffsetX
+	anchorOffsetX := findClosestXOffset(-localX)
 	anchorOffsetY := placement.OffsetY
 
 	overlayHeight := activeOverlayHeight()
@@ -231,6 +233,34 @@ func overlayPlacementForTooltip(localY int32, width int32, height int32) Overlay
 		OffsetX:       width + referenceRightOverhang - panelWidth,
 		OffsetY:       scaleByReference(height, TooltipOverlayAnchorOffsetY, TooltipOverlayReferenceHeight),
 	}
+}
+
+func findClosestXOffset(localX int32) int32 {
+	GameLayoutMu.RLock()
+	calibrations := ActiveGameLayout.XCalibrations
+	GameLayoutMu.RUnlock()
+
+	if len(calibrations) == 0 {
+		return 0
+	}
+
+	bestIndex := 0
+	bestDiff := absInt32(localX - roundFloat32ToInt32(calibrations[0].X))
+	for index := 1; index < len(calibrations); index++ {
+		diff := absInt32(localX - roundFloat32ToInt32(calibrations[index].X))
+		if diff < bestDiff {
+			bestDiff = diff
+			bestIndex = index
+		}
+	}
+	return calibrations[bestIndex].Offset
+}
+
+func roundFloat32ToInt32(val float32) int32 {
+	if val >= 0 {
+		return int32(val + 0.5)
+	}
+	return int32(val - 0.5)
 }
 
 func absInt32(value int32) int32 {

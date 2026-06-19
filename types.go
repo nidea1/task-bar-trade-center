@@ -186,3 +186,8 @@ type OverlayPlacementCalibration struct {
 	OffsetX       int32 `json:"offset_x"`
 	OffsetY       int32 `json:"offset_y"`
 }
+
+type OverlayXCalibration struct {
+	X      float32 `json:"x"`
+	Offset int32   `json:"offset"`
+}
