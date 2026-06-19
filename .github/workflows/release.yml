@@ -1,0 +1,53 @@
+name: Build and release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-amd64:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build Windows executable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          go install github.com/akavel/rsrc@latest
+          rsrc -ico assets/icon.ico -o rsrc_windows_amd64.syso
+          go build -trimpath -ldflags="-s -w -H=windowsgui" -o dist/tbtc.exe .
+          $hash = Get-FileHash dist/tbtc.exe -Algorithm SHA256
+          "$($hash.Hash.ToLower())  tbtc.exe" | Set-Content dist/checksums.txt
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tbtc-windows-amd64
+          path: dist/*
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $assets = Get-ChildItem dist -File | ForEach-Object { $_.FullName }
+          gh release create "$env:GITHUB_REF_NAME" @assets --title "$env:GITHUB_REF_NAME" --notes "Task Bar Trade Center $env:GITHUB_REF_NAME"

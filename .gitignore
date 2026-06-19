@@ -1,0 +1,12 @@
+.tmp/
+dist/
+*.exe
+*.log
+*.ps1
+.vscode/
+.idea/
+.vs/
+*.user
+*.local
+*.local.*
+*.syso
