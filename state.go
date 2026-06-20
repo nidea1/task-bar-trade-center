@@ -84,10 +84,13 @@ var (
 	PriceCache   = make(map[string]MarketData)
 	PriceCacheMu sync.RWMutex
 
-	GameLayoutMu         sync.RWMutex
-	ActiveGameLayout     GameLayout
-	GameLayoutSource     string
-	GameLayoutReadHealth pointerReadHealth
+	GameLayoutMu             sync.RWMutex
+	ActiveGameLayout         GameLayout
+	GameLayoutSource         string
+	GameLayoutReadHealth     pointerReadHealth
+	TooltipXAOBResolver      tooltipAOBResolver
+	TooltipYAOBResolver      tooltipAOBResolver
+	TooltipHeightAOBResolver tooltipAOBResolver
 
 	CurrentPriceText      = "Loading market..."
 	CurrentItemName       = ""

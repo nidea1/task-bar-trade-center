@@ -12,7 +12,7 @@ import (
 )
 
 func TestResolveGameLayoutUsesRemoteAndCachesIt(t *testing.T) {
-	remoteLayout := []byte(strings.Replace(string(embeddedGameLayoutJSON), "0x05DCFD70", "0x00000020", 1))
+	remoteLayout := []byte(strings.Replace(string(embeddedGameLayoutJSON), "0x05DF8198", "0x00000020", 1))
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if got := request.Header.Get("User-Agent"); got != userAgent {
 			t.Errorf("User-Agent = %q, want %q", got, userAgent)
@@ -55,8 +55,18 @@ func TestLoadGameLayoutFromFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadGameLayoutFromFile returned error: %v", err)
 	}
-	if layout.HoveredItemPointerBaseOffset != 0x05DCFD70 {
-		t.Fatalf("hovered pointer base = 0x%X, want 0x05DCFD70", layout.HoveredItemPointerBaseOffset)
+	if layout.HoveredItemPointerBaseOffset != 0x05DF8198 {
+		t.Fatalf("hovered pointer base = 0x%X, want 0x05DF8198", layout.HoveredItemPointerBaseOffset)
+	}
+}
+
+func TestApplyEmbeddedAOBFallback(t *testing.T) {
+	layout, err := applyEmbeddedAOBFallback(GameLayout{}, embeddedGameLayoutJSON)
+	if err != nil {
+		t.Fatalf("applyEmbeddedAOBFallback returned error: %v", err)
+	}
+	if !layout.HoveredItemPointerBaseAOB.configured() || !layout.TooltipXPointerBaseAOB.configured() || !layout.TooltipYPointerBaseAOB.configured() || !layout.TooltipHeightPointerBaseAOB.configured() {
+		t.Fatal("embedded AOB fallback was not applied to every pointer")
 	}
 }
 
@@ -73,7 +83,7 @@ func TestLoadGameLayoutFromFileRejectsInvalidLayout(t *testing.T) {
 
 func TestLoadGameLayoutPrefersLocalDevelopmentFile(t *testing.T) {
 	layoutPath := filepath.Join(t.TempDir(), "game-layout.json")
-	localLayout := []byte(strings.Replace(string(embeddedGameLayoutJSON), "0x05DCFD70", "0x00000020", 1))
+	localLayout := []byte(strings.Replace(string(embeddedGameLayoutJSON), "0x05DF8198", "0x00000020", 1))
 	if err := os.WriteFile(layoutPath, localLayout, 0600); err != nil {
 		t.Fatalf("write layout: %v", err)
 	}
@@ -99,7 +109,7 @@ func TestLoadGameLayoutPrefersLocalDevelopmentFile(t *testing.T) {
 
 func TestResolveGameLayoutUsesCacheWhenRemoteIsUnavailable(t *testing.T) {
 	cacheFilePath := filepath.Join(t.TempDir(), "game-layout-cache.json")
-	cachedLayout := []byte(strings.Replace(string(embeddedGameLayoutJSON), "0x05DCFD70", "0x00000030", 1))
+	cachedLayout := []byte(strings.Replace(string(embeddedGameLayoutJSON), "0x05DF8198", "0x00000030", 1))
 	if err := os.WriteFile(cacheFilePath, cachedLayout, 0600); err != nil {
 		t.Fatalf("write cache: %v", err)
 	}
@@ -136,8 +146,8 @@ func TestResolveGameLayoutUsesEmbeddedDefaultWhenRemoteAndCacheAreInvalid(t *tes
 	if source != gameLayoutSourceEmbeddedDefault {
 		t.Fatalf("source = %q, want %q", source, gameLayoutSourceEmbeddedDefault)
 	}
-	if layout.HoveredItemPointerBaseOffset != 0x05DCFD70 {
-		t.Fatalf("hovered pointer base = 0x%X, want 0x05DCFD70", layout.HoveredItemPointerBaseOffset)
+	if layout.HoveredItemPointerBaseOffset != 0x05DF8198 {
+		t.Fatalf("hovered pointer base = 0x%X, want 0x05DF8198", layout.HoveredItemPointerBaseOffset)
 	}
 
 	cached, err := os.ReadFile(cacheFilePath)
@@ -159,6 +169,12 @@ func TestParseGameLayoutValidatesOffsetsAndPlacementCalibrations(t *testing.T) {
 	}
 	if len(layout.TooltipXPointerOffsets) != 7 || len(layout.TooltipYPointerOffsets) != 7 {
 		t.Fatalf("tooltip pointer offset lengths = %d and %d, want 7", len(layout.TooltipXPointerOffsets), len(layout.TooltipYPointerOffsets))
+	}
+	if !layout.HoveredItemPointerBaseAOB.configured() {
+		t.Fatal("hovered item AOB pattern was not parsed")
+	}
+	if !layout.TooltipXPointerBaseAOB.configured() || !layout.TooltipYPointerBaseAOB.configured() || !layout.TooltipHeightPointerBaseAOB.configured() {
+		t.Fatal("tooltip AOB pattern was not parsed")
 	}
 }
 
@@ -322,7 +338,7 @@ func TestPointerReadWarningIsShownOnlyOncePerSession(t *testing.T) {
 
 func TestUpdateGameLayoutConfigs(t *testing.T) {
 	// Setup test server
-	remoteLayout := []byte(strings.Replace(string(embeddedGameLayoutJSON), "0x05DCFD70", "0x00000030", 1))
+	remoteLayout := []byte(strings.Replace(string(embeddedGameLayoutJSON), "0x05DF8198", "0x00000030", 1))
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if !strings.Contains(request.URL.RawQuery, "nocache=") {
 			t.Errorf("expected query parameter 'nocache', got query %q", request.URL.RawQuery)

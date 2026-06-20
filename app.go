@@ -128,12 +128,16 @@ func configureGameProcess(pid uint32, processHandle uintptr, gameAssemblyBase ui
 	GameProcessID = pid
 	GameAssemblyBase = gameAssemblyBase
 	GameLayoutReadHealth.reset()
+	TooltipXAOBResolver.reset()
+	TooltipYAOBResolver.reset()
+	TooltipHeightAOBResolver.reset()
 }
 
 func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 	var lastID int32 = 0
 	lastReadFailed := false
 	var lastUnknownRaw int32 = 0
+	aobResolver := hoveredItemAOBResolver{}
 
 	for {
 		if hasProcessExited(pHandle) {
@@ -148,6 +152,9 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 		offsets := layout.HoveredItemPointerOffsets
 
 		currentItemID, readMode, rawValue, ok := readHoveredItemID(pHandle, baseAddress, offsets, layout.HoveredItemKeyOffset)
+		if !ok {
+			currentItemID, readMode, rawValue, ok = aobResolver.read(pHandle, gameAssemblyBase, layout)
+		}
 		if !ok {
 			recordPointerReadResult(pointerReadHoveredItem, false)
 			if !lastReadFailed {
@@ -230,6 +237,9 @@ func resetGameProcess() {
 	GameAssemblyBase = 0
 	GameWindowHWND = 0
 	GameLayoutReadHealth.reset()
+	TooltipXAOBResolver.reset()
+	TooltipYAOBResolver.reset()
+	TooltipHeightAOBResolver.reset()
 	setAppStatus(AppStatusWaitingForGame)
 }
 

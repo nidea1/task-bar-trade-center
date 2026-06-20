@@ -152,6 +152,15 @@ func readTooltipRectFromMemory() (RECT, bool) {
 	xAddress, xChainOK, xTrace := resolveTooltipPointerChain("x", xBase, layout.TooltipXPointerOffsets)
 	yAddress, yChainOK, yTrace := resolveTooltipPointerChain("y", yBase, layout.TooltipYPointerOffsets)
 	heightAddress, heightChainOK, heightTrace := resolveTooltipPointerChain("height", heightBase, layout.TooltipHeightPointerOffsets)
+	if !xChainOK {
+		xAddress, xChainOK, xTrace = TooltipXAOBResolver.resolve("x", GameProcessHandle, GameAssemblyBase, layout.TooltipXPointerBaseAOB, layout.TooltipXPointerOffsets)
+	}
+	if !yChainOK {
+		yAddress, yChainOK, yTrace = TooltipYAOBResolver.resolve("y", GameProcessHandle, GameAssemblyBase, layout.TooltipYPointerBaseAOB, layout.TooltipYPointerOffsets)
+	}
+	if !heightChainOK {
+		heightAddress, heightChainOK, heightTrace = TooltipHeightAOBResolver.resolve("height", GameProcessHandle, GameAssemblyBase, layout.TooltipHeightPointerBaseAOB, layout.TooltipHeightPointerOffsets)
+	}
 	if !xChainOK || !yChainOK {
 		logTooltipDebugLines(
 			"pointer chain status:",

@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-06-20
+
+### Added
+- Added AOB-based fallback scanning for hovered-item and tooltip X/Y/height pointer roots when a game update invalidates the configured pointer bases.
+
+### Fixed
+- Updated the hovered-item and tooltip pointer bases for the current TaskbarHero build, validating their memory chains against the running game.
+- Validated AOB candidates against item IDs and expected tooltip coordinate or height ranges before accepting them.
+
 ## [0.3.5] - 2026-06-20
 
 ### Fixed

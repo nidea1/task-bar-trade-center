@@ -38,33 +38,47 @@ var (
 type gameLayoutDocument struct {
 	SchemaVersion int `json:"schema_version"`
 	HoveredItem   struct {
-		PointerBaseOffset string   `json:"pointer_base_offset"`
-		PointerOffsets    []string `json:"pointer_offsets"`
-		KeyOffset         string   `json:"key_offset"`
+		PointerBaseOffset string                `json:"pointer_base_offset"`
+		PointerOffsets    []string              `json:"pointer_offsets"`
+		KeyOffset         string                `json:"key_offset"`
+		PointerBaseAOB    gameLayoutAOBDocument `json:"pointer_base_aob"`
 	} `json:"hovered_item"`
 	Tooltip struct {
-		XPointerBaseOffset      string   `json:"x_pointer_base_offset"`
-		XPointerOffsets         []string `json:"x_pointer_offsets"`
-		YPointerBaseOffset      string   `json:"y_pointer_base_offset"`
-		YPointerOffsets         []string `json:"y_pointer_offsets"`
-		HeightPointerBaseOffset string   `json:"height_pointer_base_offset"`
-		HeightPointerOffsets    []string `json:"height_pointer_offsets"`
+		XPointerBaseOffset      string                `json:"x_pointer_base_offset"`
+		XPointerOffsets         []string              `json:"x_pointer_offsets"`
+		XPointerBaseAOB         gameLayoutAOBDocument `json:"x_pointer_base_aob"`
+		YPointerBaseOffset      string                `json:"y_pointer_base_offset"`
+		YPointerOffsets         []string              `json:"y_pointer_offsets"`
+		YPointerBaseAOB         gameLayoutAOBDocument `json:"y_pointer_base_aob"`
+		HeightPointerBaseOffset string                `json:"height_pointer_base_offset"`
+		HeightPointerOffsets    []string              `json:"height_pointer_offsets"`
+		HeightPointerBaseAOB    gameLayoutAOBDocument `json:"height_pointer_base_aob"`
 	} `json:"tooltip"`
 	PlacementCalibrations []OverlayPlacementCalibration `json:"placement_calibrations"`
 	XCalibrations         []OverlayXCalibration         `json:"x_calibrations"`
+}
+
+type gameLayoutAOBDocument struct {
+	Pattern              string `json:"pattern"`
+	DisplacementOffset   int    `json:"displacement_offset"`
+	InstructionEndOffset int    `json:"instruction_end_offset"`
 }
 
 type GameLayout struct {
 	HoveredItemPointerBaseOffset uintptr
 	HoveredItemPointerOffsets    []uintptr
 	HoveredItemKeyOffset         uintptr
+	HoveredItemPointerBaseAOB    AOBPattern
 
 	TooltipXPointerBaseOffset      uintptr
 	TooltipXPointerOffsets         []uintptr
+	TooltipXPointerBaseAOB         AOBPattern
 	TooltipYPointerBaseOffset      uintptr
 	TooltipYPointerOffsets         []uintptr
+	TooltipYPointerBaseAOB         AOBPattern
 	TooltipHeightPointerBaseOffset uintptr
 	TooltipHeightPointerOffsets    []uintptr
+	TooltipHeightPointerBaseAOB    AOBPattern
 
 	PlacementCalibrations []OverlayPlacementCalibration
 	XCalibrations         []OverlayXCalibration
@@ -111,6 +125,10 @@ func resolveGameLayout(remoteURL, cacheFilePath string, client *http.Client, emb
 	if err == nil {
 		layout, parseErr := parseGameLayout(remoteBytes)
 		if parseErr == nil {
+			layout, parseErr = applyEmbeddedAOBFallback(layout, embeddedDefaults)
+			if parseErr != nil {
+				return GameLayout{}, "", parseErr
+			}
 			if cacheFilePath != "" {
 				if writeErr := writeGameLayoutCache(cacheFilePath, remoteBytes); writeErr != nil {
 					fmt.Printf("Game layout cache could not be written: %v\n", writeErr)
@@ -125,6 +143,10 @@ func resolveGameLayout(remoteURL, cacheFilePath string, client *http.Client, emb
 	if cacheFilePath != "" {
 		if cachedBytes, readErr := os.ReadFile(cacheFilePath); readErr == nil {
 			if layout, parseErr := parseGameLayout(cachedBytes); parseErr == nil {
+				layout, parseErr = applyEmbeddedAOBFallback(layout, embeddedDefaults)
+				if parseErr != nil {
+					return GameLayout{}, "", parseErr
+				}
 				return layout, gameLayoutSourceCache, nil
 			} else {
 				fmt.Printf("Game layout cache is invalid: %v\n", parseErr)
@@ -139,6 +161,26 @@ func resolveGameLayout(remoteURL, cacheFilePath string, client *http.Client, emb
 		return GameLayout{}, "", fmt.Errorf("embedded game layout is invalid: %w", parseErr)
 	}
 	return layout, gameLayoutSourceEmbeddedDefault, nil
+}
+
+func applyEmbeddedAOBFallback(layout GameLayout, embeddedDefaults []byte) (GameLayout, error) {
+	embeddedLayout, err := parseGameLayout(embeddedDefaults)
+	if err != nil {
+		return GameLayout{}, fmt.Errorf("embedded AOB fallback is invalid: %w", err)
+	}
+	if !layout.HoveredItemPointerBaseAOB.configured() {
+		layout.HoveredItemPointerBaseAOB = embeddedLayout.HoveredItemPointerBaseAOB
+	}
+	if !layout.TooltipXPointerBaseAOB.configured() {
+		layout.TooltipXPointerBaseAOB = embeddedLayout.TooltipXPointerBaseAOB
+	}
+	if !layout.TooltipYPointerBaseAOB.configured() {
+		layout.TooltipYPointerBaseAOB = embeddedLayout.TooltipYPointerBaseAOB
+	}
+	if !layout.TooltipHeightPointerBaseAOB.configured() {
+		layout.TooltipHeightPointerBaseAOB = embeddedLayout.TooltipHeightPointerBaseAOB
+	}
+	return layout, nil
 }
 
 func downloadGameLayout(remoteURL string, client *http.Client) ([]byte, error) {
@@ -193,12 +235,30 @@ func parseGameLayout(raw []byte) (GameLayout, error) {
 	if err != nil {
 		return GameLayout{}, err
 	}
+	hoveredPointerBaseAOB, err := parseOptionalAOBPattern(
+		"hovered_item.pointer_base_aob",
+		document.HoveredItem.PointerBaseAOB.Pattern,
+		document.HoveredItem.PointerBaseAOB.DisplacementOffset,
+		document.HoveredItem.PointerBaseAOB.InstructionEndOffset,
+	)
+	if err != nil {
+		return GameLayout{}, err
+	}
 
 	xBase, err := parseLayoutOffset("tooltip.x_pointer_base_offset", document.Tooltip.XPointerBaseOffset)
 	if err != nil {
 		return GameLayout{}, err
 	}
 	xOffsets, err := parseLayoutOffsets("tooltip.x_pointer_offsets", document.Tooltip.XPointerOffsets)
+	if err != nil {
+		return GameLayout{}, err
+	}
+	xPointerBaseAOB, err := parseOptionalAOBPattern(
+		"tooltip.x_pointer_base_aob",
+		document.Tooltip.XPointerBaseAOB.Pattern,
+		document.Tooltip.XPointerBaseAOB.DisplacementOffset,
+		document.Tooltip.XPointerBaseAOB.InstructionEndOffset,
+	)
 	if err != nil {
 		return GameLayout{}, err
 	}
@@ -210,11 +270,29 @@ func parseGameLayout(raw []byte) (GameLayout, error) {
 	if err != nil {
 		return GameLayout{}, err
 	}
+	yPointerBaseAOB, err := parseOptionalAOBPattern(
+		"tooltip.y_pointer_base_aob",
+		document.Tooltip.YPointerBaseAOB.Pattern,
+		document.Tooltip.YPointerBaseAOB.DisplacementOffset,
+		document.Tooltip.YPointerBaseAOB.InstructionEndOffset,
+	)
+	if err != nil {
+		return GameLayout{}, err
+	}
 	heightBase, err := parseLayoutOffset("tooltip.height_pointer_base_offset", document.Tooltip.HeightPointerBaseOffset)
 	if err != nil {
 		return GameLayout{}, err
 	}
 	heightOffsets, err := parseLayoutOffsets("tooltip.height_pointer_offsets", document.Tooltip.HeightPointerOffsets)
+	if err != nil {
+		return GameLayout{}, err
+	}
+	heightPointerBaseAOB, err := parseOptionalAOBPattern(
+		"tooltip.height_pointer_base_aob",
+		document.Tooltip.HeightPointerBaseAOB.Pattern,
+		document.Tooltip.HeightPointerBaseAOB.DisplacementOffset,
+		document.Tooltip.HeightPointerBaseAOB.InstructionEndOffset,
+	)
 	if err != nil {
 		return GameLayout{}, err
 	}
@@ -229,12 +307,16 @@ func parseGameLayout(raw []byte) (GameLayout, error) {
 		HoveredItemPointerBaseOffset:   hoveredBase,
 		HoveredItemPointerOffsets:      hoveredOffsets,
 		HoveredItemKeyOffset:           hoveredKeyOffset,
+		HoveredItemPointerBaseAOB:      hoveredPointerBaseAOB,
 		TooltipXPointerBaseOffset:      xBase,
 		TooltipXPointerOffsets:         xOffsets,
+		TooltipXPointerBaseAOB:         xPointerBaseAOB,
 		TooltipYPointerBaseOffset:      yBase,
 		TooltipYPointerOffsets:         yOffsets,
+		TooltipYPointerBaseAOB:         yPointerBaseAOB,
 		TooltipHeightPointerBaseOffset: heightBase,
 		TooltipHeightPointerOffsets:    heightOffsets,
+		TooltipHeightPointerBaseAOB:    heightPointerBaseAOB,
 		PlacementCalibrations:          append([]OverlayPlacementCalibration(nil), document.PlacementCalibrations...),
 		XCalibrations:                  append([]OverlayXCalibration(nil), document.XCalibrations...),
 	}, nil
