@@ -306,34 +306,32 @@ const (
 type pointerReadHealth struct {
 	mu                  sync.Mutex
 	hoveredFailureSince time.Time
-	tooltipFailureSince time.Time
 	incompatible        bool
 	notified            bool
 }
 
 func (health *pointerReadHealth) record(now time.Time, kind pointerReadKind, success bool) (bool, bool, bool) {
+	if kind != pointerReadHoveredItem {
+		return false, false, false
+	}
+
 	health.mu.Lock()
 	defer health.mu.Unlock()
 
-	failureSince := &health.hoveredFailureSince
-	if kind == pointerReadTooltip {
-		failureSince = &health.tooltipFailureSince
-	}
-
 	if success {
-		*failureSince = time.Time{}
-		if health.incompatible && health.hoveredFailureSince.IsZero() && health.tooltipFailureSince.IsZero() {
+		health.hoveredFailureSince = time.Time{}
+		if health.incompatible {
 			health.incompatible = false
 			return false, false, true
 		}
 		return false, false, false
 	}
 
-	if failureSince.IsZero() {
-		*failureSince = now
+	if health.hoveredFailureSince.IsZero() {
+		health.hoveredFailureSince = now
 		return false, false, false
 	}
-	if !health.incompatible && now.Sub(*failureSince) >= gameLayoutPointerFailureAfter {
+	if !health.incompatible && now.Sub(health.hoveredFailureSince) >= gameLayoutPointerFailureAfter {
 		health.incompatible = true
 		if !health.notified {
 			health.notified = true
@@ -348,7 +346,6 @@ func (health *pointerReadHealth) reset() {
 	health.mu.Lock()
 	defer health.mu.Unlock()
 	health.hoveredFailureSince = time.Time{}
-	health.tooltipFailureSince = time.Time{}
 	health.incompatible = false
 	health.notified = false
 }
@@ -378,12 +375,6 @@ func recordPointerReadResultAt(now time.Time, kind pointerReadKind, success bool
 		"Game Memory Layout Update Required",
 		fmt.Sprintf("Task Bar Trade Center could not read the game's memory layout continuously. A TaskBarHero update may have changed it.\n\nThe price HUD has been disabled. Connect to the internet and restart Task Bar Trade Center to download the latest layout, or update the application.\n\nDiagnostic log: %s", LogFilePath),
 	)
-}
-
-func reportTooltipPointerRead(success bool) {
-	if ShowOverlay.Load() {
-		recordPointerReadResult(pointerReadTooltip, success)
-	}
 }
 
 // updateGameLayoutConfigs reloads the game layout configuration from remote.

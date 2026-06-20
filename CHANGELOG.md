@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-06-20
+
+### Fixed
+- Updated the tooltip X pointer chain and expanded its placement calibrations using values verified on two computers.
+- Kept the price HUD visible with cursor-based placement when tooltip coordinate memory cannot be read; only sustained hovered-item pointer failures now mark the game layout as incompatible.
+
 ## [0.3.4] - 2026-06-19
 
 ### Fixed

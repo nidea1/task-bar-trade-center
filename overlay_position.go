@@ -1,5 +1,7 @@
 package main
 
+import "unsafe"
+
 func marketOverlayRect() (RECT, bool) {
 	if tooltipRect, ok := readTooltipRectFromMemory(); ok {
 		LastOverlayRect = placeOverlayByTooltipRect(tooltipRect)
@@ -9,10 +11,21 @@ func marketOverlayRect() (RECT, bool) {
 	if !ShowOverlay.Load() {
 		return RECT{}, false
 	}
+	if cursor, ok := cursorScreenPosition(); ok {
+		LastOverlayRect = fallbackOverlayRect(cursor)
+		HasLastOverlayRect = true
+		return LastOverlayRect, true
+	}
 	if HasLastOverlayRect {
 		return LastOverlayRect, true
 	}
 	return RECT{}, false
+}
+
+func cursorScreenPosition() (POINT, bool) {
+	var cursor POINT
+	result, _, _ := procGetCursorPos.Call(uintptr(unsafe.Pointer(&cursor)))
+	return cursor, result != 0
 }
 
 func findTooltipRect(cursor POINT) (RECT, bool) {

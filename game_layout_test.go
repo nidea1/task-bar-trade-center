@@ -251,6 +251,21 @@ func TestPointerReadHealthRequiresContinuousFailureAndRecovers(t *testing.T) {
 	}
 }
 
+func TestPointerReadHealthIgnoresTooltipFailures(t *testing.T) {
+	var health pointerReadHealth
+	start := time.Unix(1_700_000_000, 0)
+
+	for _, elapsed := range []time.Duration{0, 3 * time.Second, 10 * time.Second} {
+		if incompatible, notified, recovered := health.record(start.Add(elapsed), pointerReadTooltip, false); incompatible || notified || recovered {
+			t.Fatalf("tooltip failure after %s = incompatible:%v notified:%v recovered:%v", elapsed, incompatible, notified, recovered)
+		}
+	}
+
+	if health.incompatible {
+		t.Fatal("tooltip failures marked the game layout incompatible")
+	}
+}
+
 func TestPointerReadWarningIsShownOnlyOncePerSession(t *testing.T) {
 	GameLayoutReadHealth.reset()
 	originalStatus := AppStatus.Load()

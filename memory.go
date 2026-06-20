@@ -159,20 +159,17 @@ func readTooltipRectFromMemory() (RECT, bool) {
 			yTrace,
 			heightTrace,
 		)
-		reportTooltipPointerRead(false)
 		return RECT{}, false
 	}
 
 	x, ok := readFloat32(GameProcessHandle, xAddress)
 	if !ok {
 		logTooltipDebug("x read failed: xAddr=0x%X", xAddress)
-		reportTooltipPointerRead(false)
 		return RECT{}, false
 	}
 	y, ok := readFloat32(GameProcessHandle, yAddress)
 	if !ok {
 		logTooltipDebug("y read failed: yAddr=0x%X", yAddress)
-		reportTooltipPointerRead(false)
 		return RECT{}, false
 	}
 	width := float32(TooltipOverlayReferenceWidth)
@@ -195,10 +192,8 @@ func readTooltipRectFromMemory() (RECT, bool) {
 	logTooltipDebug("base=0x%X xBase=0x%X yBase=0x%X heightBase=0x%X | xAddr=0x%X yAddr=0x%X heightAddr=0x%X heightSource=%s | raw x=%.2f y=%.2f normalized x=%.2f y=%.2f w=%.2f h=%.2f", GameAssemblyBase, xBase, yBase, heightBase, xAddress, yAddress, heightAddress, heightSource, rawX, rawY, x, y, width, height)
 	if width < 150 || width > 650 || height < 60 || height > 700 {
 		logTooltipDebug("values rejected by size range: x=%.2f y=%.2f w=%.2f h=%.2f", x, y, width, height)
-		reportTooltipPointerRead(false)
 		return RECT{}, false
 	}
-	reportTooltipPointerRead(true)
 
 	clientOrigin, ok := gameClientScreenOrigin()
 	if !ok {

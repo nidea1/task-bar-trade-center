@@ -74,7 +74,7 @@ Pointer chains and tooltip placement calibrations are published in [game-layout.
 2. The locally cached valid JSON file.
 3. The layout embedded in the executable.
 
-If the required game memory pointers fail continuously for 3 seconds while the HUD is active, the app hides the HUD, updates its tray status, and shows a one-time message. This usually means a TaskBarHero update changed the memory layout. Connect to the internet and restart the app to download the latest layout; update the app if the problem continues.
+If the hovered-item memory pointer fails continuously for 3 seconds while the HUD is active, the app hides the HUD, updates its tray status, and shows a one-time message. This usually means a TaskBarHero update changed the memory layout. If only tooltip coordinate memory is unavailable, the HUD remains visible using cursor-based placement.
 
 ## Build
 
