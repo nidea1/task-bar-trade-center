@@ -296,13 +296,6 @@ func appendMarketScopeMenus(menu uintptr, scope MarketScope) {
 						flags |= MF_CHECKED
 					}
 					label := "USD — " + region.Name
-					if region.CountryCode == "TR" {
-						if currentDisplayLanguage() == "tr-TR" {
-							label = "USD — Türkiye/MENA"
-						} else {
-							label = "USD — Turkey/MENA"
-						}
-					}
 					appendTrayMenuItem(currencyMenu, flags, MenuRegionBase+uint32(regionIndex), label)
 				}
 				continue

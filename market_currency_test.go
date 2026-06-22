@@ -101,8 +101,28 @@ func TestMarketSelectionRestrictsRegions(t *testing.T) {
 		t.Fatalf("USD menu label = %q, want USD — United States", got)
 	}
 	usdTR, _ := marketScopeFor("USD", "TR")
-	if got := marketCurrencyMenuLabel(usd, usdTR); got != "USD — Turkey" {
-		t.Fatalf("USD/TR menu label = %q, want USD — Turkey", got)
+
+	// Test English language behavior
+	originalLang := currentDisplayLanguagePreference()
+	applyDisplayLanguagePreference("en-US")
+	t.Cleanup(func() {
+		applyDisplayLanguagePreference(originalLang)
+	})
+
+	if got := marketCurrencyMenuLabel(usd, usdTR); got != "USD — Türkiye/MENA" {
+		t.Fatalf("USD/TR menu label in English = %q, want USD — Türkiye/MENA", got)
+	}
+	if got := formatMarketScope(usdTR); got != "USD — Türkiye/MENA" {
+		t.Fatalf("USD/TR formatMarketScope in English = %q, want USD — Türkiye/MENA", got)
+	}
+
+	// Test Turkish language behavior
+	applyDisplayLanguagePreference("tr-TR")
+	if got := marketCurrencyMenuLabel(usd, usdTR); got != "USD — Türkiye/MENA" {
+		t.Fatalf("USD/TR menu label in Turkish = %q, want USD — Türkiye/MENA", got)
+	}
+	if got := formatMarketScope(usdTR); got != "USD — Türkiye/MENA" {
+		t.Fatalf("USD/TR formatMarketScope in Turkish = %q, want USD — Türkiye/MENA", got)
 	}
 }
 

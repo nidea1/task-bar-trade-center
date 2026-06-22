@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-06-22
+
+### Changed
+- Reordered USD market regions to list `Türkiye/MENA` first and `United States` second.
+- Standardized the Turkey region name to `Türkiye/MENA` globally across all display language preferences.
+
 ## [0.4.0] - 2026-06-22
 
 ### Added

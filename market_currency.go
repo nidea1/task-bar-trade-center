@@ -42,8 +42,8 @@ var supportedMarketCurrencies = []MarketCurrency{
 }
 
 var supportedMarketRegions = []MarketRegion{
+	{CountryCode: "TR", Name: "Türkiye/MENA", CurrencyCode: "USD"},
 	{CountryCode: "US", Name: "United States", CurrencyCode: "USD"},
-	{CountryCode: "TR", Name: "Turkey", CurrencyCode: "USD"},
 	{CountryCode: "DE", Name: "Germany", CurrencyCode: "EUR"},
 	{CountryCode: "FR", Name: "France", CurrencyCode: "EUR"},
 	{CountryCode: "IT", Name: "Italy", CurrencyCode: "EUR"},
