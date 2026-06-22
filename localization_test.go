@@ -92,3 +92,42 @@ func TestSemanticOverlayIsRenderedInCurrentLanguage(t *testing.T) {
 		t.Fatalf("localized daily sales = %q", view.DailySales)
 	}
 }
+
+func TestGetCurrentItemNameLocalization(t *testing.T) {
+	originalItemMap := AllItemMap
+	AllItemMap = make(map[int]ItemConfig)
+	originalPreference := currentDisplayLanguagePreference()
+	t.Cleanup(func() {
+		AllItemMap = originalItemMap
+		ActiveItemID.Store(0)
+		applyDisplayLanguagePreference(originalPreference)
+	})
+
+	AllItemMap[123] = ItemConfig{
+		ID: 123,
+		Name: map[string]string{
+			"en-US": "English Name",
+			"tr-TR": "Türkçe İsim",
+		},
+	}
+
+	ActiveItemID.Store(123)
+
+	// Test default language (en-US)
+	applyDisplayLanguagePreference("en-US")
+	if name := getCurrentItemName(); name != "English Name" {
+		t.Errorf("got %q, want English Name", name)
+	}
+
+	// Test Turkish language (tr-TR)
+	applyDisplayLanguagePreference("tr-TR")
+	if name := getCurrentItemName(); name != "Türkçe İsim" {
+		t.Errorf("got %q, want Türkçe İsim", name)
+	}
+
+	// Test fallback to English when language is not translated
+	applyDisplayLanguagePreference("de-DE")
+	if name := getCurrentItemName(); name != "English Name" {
+		t.Errorf("got %q, want English Name", name)
+	}
+}

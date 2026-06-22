@@ -158,6 +158,18 @@ func getCurrentMarketAnalysis() (MarketAnalysis, bool) {
 }
 
 func getCurrentItemName() string {
+	itemID := ActiveItemID.Load()
+	if itemID > 0 {
+		if config, exists := AllItemMap[int(itemID)]; exists {
+			lang := currentDisplayLanguage()
+			if name, ok := config.Name[lang]; ok && name != "" {
+				return name
+			}
+			if name, ok := config.Name["en-US"]; ok && name != "" {
+				return name
+			}
+		}
+	}
 	CurrentPriceTextMutex.RLock()
 	defer CurrentPriceTextMutex.RUnlock()
 	return CurrentItemName

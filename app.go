@@ -214,7 +214,12 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 			ActiveItemID.Store(currentItemID)
 			if currentItemID > 0 {
 				if config, exists := ItemMap[int(currentItemID)]; exists {
-					setCurrentItemName(config.Name["en-US"])
+					lang := currentDisplayLanguage()
+					name := config.Name[lang]
+					if name == "" {
+						name = config.Name["en-US"]
+					}
+					setCurrentItemName(name)
 					fmt.Printf("Mouse is over item: %s (ID: %d)\n", getCurrentItemName(), currentItemID)
 					fmt.Printf("Item ID read mode: %s\n", readMode)
 					if EnablePriceHUD {

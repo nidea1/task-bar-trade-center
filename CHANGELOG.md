@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-06-22
+
+### Changed
+- Localized the hovered item name displayed on the overlay HUD according to the selected display language preference, falling back to English (en-US) if the translation is unavailable.
+
 ## [0.6.1] - 2026-06-22
 
 ### Added
