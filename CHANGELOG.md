@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-06-22
+
+### Added
+- Completed 100% translation coverage for all 16 other supported languages (German, French, Italian, Spanish, Dutch, Portuguese-PT, Portuguese-BR, Finnish, Japanese, Korean, Simplified Chinese, Hindi, Indonesian, Thai, Vietnamese, Polish).
+
 ## [0.6.0] - 2026-06-22
 
 ### Added
