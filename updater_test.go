@@ -2,9 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"sync/atomic"
 	"testing"
 )
 
@@ -55,30 +55,20 @@ func TestCheckForUpdates_UpToDate(t *testing.T) {
 	githubReleaseURL = ts.URL
 	defer func() { githubReleaseURL = oldURL }()
 
-	var infoMsgCalled atomic.Bool
-	showInfoMessageBoxMock = func(title, message string) {
-		infoMsgCalled.Store(true)
-		if title != "Up to Date" {
-			t.Errorf("Expected info dialog title 'Up to Date', got %q", title)
-		}
-	}
-	defer func() { showInfoMessageBoxMock = nil }()
-
-	// Trigger foreground update check
 	checkForUpdates(false)
 
-	if !infoMsgCalled.Load() {
-		t.Error("Expected info dialog to be called when application is up to date")
+	if UpdateStatus.Load() != UpdateStatusUpToDate {
+		t.Fatalf("update status = %d, want up to date", UpdateStatus.Load())
 	}
 }
 
-func TestCheckForUpdates_NewVersion_Rejected(t *testing.T) {
+func TestCheckForUpdates_RecordsAvailableUpdateWithoutPrompt(t *testing.T) {
 	// Setup test server
 	mockRelease := GitHubRelease{
 		TagName: "v99.0.0",
 		HTMLURL: "https://github.com/nidea1/task-bar-trade-center/releases/tag/v99.0.0",
 		Body:    "Cool new features.",
-		Assets:  []GitHubAsset{},
+		Assets:  []GitHubAsset{{Name: "tbtc.exe", BrowserDownloadURL: "https://example.com/tbtc.exe"}},
 	}
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -90,23 +80,29 @@ func TestCheckForUpdates_NewVersion_Rejected(t *testing.T) {
 	// Backup and restore globals
 	oldURL := githubReleaseURL
 	githubReleaseURL = ts.URL
-	defer func() { githubReleaseURL = oldURL }()
-
-	var yesNoMsgCalled atomic.Bool
+	oldYesNo := showYesNoMessageBoxMock
+	oldInfo := showInfoMessageBoxMock
+	defer func() {
+		githubReleaseURL = oldURL
+		showYesNoMessageBoxMock = oldYesNo
+		showInfoMessageBoxMock = oldInfo
+	}()
 	showYesNoMessageBoxMock = func(title, message string) bool {
-		yesNoMsgCalled.Store(true)
-		if title != "Update Available" {
-			t.Errorf("Expected yes-no dialog title 'Update Available', got %q", title)
-		}
-		return false // User clicks "No"
+		t.Fatalf("unexpected update prompt: %s - %s", title, message)
+		return false
 	}
-	defer func() { showYesNoMessageBoxMock = nil }()
+	showInfoMessageBoxMock = func(title, message string) {
+		t.Fatalf("unexpected update dialog: %s - %s", title, message)
+	}
 
-	// Trigger foreground update check
 	checkForUpdates(false)
 
-	if !yesNoMsgCalled.Load() {
-		t.Error("Expected yes-no dialog to be called when new version is available")
+	if UpdateStatus.Load() != UpdateStatusAvailable {
+		t.Fatalf("update status = %d, want available", UpdateStatus.Load())
+	}
+	downloadURL, releaseURL := updateActionURLs()
+	if downloadURL != "https://example.com/tbtc.exe" || releaseURL != mockRelease.HTMLURL {
+		t.Fatalf("update URLs = %q, %q", downloadURL, releaseURL)
 	}
 }
 
@@ -167,6 +163,36 @@ func TestRestartUpdatedApplicationWaitsForParentExit(t *testing.T) {
 	}
 }
 
+func TestRequestElevatedRestartReportsLaunchFailureWithoutClosing(t *testing.T) {
+	originalLaunch := launchElevatedRestart
+	originalAppHWND := AppHWND
+	originalTrayIconAdded := TrayIconAdded
+	originalPublisher := publishTrayNotification
+	t.Cleanup(func() {
+		launchElevatedRestart = originalLaunch
+		AppHWND = originalAppHWND
+		TrayIconAdded = originalTrayIconAdded
+		publishTrayNotification = originalPublisher
+		flushTrayNotifications()
+	})
+	AppHWND = 1
+	TrayIconAdded = true
+	var notification string
+	publishTrayNotification = func(title, message string) { notification = message }
+	launchElevatedRestart = func(path string, pid uint32) error {
+		if path == "" || pid == 0 {
+			t.Fatalf("unexpected elevation launch arguments: %q, %d", path, pid)
+		}
+		return fmt.Errorf("UAC cancelled")
+	}
+
+	requestElevatedRestart()
+	flushTrayNotifications()
+	if notification == "" {
+		t.Fatal("expected an administrator restart failure notification")
+	}
+}
+
 func TestHandleGameClosedPromptsForAppExit(t *testing.T) {
 	originalShowYesNoMessageBoxMock := showYesNoMessageBoxMock
 	originalStatus := AppStatus.Load()
@@ -176,10 +202,10 @@ func TestHandleGameClosedPromptsForAppExit(t *testing.T) {
 	})
 
 	showYesNoMessageBoxMock = func(title, message string) bool {
-		if title != "TaskBarHero Closed" {
+		if title != tr("dialog.game_closed.title") {
 			t.Errorf("title = %q", title)
 		}
-		if message != "TaskBarHero was closed. Do you want to close Task Bar Trade Center too?" {
+		if message != tr("dialog.game_closed.body") {
 			t.Errorf("message = %q", message)
 		}
 		return false

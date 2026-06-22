@@ -6,9 +6,10 @@ Task Bar Trade Center is a Windows tray utility for TaskBarHero, created by nide
 
 ## Features
 
-- Runs from the Windows notification area.
+- Runs from the Windows notification area and makes the tray icon available before network startup work completes.
+- Left- or right-click the tray icon to open the action menu.
 - Waits in the background until `TaskBarHero.exe` is launched.
-- Shows `Waiting for TaskBarHero` in the tray tooltip while waiting for the game.
+- Shows the current monitoring state in the tray tooltip and reports runtime, configuration, and update transitions through tray notifications.
 - When TaskBarHero closes, asks whether Task Bar Trade Center should exit; choosing No returns to the waiting state.
 - Shows a compact market price overlay for marketable items (supports **Detail** and **Compact** modes).
 - Lets you select a Steam Market currency and compatible country/region from the tray menu.
@@ -16,6 +17,7 @@ Task Bar Trade Center is a Windows tray utility for TaskBarHero, created by nide
 - Uses `assets/icon.png` as the Windows application and tray icon.
 - Embeds `items.json` into the executable, so release builds are single-file.
 - Persists user preferences and price cache between launches.
+- Uses the Windows display language by default and lets you choose English, German, French, Italian, Spanish, Dutch, Portuguese (Portugal/Brazil), Finnish, Japanese, Korean, Simplified Chinese, Hindi, Indonesian, Thai, Vietnamese, Polish, or Turkish.
 - Automatic log rotation (automatically prunes debug logs if they exceed 5MB).
 - Tray menu actions:
   - `Refresh cached prices`
@@ -23,6 +25,7 @@ Task Bar Trade Center is a Windows tray utility for TaskBarHero, created by nide
   - `Switch to Compact/Detail mode`
   - `Currency` (with EUR country submenu)
   - `Check for updates...`
+  - `Language`
   - `Exit`
 
 ## UI Modes
@@ -68,7 +71,7 @@ go build -o .tmp/tbtc-dev.exe .
 Release builds write logs, settings, and cache under the user's local app data folder:
 
 ```text
-%LOCALAPPDATA%\Task Bar Trade Center\config\settings.json      - Persists user preferences (e.g., overlay mode, market currency, and country)
+%LOCALAPPDATA%\Task Bar Trade Center\config\settings.json      - Persists user preferences (e.g., overlay mode, market currency, country, and display language)
 %LOCALAPPDATA%\Task Bar Trade Center\config\game-layout-cache.json - Last valid game memory layout downloaded from GitHub
 %LOCALAPPDATA%\Task Bar Trade Center\logs\tbtc.log - Debug logs (automatically capped at 5MB)
 %LOCALAPPDATA%\Task Bar Trade Center\cache\price-cache.json    - Persisted price cache

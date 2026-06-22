@@ -101,12 +101,12 @@ func drawDetailOverlay(hdc uintptr, rect RECT) {
 	strokeRect(hdc, header, colorRGB(227, 169, 67), 1)
 
 	withOverlayFont(hdc, 16, FW_BOLD, func() {
-		drawOverlayText(hdc, "TRADE CENTER", header, colorRGB(255, 190, 45), DT_CENTER|DT_SINGLELINE|DT_VCENTER)
+		drawOverlayText(hdc, tr("hud.title"), header, colorRGB(255, 190, 45), DT_CENTER|DT_SINGLELINE|DT_VCENTER)
 	})
 
 	itemName := getCurrentItemName()
 	if itemName == "" {
-		itemName = "Market Price"
+		itemName = tr("hud.market_price")
 	}
 	itemRect := RECT{Left: inner.Left + 8, Top: header.Bottom + 4, Right: inner.Right - 8, Bottom: header.Bottom + 26}
 	fillSolidRect(hdc, itemRect, colorRGB(25, 21, 18))
@@ -115,7 +115,7 @@ func drawDetailOverlay(hdc uintptr, rect RECT) {
 		drawOverlayText(hdc, itemName, insetRect(itemRect, 8, 0), colorRGB(235, 205, 156), DT_CENTER|DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS)
 	})
 
-	data := parsePriceOverlayView(getCurrentPriceText())
+	data := currentPriceOverlayView()
 	bodyLeft := inner.Left + 10
 	bodyRight := inner.Right - 10
 	y := itemRect.Bottom + 6
@@ -128,9 +128,9 @@ func drawDetailOverlay(hdc uintptr, rect RECT) {
 	withOverlayFont(hdc, 12, FW_BOLD, func() {
 		labelRect := RECT{Left: suggestedRect.Left + 8, Top: suggestedRect.Top, Right: suggestedRect.Left + 128, Bottom: suggestedRect.Bottom}
 		valueRect := RECT{Left: labelRect.Right, Top: suggestedRect.Top, Right: suggestedRect.Right - 8, Bottom: suggestedRect.Bottom}
-		suggestedLabel := "Suggested"
+		suggestedLabel := tr("hud.suggested")
 		if data.Confidence != "" {
-			suggestedLabel += " [" + data.Confidence + "]"
+			suggestedLabel += " [" + localizedSemanticValue(data.Confidence) + "]"
 		}
 		drawOverlayText(hdc, suggestedLabel, labelRect, colorRGB(202, 179, 139), DT_LEFT|DT_SINGLELINE|DT_VCENTER)
 		drawOverlayText(hdc, data.Suggested, valueRect, colorRGB(84, 220, 94), DT_RIGHT|DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS)
@@ -141,13 +141,13 @@ func drawDetailOverlay(hdc uintptr, rect RECT) {
 		dealTagRect := RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16}
 		dealColor := colorRGB(84, 220, 94)
 		dealBgColor := colorRGB(20, 42, 20)
-		if data.DealTag == "Overvalued" {
+		if strings.EqualFold(data.DealTag, "overvalued") {
 			dealColor = colorRGB(240, 80, 70)
 			dealBgColor = colorRGB(42, 16, 14)
 		}
 		fillSolidRect(hdc, dealTagRect, dealBgColor)
 		withOverlayFont(hdc, 11, FW_BOLD, func() {
-			drawOverlayText(hdc, data.DealTag, dealTagRect, dealColor, DT_CENTER|DT_SINGLELINE|DT_VCENTER)
+			drawOverlayText(hdc, localizedSemanticValue(data.DealTag), dealTagRect, dealColor, DT_CENTER|DT_SINGLELINE|DT_VCENTER)
 		})
 		y += 18
 	}
@@ -155,39 +155,39 @@ func drawDetailOverlay(hdc uintptr, rect RECT) {
 	y += 2
 	withOverlayFont(hdc, 12, FW_NORMAL, func() {
 		if data.LastSold != "" {
-			drawMarketStat(hdc, "Last Sold", data.LastSold, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
+			drawMarketStat(hdc, tr("hud.last_sold"), data.LastSold, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
 			y += 17
 		}
 		if data.LowestSell != "" {
-			drawMarketStat(hdc, "Lowest Sell", data.LowestSell, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
+			drawMarketStat(hdc, tr("hud.lowest_sell"), data.LowestSell, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
 			y += 17
 		}
 		if data.HighestBuy != "" {
-			drawMarketStat(hdc, "Highest Buy", data.HighestBuy, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
+			drawMarketStat(hdc, tr("hud.highest_buy"), data.HighestBuy, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
 			y += 17
 		}
 		if data.WeeklyAvg != "" {
-			drawMarketStat(hdc, "Weekly Avg", data.WeeklyAvg, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
+			drawMarketStat(hdc, tr("hud.weekly_average"), data.WeeklyAvg, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
 			y += 17
 		}
 		if data.SaleP75 != "" {
-			drawMarketStat(hdc, "Sale P75", data.SaleP75, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
+			drawMarketStat(hdc, tr("hud.sale_p75"), data.SaleP75, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
 			y += 17
 		}
 		if data.Spread != "" {
-			drawMarketStat(hdc, "Spread", data.Spread, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
+			drawMarketStat(hdc, tr("hud.spread"), data.Spread, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
 			y += 17
 		}
 		if data.Trend != "" {
-			drawMarketStat(hdc, "Trend", data.Trend, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
+			drawMarketStat(hdc, tr("hud.trend"), data.Trend, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
 			y += 17
 		}
 		if data.DailySales != "" {
-			drawMarketStat(hdc, "Daily Sales", data.DailySales, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
+			drawMarketStat(hdc, tr("hud.daily_sales"), data.DailySales, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
 			y += 17
 		}
 		if data.Orders != "" {
-			drawMarketStat(hdc, "Orders", data.Orders, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
+			drawMarketStat(hdc, tr("hud.orders"), data.Orders, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
 			y += 17
 		}
 	})
@@ -208,7 +208,7 @@ func drawDetailOverlay(hdc uintptr, rect RECT) {
 	fillSolidRect(hdc, footerRect, colorRGB(18, 17, 16))
 	strokeRect(hdc, footerRect, colorRGB(82, 69, 51), 1)
 	withOverlayFont(hdc, 10, FW_BOLD, func() {
-		drawOverlayText(hdc, "Middle Click: Open Steam Market", insetRect(footerRect, 9, 1), colorRGB(202, 179, 139), DT_CENTER|DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS)
+		drawOverlayText(hdc, tr("hud.open_market"), insetRect(footerRect, 9, 1), colorRGB(202, 179, 139), DT_CENTER|DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS)
 	})
 }
 
@@ -234,12 +234,12 @@ func drawCompactOverlay(hdc uintptr, rect RECT) {
 	strokeRect(hdc, header, colorRGB(227, 169, 67), 1)
 
 	withOverlayFont(hdc, 16, FW_BOLD, func() {
-		drawOverlayText(hdc, "TRADE CENTER", header, colorRGB(255, 190, 45), DT_CENTER|DT_SINGLELINE|DT_VCENTER)
+		drawOverlayText(hdc, tr("hud.title"), header, colorRGB(255, 190, 45), DT_CENTER|DT_SINGLELINE|DT_VCENTER)
 	})
 
 	itemName := getCurrentItemName()
 	if itemName == "" {
-		itemName = "Market Price"
+		itemName = tr("hud.market_price")
 	}
 	itemRect := RECT{Left: inner.Left + 8, Top: header.Bottom + 4, Right: inner.Right - 8, Bottom: header.Bottom + 26}
 	fillSolidRect(hdc, itemRect, colorRGB(25, 21, 18))
@@ -248,7 +248,7 @@ func drawCompactOverlay(hdc uintptr, rect RECT) {
 		drawOverlayText(hdc, itemName, insetRect(itemRect, 8, 0), colorRGB(235, 205, 156), DT_CENTER|DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS)
 	})
 
-	data := parsePriceOverlayView(getCurrentPriceText())
+	data := currentPriceOverlayView()
 	bodyLeft := inner.Left + 10
 	bodyRight := inner.Right - 10
 	y := itemRect.Bottom + 6
@@ -261,30 +261,30 @@ func drawCompactOverlay(hdc uintptr, rect RECT) {
 	withOverlayFont(hdc, 12, FW_BOLD, func() {
 		labelRect := RECT{Left: suggestedRect.Left + 8, Top: suggestedRect.Top, Right: suggestedRect.Left + 128, Bottom: suggestedRect.Bottom}
 		valueRect := RECT{Left: labelRect.Right, Top: suggestedRect.Top, Right: suggestedRect.Right - 8, Bottom: suggestedRect.Bottom}
-		drawOverlayText(hdc, "Suggested", labelRect, colorRGB(202, 179, 139), DT_LEFT|DT_SINGLELINE|DT_VCENTER)
+		drawOverlayText(hdc, tr("hud.suggested"), labelRect, colorRGB(202, 179, 139), DT_LEFT|DT_SINGLELINE|DT_VCENTER)
 		drawOverlayText(hdc, data.Suggested, valueRect, colorRGB(84, 220, 94), DT_RIGHT|DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS)
 	})
 
 	y = suggestedRect.Bottom + 5
 	withOverlayFont(hdc, 12, FW_NORMAL, func() {
 		if data.LastSold != "" {
-			drawMarketStat(hdc, "Last Sold", data.LastSold, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
+			drawMarketStat(hdc, tr("hud.last_sold"), data.LastSold, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
 			y += 17
 		}
 		if data.LowestSell != "" {
-			drawMarketStat(hdc, "Lowest Sell", data.LowestSell, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
+			drawMarketStat(hdc, tr("hud.lowest_sell"), data.LowestSell, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
 			y += 17
 		}
 		if data.HighestBuy != "" {
-			drawMarketStat(hdc, "Highest Buy", data.HighestBuy, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
+			drawMarketStat(hdc, tr("hud.highest_buy"), data.HighestBuy, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
 			y += 17
 		}
 		if data.WeeklyAvg != "" {
-			drawMarketStat(hdc, "Weekly Avg", data.WeeklyAvg, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
+			drawMarketStat(hdc, tr("hud.weekly_average"), data.WeeklyAvg, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
 			y += 17
 		}
 		if data.DailySales != "" {
-			drawMarketStat(hdc, "Daily Sales", data.DailySales, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
+			drawMarketStat(hdc, tr("hud.daily_sales"), data.DailySales, RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
 			y += 17
 		}
 	})
@@ -305,13 +305,13 @@ func drawCompactOverlay(hdc uintptr, rect RECT) {
 	fillSolidRect(hdc, footerRect, colorRGB(18, 17, 16))
 	strokeRect(hdc, footerRect, colorRGB(82, 69, 51), 1)
 	withOverlayFont(hdc, 10, FW_BOLD, func() {
-		drawOverlayText(hdc, "Middle Click: Open Steam Market", insetRect(footerRect, 9, 1), colorRGB(202, 179, 139), DT_CENTER|DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS)
+		drawOverlayText(hdc, tr("hud.open_market"), insetRect(footerRect, 9, 1), colorRGB(202, 179, 139), DT_CENTER|DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS)
 	})
 }
 
 func drawMarketStat(hdc uintptr, label string, value string, rect RECT) {
-	if value == "" || value == "N/A" || value == "N/A units" {
-		value = "N/A"
+	if value == "" || value == "N/A" || value == "N/A units" || value == tr("value.na") {
+		value = tr("value.na")
 	}
 	fillSolidRect(hdc, rect, colorRGB(14, 14, 13))
 	fillSolidRect(hdc, RECT{Left: rect.Left, Top: rect.Bottom - 1, Right: rect.Right, Bottom: rect.Bottom}, colorRGB(50, 45, 38))
@@ -320,6 +320,36 @@ func drawMarketStat(hdc uintptr, label string, value string, rect RECT) {
 	valueRect := RECT{Left: labelRect.Right + 4, Top: rect.Top, Right: rect.Right - 7, Bottom: rect.Bottom}
 	drawOverlayText(hdc, label, labelRect, colorRGB(154, 137, 111), DT_LEFT|DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS)
 	drawOverlayText(hdc, value, valueRect, colorRGB(225, 213, 191), DT_RIGHT|DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS)
+}
+
+func currentPriceOverlayView() PriceOverlayView {
+	if analysis, ok := getCurrentMarketAnalysis(); ok {
+		return priceOverlayViewFromAnalysis(analysis)
+	}
+	return parsePriceOverlayView(getCurrentPriceText())
+}
+
+func priceOverlayViewFromAnalysis(analysis MarketAnalysis) PriceOverlayView {
+	view := PriceOverlayView{
+		Suggested:  formatAnalysisPrice(analysis.SuggestedPrice, analysis.HasSuggested, analysis),
+		LowestSell: formatAnalysisPrice(analysis.LowestSellPrice, analysis.HasLowestSell, analysis),
+		HighestBuy: formatAnalysisPrice(analysis.HighestBuyPrice, analysis.HasHighestBuy, analysis),
+		DailySales: formatAnalysisVolume(analysis.DailySalesVolume, analysis.HasDailySales, analysis.VolumeActivity),
+		WeeklyAvg:  formatAnalysisPrice(analysis.WeeklyAveragePrice, analysis.HasWeeklyAverage, analysis),
+		LastSold:   formatAnalysisPrice(analysis.LastSoldPrice, analysis.HasLastSold, analysis),
+		Trend:      formatTrendPercent(analysis.TrendPercent, analysis.HasTrend),
+		Spread:     formatSpread(analysis),
+		Orders:     formatOrderCounts(analysis.BuyOrderCount, analysis.SellOrderCount, analysis.HasOrderBook),
+		DealTag:    analysis.DealTag,
+		Confidence: analysis.Confidence,
+	}
+	if analysis.HasRecentSaleP75 {
+		view.SaleP75 = formatAnalysisPrice(analysis.RecentSaleP75Price, true, analysis)
+	}
+	if !analysis.UpdatedAt.IsZero() {
+		view.Updated = analysis.UpdatedAt.Format(time.RFC3339)
+	}
+	return view
 }
 
 func parsePriceOverlayView(text string) PriceOverlayView {

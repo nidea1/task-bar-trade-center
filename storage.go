@@ -165,9 +165,10 @@ func writePriceCacheFileLocked() {
 }
 
 type AppSettings struct {
-	OverlayMode    int32  `json:"overlay_mode"`
-	MarketCurrency string `json:"market_currency"`
-	MarketCountry  string `json:"market_country"`
+	OverlayMode     int32  `json:"overlay_mode"`
+	MarketCurrency  string `json:"market_currency"`
+	MarketCountry   string `json:"market_country"`
+	DisplayLanguage string `json:"display_language"`
 }
 
 func loadSettingsFromDisk() {
@@ -178,6 +179,7 @@ func loadSettingsFromDisk() {
 	bytes, err := os.ReadFile(SettingsFilePath)
 	if err != nil {
 		if os.IsNotExist(err) {
+			applyDisplayLanguagePreference(displayLanguageSystem)
 			saveSettingsToDisk()
 		} else {
 			fmt.Printf("Settings file could not be read: %v\n", err)
@@ -194,7 +196,8 @@ func loadSettingsFromDisk() {
 	OverlayMode.Store(settings.OverlayMode)
 	scope := marketScopeFromSettings(settings.MarketCurrency, settings.MarketCountry)
 	setMarketScope(scope.Currency.Code, scope.Region.CountryCode)
-	fmt.Printf("Settings loaded from disk: overlayMode=%d market=%s\n", settings.OverlayMode, formatMarketScope(scope))
+	applyDisplayLanguagePreference(settings.DisplayLanguage)
+	fmt.Printf("Settings loaded from disk: overlayMode=%d market=%s language=%s\n", settings.OverlayMode, formatMarketScope(scope), currentDisplayLanguage())
 }
 
 func saveSettingsToDisk() {
@@ -204,9 +207,10 @@ func saveSettingsToDisk() {
 
 	scope := currentMarketScope()
 	settings := AppSettings{
-		OverlayMode:    OverlayMode.Load(),
-		MarketCurrency: scope.Currency.Code,
-		MarketCountry:  scope.Region.CountryCode,
+		OverlayMode:     OverlayMode.Load(),
+		MarketCurrency:  scope.Currency.Code,
+		MarketCountry:   scope.Region.CountryCode,
+		DisplayLanguage: currentDisplayLanguagePreference(),
 	}
 
 	bytes, err := json.MarshalIndent(settings, "", "  ")

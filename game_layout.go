@@ -112,6 +112,94 @@ func loadGameLayout() error {
 	return nil
 }
 
+// loadLocalGameLayout makes startup independent from the network. A validated
+// remote version is fetched later by refreshGameLayoutInBackground.
+func loadLocalGameLayout() error {
+	localLayoutPath := strings.TrimSpace(os.Getenv(gameLayoutPathEnvironment))
+	if localLayoutPath != "" {
+		layout, err := loadGameLayoutFromFile(localLayoutPath)
+		if err != nil {
+			return fmt.Errorf("local development game layout %q: %w", localLayoutPath, err)
+		}
+		GameLayoutMu.Lock()
+		ActiveGameLayout = layout
+		GameLayoutSource = gameLayoutSourceLocalDevelopment
+		GameLayoutMu.Unlock()
+		setConfigurationStatus(ConfigStatusDevelopment, "")
+		fmt.Printf("Game layout loaded from %s: %s\n", gameLayoutSourceLocalDevelopment, localLayoutPath)
+		return nil
+	}
+
+	if GameLayoutCacheFilePath != "" {
+		if raw, err := os.ReadFile(GameLayoutCacheFilePath); err == nil {
+			if layout, parseErr := parseGameLayout(raw); parseErr == nil {
+				layout, parseErr = applyEmbeddedAOBFallback(layout, embeddedGameLayoutJSON)
+				if parseErr == nil {
+					GameLayoutMu.Lock()
+					ActiveGameLayout = layout
+					GameLayoutSource = gameLayoutSourceCache
+					GameLayoutMu.Unlock()
+					setConfigurationStatus(ConfigStatusLocalCache, "")
+					fmt.Println("Game layout loaded from cache.")
+					return nil
+				}
+			}
+			fmt.Println("Game layout cache is invalid; using embedded layout.")
+		}
+	}
+
+	layout, err := parseGameLayout(embeddedGameLayoutJSON)
+	if err != nil {
+		return fmt.Errorf("embedded game layout is invalid: %w", err)
+	}
+	GameLayoutMu.Lock()
+	ActiveGameLayout = layout
+	GameLayoutSource = gameLayoutSourceEmbeddedDefault
+	GameLayoutMu.Unlock()
+	setConfigurationStatus(ConfigStatusEmbedded, "")
+	fmt.Println("Game layout loaded from embedded defaults.")
+	return nil
+}
+
+func refreshGameLayoutInBackground() {
+	if strings.TrimSpace(os.Getenv(gameLayoutPathEnvironment)) != "" {
+		return
+	}
+	startedAt := time.Now()
+	setConfigurationStatus(ConfigStatusRefreshing, "")
+	GameLayoutReadHealth.reset()
+	defer func() { fmt.Printf("startup remote_config_finished=%s\n", time.Since(startedAt)) }()
+	raw, err := downloadGameLayout(gameLayoutURL, gameLayoutHTTPClient)
+	if err != nil {
+		fmt.Printf("Game layout refresh failed: %v\n", err)
+		GameLayoutReadHealth.reset()
+		setConfigurationStatus(ConfigStatusRefreshFailed, "")
+		return
+	}
+	layout, err := parseGameLayout(raw)
+	if err == nil {
+		layout, err = applyEmbeddedAOBFallback(layout, embeddedGameLayoutJSON)
+	}
+	if err != nil {
+		fmt.Printf("Downloaded game layout is invalid: %v\n", err)
+		GameLayoutReadHealth.reset()
+		setConfigurationStatus(ConfigStatusRefreshFailed, "")
+		return
+	}
+	if GameLayoutCacheFilePath != "" {
+		if err := writeGameLayoutCache(GameLayoutCacheFilePath, raw); err != nil {
+			fmt.Printf("Game layout cache could not be written: %v\n", err)
+		}
+	}
+	GameLayoutMu.Lock()
+	ActiveGameLayout = layout
+	GameLayoutSource = gameLayoutSourceRemote
+	GameLayoutMu.Unlock()
+	GameLayoutReadHealth.reset()
+	setConfigurationStatus(ConfigStatusCurrent, "")
+	fmt.Println("Game layout refreshed from remote.")
+}
+
 func loadGameLayoutFromFile(filePath string) (GameLayout, error) {
 	raw, err := os.ReadFile(filePath)
 	if err != nil {
@@ -445,6 +533,13 @@ func recordPointerReadResultAt(now time.Time, kind pointerReadKind, success bool
 	if !becameIncompatible {
 		return
 	}
+	if ConfigurationStatus.Load() == ConfigStatusRefreshing {
+		// A fresh remote layout may arrive shortly; do not surface a stale-layout
+		// error while that validation is in progress. Resetting lets a genuine
+		// failure be detected again after the refresh completes.
+		GameLayoutReadHealth.reset()
+		return
+	}
 
 	ShowOverlay.Store(false)
 	redrawOverlay()
@@ -454,8 +549,8 @@ func recordPointerReadResultAt(now time.Time, kind pointerReadKind, success bool
 		return
 	}
 	showErrorMessageBox(
-		"Game Memory Layout Update Required",
-		fmt.Sprintf("Task Bar Trade Center could not read the game's memory layout continuously. A TaskBarHero update may have changed it.\n\nThe price HUD has been disabled. Connect to the internet and restart Task Bar Trade Center to download the latest layout, or update the application.\n\nDiagnostic log: %s", LogFilePath),
+		tr("dialog.layout_incompatible.title"),
+		tr("dialog.layout_incompatible.body", LogFilePath),
 	)
 }
 
@@ -463,16 +558,30 @@ func recordPointerReadResultAt(now time.Time, kind pointerReadKind, success bool
 // It appends a cache-busting timestamp parameter to the URL to bypass GitHub raw CDN cache,
 // resets the layout pointer read health, and updates the app status.
 func updateGameLayoutConfigs() {
+	setConfigurationStatus(ConfigStatusRefreshing, "")
 	bustedURL := fmt.Sprintf("%s?nocache=%d", gameLayoutURL, time.Now().UnixNano())
-	layout, source, err := resolveGameLayout(bustedURL, GameLayoutCacheFilePath, gameLayoutHTTPClient, embeddedGameLayoutJSON)
+	raw, err := downloadGameLayout(bustedURL, gameLayoutHTTPClient)
 	if err != nil {
-		showErrorMessageBox("Update Configs Failed", fmt.Sprintf("Failed to update configurations:\n%v", err))
+		setConfigurationStatus(ConfigStatusRefreshFailed, err.Error())
 		return
+	}
+	layout, err := parseGameLayout(raw)
+	if err == nil {
+		layout, err = applyEmbeddedAOBFallback(layout, embeddedGameLayoutJSON)
+	}
+	if err != nil {
+		setConfigurationStatus(ConfigStatusRefreshFailed, err.Error())
+		return
+	}
+	if GameLayoutCacheFilePath != "" {
+		if err := writeGameLayoutCache(GameLayoutCacheFilePath, raw); err != nil {
+			fmt.Printf("Game layout cache could not be written: %v\n", err)
+		}
 	}
 
 	GameLayoutMu.Lock()
 	ActiveGameLayout = layout
-	GameLayoutSource = source
+	GameLayoutSource = gameLayoutSourceRemote
 	GameLayoutMu.Unlock()
 
 	GameLayoutReadHealth.reset()
@@ -484,6 +593,5 @@ func updateGameLayoutConfigs() {
 	if ShowOverlay.Load() {
 		redrawOverlay()
 	}
-
-	showInfoMessageBox("Update Configs", fmt.Sprintf("Configurations updated successfully from %s.", source))
+	setConfigurationStatus(ConfigStatusCurrent, "")
 }

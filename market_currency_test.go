@@ -80,10 +80,15 @@ func TestMarketSelectionRestrictsRegions(t *testing.T) {
 		t.Fatalf("switching back to USD = %+v, changed=%t, ok=%t", scope, changed, ok)
 	}
 
+	scope, changed, ok = selectMarketRegion("USD", "TR")
+	if !ok || !changed || scope.Region.CountryCode != "TR" {
+		t.Fatalf("selecting Turkey = %+v, changed=%t, ok=%t", scope, changed, ok)
+	}
+
 	usd, _ := marketCurrencyForCode("USD")
 	eur, _ := marketCurrencyForCode("EUR")
 	if hasAdditionalRegionSelection(usd) {
-		t.Fatal("USD must not expose a region selection menu")
+		t.Fatal("USD should not expose a sub-menu region selection (US, Turkey), listed directly instead")
 	}
 	if !hasAdditionalRegionSelection(eur) {
 		t.Fatal("EUR must expose a region selection menu")
@@ -94,6 +99,10 @@ func TestMarketSelectionRestrictsRegions(t *testing.T) {
 	}
 	if got := marketCurrencyMenuLabel(usd, eurFR); got != "USD — United States" {
 		t.Fatalf("USD menu label = %q, want USD — United States", got)
+	}
+	usdTR, _ := marketScopeFor("USD", "TR")
+	if got := marketCurrencyMenuLabel(usd, usdTR); got != "USD — Turkey" {
+		t.Fatalf("USD/TR menu label = %q, want USD — Turkey", got)
 	}
 }
 
@@ -145,6 +154,7 @@ func TestPriceOverviewFormattingAndCacheMigration(t *testing.T) {
 		wantSuffix string
 	}{
 		{input: "$46.00", wantPrice: 46, wantPrefix: "$"},
+		{input: "$0.21 USD", wantPrice: 0.21, wantPrefix: "$", wantSuffix: ""},
 		{input: "40,13€", wantPrice: 40.13, wantSuffix: "€"},
 		{input: "P2,788.25", wantPrice: 2788.25, wantPrefix: "P"},
 	} {
@@ -233,13 +243,14 @@ func TestPriceOverlayIgnoresStaleMarketScope(t *testing.T) {
 	ActiveItemID.Store(42)
 	setCurrentPriceText("current")
 
-	updatePriceOverlay(42, usdUS, "stale")
+	updatePriceOverlay(42, usdUS, MarketAnalysis{UpdatedAt: time.Now(), HasSuggested: true, SuggestedPrice: 1})
 	if got := getCurrentPriceText(); got != "current" {
 		t.Fatalf("stale request updated overlay to %q", got)
 	}
-	updatePriceOverlay(42, eurDE, "fresh")
-	if got := getCurrentPriceText(); got != "fresh" {
-		t.Fatalf("current request left overlay at %q", got)
+	updatePriceOverlay(42, eurDE, MarketAnalysis{UpdatedAt: time.Now(), HasSuggested: true, SuggestedPrice: 2})
+	analysis, ok := getCurrentMarketAnalysis()
+	if !ok || analysis.SuggestedPrice != 2 {
+		t.Fatalf("current request left analysis at %+v, %v", analysis, ok)
 	}
 }
 

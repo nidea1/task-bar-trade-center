@@ -1,7 +1,7 @@
 package main
 
 func main() {
-	if runRestartAfterUpdateHelper() {
+	if runRestartAfterUpdateHelper() || runRestartAfterElevationHelper() {
 		return
 	}
 	runApp()

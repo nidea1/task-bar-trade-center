@@ -6,13 +6,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-22
+
 ### Added
 - Added Steam Market currency selection for USD, EUR, GBP, PHP, JPY, KRW, CNY, INR, IDR, THB, VND, BRL, PLN, CAD, and AUD.
 - Added country-aware market requests, with an EUR country submenu for Germany, France, Italy, Spain, Netherlands, Austria, Belgium, Portugal, Finland, and Ireland.
+- Added Turkey (TR) as a USD market region (MENA-USD).
+- Listed USD regions (`USD — United States` and `USD — Türkiye/MENA`) directly in the main currency menu instead of a sub-menu.
+- Added status transition notifications (`Başlatılıyor...` -> `TaskBarHero bekleniyor` -> `Hazır`).
 
 ### Changed
 - Separated price cache entries by selected currency and country, migrating existing entries to USD/United States.
 - Prevented stale price responses from a previous currency or country selection from updating the overlay.
+- Reduced tray status notification count (only action-required events trigger notifications by default).
+- Simplified startup tray status notification by removing the redundant "Started —" prefix.
+- Cleaned up redundant "USD" suffix (e.g. `"$0.21 USD"` to `"$0.21"`) in overlay HUD when prefix is `$`.
+
+### Fixed
+- Fixed tray icon tooltip not opening on hover after application startup.
+- Changed tray menu status format to `"Durum: <durum>"` (Status: <status>) across 18 languages.
+- Fixed the application shutdown confirmation dialog when TaskBarHero is closed.
 
 ## [0.3.6] - 2026-06-20
 

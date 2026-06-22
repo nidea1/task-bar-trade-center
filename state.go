@@ -22,6 +22,7 @@ var (
 	procGetConsoleWindow         = kernel32.NewProc("GetConsoleWindow")
 	procGetConsoleProcessList    = kernel32.NewProc("GetConsoleProcessList")
 	procCreateMutexW             = kernel32.NewProc("CreateMutexW")
+	procGetUserDefaultLocaleName = kernel32.NewProc("GetUserDefaultLocaleName")
 
 	user32                         = syscall.NewLazyDLL("user32.dll")
 	procRegisterClassExW           = user32.NewProc("RegisterClassExW")
@@ -37,6 +38,7 @@ var (
 	procBeginPaint                 = user32.NewProc("BeginPaint")
 	procEndPaint                   = user32.NewProc("EndPaint")
 	procPostMessageW               = user32.NewProc("PostMessageW")
+	procSendMessageW               = user32.NewProc("SendMessageW")
 	procPostQuitMessage            = user32.NewProc("PostQuitMessage")
 	procDestroyWindow              = user32.NewProc("DestroyWindow")
 	procDefWindowProcW             = user32.NewProc("DefWindowProcW")
@@ -59,6 +61,7 @@ var (
 	procTrackPopupMenu             = user32.NewProc("TrackPopupMenu")
 	procDestroyMenu                = user32.NewProc("DestroyMenu")
 	procSetForegroundWindow        = user32.NewProc("SetForegroundWindow")
+	procFindWindowW                = user32.NewProc("FindWindowW")
 	procSetWindowsHookExW          = user32.NewProc("SetWindowsHookExW")
 	procCallNextHookEx             = user32.NewProc("CallNextHookEx")
 	procUnhookWindowsHookEx        = user32.NewProc("UnhookWindowsHookEx")
@@ -93,6 +96,8 @@ var (
 	TooltipHeightAOBResolver tooltipAOBResolver
 
 	CurrentPriceText      = "Loading market..."
+	CurrentMarketAnalysis MarketAnalysis
+	CurrentOverlayHasData bool
 	CurrentItemName       = ""
 	ActiveItemID          atomic.Int32
 	OverlayHWND           uintptr
@@ -120,6 +125,9 @@ var (
 	MouseHook             uintptr
 	MouseHookCallback     uintptr
 	OverlayMode           atomic.Int32
+	ConfigurationStatus   atomic.Int32
+	UpdateStatus          atomic.Int32
+	AppInitialized        atomic.Bool
 	CurrentPriceTextMutex sync.RWMutex
 )
 
@@ -133,6 +141,20 @@ func setCurrentPriceText(val string) {
 	CurrentPriceTextMutex.Lock()
 	defer CurrentPriceTextMutex.Unlock()
 	CurrentPriceText = val
+	CurrentOverlayHasData = false
+}
+
+func setCurrentMarketAnalysis(analysis MarketAnalysis) {
+	CurrentPriceTextMutex.Lock()
+	defer CurrentPriceTextMutex.Unlock()
+	CurrentMarketAnalysis = analysis
+	CurrentOverlayHasData = true
+}
+
+func getCurrentMarketAnalysis() (MarketAnalysis, bool) {
+	CurrentPriceTextMutex.RLock()
+	defer CurrentPriceTextMutex.RUnlock()
+	return CurrentMarketAnalysis, CurrentOverlayHasData
 }
 
 func getCurrentItemName() string {

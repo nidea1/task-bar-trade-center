@@ -29,8 +29,9 @@ type GitHubRelease struct {
 var githubReleaseURL = "https://api.github.com/repos/nidea1/task-bar-trade-center/releases/latest"
 
 const (
-	userAgent                  = "TaskBarTradeCenter-Updater"
-	restartAfterUpdateArgument = "--restart-after-update"
+	userAgent                     = "TaskBarTradeCenter-Updater"
+	restartAfterUpdateArgument    = "--restart-after-update"
+	restartAfterElevationArgument = "--restart-after-elevation"
 )
 
 var (
@@ -38,6 +39,7 @@ var (
 		return exec.Command(executablePath, args...).Start()
 	}
 	waitForUpdateParentExit = waitForProcessExit
+	launchElevatedRestart   = launchElevatedRestartProcess
 )
 
 // cleanOldVersion deletes the temporary .old file left behind from self-update.
@@ -103,11 +105,10 @@ func isNewerVersion(current, latest string) bool {
 // if silent is true, it only prompts if an update is available.
 // if silent is false, it prompts for update or shows "Up to date" or error dialog.
 func checkForUpdates(silent bool) {
+	setUpdateState(UpdateStatusChecking, "", "", "")
 	req, err := http.NewRequest("GET", githubReleaseURL, nil)
 	if err != nil {
-		if !silent {
-			showErrorMessageBox("Update Check Failed", fmt.Sprintf("Failed to initialize update check:\n%v", err))
-		}
+		setUpdateState(UpdateStatusFailed, err.Error(), "", "")
 		return
 	}
 	req.Header.Set("User-Agent", userAgent)
@@ -115,60 +116,34 @@ func checkForUpdates(silent bool) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		if !silent {
-			showErrorMessageBox("Update Check Failed", fmt.Sprintf("Failed to contact update server:\n%v\n\nPlease check your internet connection.", err))
-		}
+		setUpdateState(UpdateStatusFailed, err.Error(), "", "")
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		if !silent {
-			showInfoMessageBox("Update Check", "No releases found on GitHub.")
-		}
+		setUpdateState(UpdateStatusUpToDate, "", "", "")
 		return
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		if !silent {
-			showErrorMessageBox("Update Check Failed", fmt.Sprintf("Update server returned status: %s", resp.Status))
-		}
+		setUpdateState(UpdateStatusFailed, fmt.Sprintf("Update server returned status: %s", resp.Status), "", "")
 		return
 	}
 
 	var release GitHubRelease
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		if !silent {
-			showErrorMessageBox("Update Check Failed", fmt.Sprintf("Failed to parse update information:\n%v", err))
-		}
+		setUpdateState(UpdateStatusFailed, err.Error(), "", "")
 		return
 	}
 
 	if !isNewerVersion(AppVersion, release.TagName) {
-		if !silent {
-			showInfoMessageBox("Up to Date", fmt.Sprintf("You are using the latest version (%s).", AppVersion))
-		}
+		setUpdateState(UpdateStatusUpToDate, "", "", release.HTMLURL)
 		return
 	}
 
-	// Update is available!
-	msg := fmt.Sprintf("A new version (%s) of Task Bar Trade Center is available. (You have %s)\n\nWould you like to download and install it automatically?", release.TagName, AppVersion)
-	if release.Body != "" {
-		// Include a snippet of release notes if present
-		notes := release.Body
-		if len(notes) > 200 {
-			notes = notes[:197] + "..."
-		}
-		msg += "\n\nRelease notes:\n" + notes
-	}
-
-	if !showYesNoMessageBox("Update Available", msg) {
-		return
-	}
-
-	// Find the exe asset
+	// Store the action instead of interrupting startup with a modal prompt.
 	var exeAsset *GitHubAsset
-	// Look for an asset that matches the app executable name or ends with .exe and has "taskbar" or "trade"
 	for _, asset := range release.Assets {
 		if strings.HasSuffix(strings.ToLower(asset.Name), ".exe") {
 			exeAsset = &asset
@@ -177,23 +152,32 @@ func checkForUpdates(silent bool) {
 	}
 
 	if exeAsset == nil {
-		showInfoMessageBox("Manual Update Required", "No automated update executable was found in this release.\n\nOpening the release page in your browser so you can download it manually.")
-		openURLInBrowser(release.HTMLURL)
+		setUpdateState(UpdateStatusFailed, "No installable executable was found for the available update.", "", release.HTMLURL)
 		return
 	}
 
-	// Perform background update
-	go performUpdate(exeAsset.BrowserDownloadURL, release.HTMLURL)
+	setUpdateState(UpdateStatusAvailable, tr("update.available", release.TagName), exeAsset.BrowserDownloadURL, release.HTMLURL)
+}
+
+func installAvailableUpdate() {
+	downloadURL, releaseURL := updateActionURLs()
+	if downloadURL == "" {
+		return
+	}
+	if UpdateStatus.Load() != UpdateStatusAvailable {
+		return
+	}
+	setUpdateState(UpdateStatusDownloading, "", downloadURL, releaseURL)
+	go performUpdate(downloadURL, releaseURL)
 }
 
 func performUpdate(downloadURL, releasePageURL string) {
-	showTrayNotification("Downloading Update", "Downloading the new version in the background...")
+	setUpdateState(UpdateStatusDownloading, "", downloadURL, releasePageURL)
 
 	err := downloadAndSwapExecutable(downloadURL)
 	if err != nil {
 		fmt.Printf("Update failed: %v\n", err)
-		showErrorMessageBox("Update Failed", fmt.Sprintf("Failed to apply update:\n%v\n\nOpening the release page in your browser for manual installation.", err))
-		openURLInBrowser(releasePageURL)
+		setUpdateState(UpdateStatusFailed, err.Error(), "", releasePageURL)
 		return
 	}
 
@@ -201,11 +185,11 @@ func performUpdate(downloadURL, releasePageURL string) {
 	// helper waits for this process to release the single-instance mutex.
 	exePath, err := os.Executable()
 	if err != nil {
-		showErrorMessageBox("Update Installed", fmt.Sprintf("The update was installed, but Task Bar Trade Center could not restart automatically:\n%v\n\nPlease start it manually.", err))
+		setUpdateState(UpdateStatusFailed, err.Error(), "", releasePageURL)
 		return
 	}
 	if err := startRestartAfterUpdateHelper(exePath, uint32(os.Getpid())); err != nil {
-		showErrorMessageBox("Update Installed", fmt.Sprintf("The update was installed, but Task Bar Trade Center could not restart automatically:\n%v\n\nPlease start it manually.", err))
+		setUpdateState(UpdateStatusFailed, err.Error(), "", releasePageURL)
 		return
 	}
 
@@ -223,17 +207,70 @@ func runRestartAfterUpdateHelper() bool {
 
 	parentPID, err := strconv.ParseUint(os.Args[2], 10, 32)
 	if err != nil || parentPID == 0 {
-		showErrorMessageBox("Update Restart Failed", "Task Bar Trade Center could not restart after the update. Please start it manually.")
+		showErrorMessageBox(tr("dialog.update_restart_failed.title"), tr("dialog.update_restart_failed.invalid"))
 		return true
 	}
 
 	executablePath, err := os.Executable()
 	if err != nil {
-		showErrorMessageBox("Update Restart Failed", fmt.Sprintf("Task Bar Trade Center could not restart after the update:\n%v\n\nPlease start it manually.", err))
+		showErrorMessageBox(tr("dialog.update_restart_failed.title"), tr("dialog.update_restart_failed.error", err))
 		return true
 	}
 	if err := restartUpdatedApplication(uint32(parentPID), executablePath); err != nil {
-		showErrorMessageBox("Update Restart Failed", fmt.Sprintf("Task Bar Trade Center could not restart after the update:\n%v\n\nPlease start it manually.", err))
+		showErrorMessageBox(tr("dialog.update_restart_failed.title"), tr("dialog.update_restart_failed.error", err))
+	}
+	return true
+}
+
+func requestElevatedRestart() {
+	executablePath, err := os.Executable()
+	if err != nil {
+		setElevationError(err.Error())
+		return
+	}
+	if err := launchElevatedRestart(executablePath, uint32(os.Getpid())); err != nil {
+		setElevationError(err.Error())
+		return
+	}
+	setElevationError("")
+	requestAppShutdown()
+}
+
+func launchElevatedRestartProcess(executablePath string, parentPID uint32) error {
+	operation, _ := syscall.UTF16PtrFromString("runas")
+	executable, _ := syscall.UTF16PtrFromString(executablePath)
+	arguments, _ := syscall.UTF16PtrFromString(restartAfterElevationArgument + " " + strconv.FormatUint(uint64(parentPID), 10))
+	result, _, _ := procShellExecuteW.Call(
+		AppHWND,
+		uintptr(unsafe.Pointer(operation)),
+		uintptr(unsafe.Pointer(executable)),
+		uintptr(unsafe.Pointer(arguments)),
+		0,
+		SW_SHOWDEFAULT,
+	)
+	if result <= 32 {
+		return fmt.Errorf("administrator restart was cancelled or could not be started (ShellExecute=%d)", result)
+	}
+	return nil
+}
+
+func runRestartAfterElevationHelper() bool {
+	if len(os.Args) != 3 || os.Args[1] != restartAfterElevationArgument {
+		return false
+	}
+
+	parentPID, err := strconv.ParseUint(os.Args[2], 10, 32)
+	if err != nil || parentPID == 0 {
+		showErrorMessageBox(tr("dialog.restart_failed.title"), tr("dialog.restart_failed.invalid"))
+		return true
+	}
+	executablePath, err := os.Executable()
+	if err != nil {
+		showErrorMessageBox(tr("dialog.restart_failed.title"), tr("dialog.restart_failed.error", err))
+		return true
+	}
+	if err := restartUpdatedApplication(uint32(parentPID), executablePath); err != nil {
+		showErrorMessageBox(tr("dialog.restart_failed.title"), tr("dialog.restart_failed.error", err))
 	}
 	return true
 }
@@ -322,7 +359,7 @@ func showYesNoMessageBox(title, message string) bool {
 	tPtr, _ := syscall.UTF16PtrFromString(title)
 	mPtr, _ := syscall.UTF16PtrFromString(message)
 	// MB_YESNO (0x4) | MB_ICONINFORMATION (0x40)
-	ret, _, _ := procMessageBoxW.Call(0, uintptr(unsafe.Pointer(mPtr)), uintptr(unsafe.Pointer(tPtr)), 0x00000004|0x00000040)
+	ret, _, _ := procMessageBoxW.Call(messageBoxOwner(), uintptr(unsafe.Pointer(mPtr)), uintptr(unsafe.Pointer(tPtr)), 0x00000004|0x00000040)
 	return ret == 6 // IDYES is 6
 }
 
@@ -334,7 +371,7 @@ func showInfoMessageBox(title, message string) {
 	tPtr, _ := syscall.UTF16PtrFromString(title)
 	mPtr, _ := syscall.UTF16PtrFromString(message)
 	// MB_OK (0x0) | MB_ICONINFORMATION (0x40)
-	procMessageBoxW.Call(0, uintptr(unsafe.Pointer(mPtr)), uintptr(unsafe.Pointer(tPtr)), 0x00000000|0x00000040)
+	procMessageBoxW.Call(messageBoxOwner(), uintptr(unsafe.Pointer(mPtr)), uintptr(unsafe.Pointer(tPtr)), 0x00000000|0x00000040)
 }
 
 func showErrorMessageBox(title, message string) {
@@ -345,5 +382,9 @@ func showErrorMessageBox(title, message string) {
 	tPtr, _ := syscall.UTF16PtrFromString(title)
 	mPtr, _ := syscall.UTF16PtrFromString(message)
 	// MB_OK (0x0) | MB_ICONERROR (0x10)
-	procMessageBoxW.Call(0, uintptr(unsafe.Pointer(mPtr)), uintptr(unsafe.Pointer(tPtr)), 0x00000000|0x00000010)
+	procMessageBoxW.Call(messageBoxOwner(), uintptr(unsafe.Pointer(mPtr)), uintptr(unsafe.Pointer(tPtr)), 0x00000000|0x00000010)
+}
+
+func messageBoxOwner() uintptr {
+	return AppHWND
 }

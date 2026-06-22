@@ -14,44 +14,76 @@ func runApp() {
 
 	mutex, ok := checkSingleInstance()
 	if !ok {
-		showAlreadyRunningMessage()
+		if !activateExistingInstance() {
+			showAlreadyRunningMessage()
+		}
 		return
 	}
 	defer procCloseHandle.Call(mutex)
 
-	initAppStorage()
-	defer closeAppStorage()
-
-	cleanOldVersion()
-
-	fmt.Printf("%s is starting...\n", AppName)
-	GameReady.Store(false)
-	AppStatus.Store(AppStatusWaitingForGame)
-	loadItemsJSON()
-	if err := loadGameLayout(); err != nil {
-		fmt.Printf("Game layout could not be loaded: %v\n", err)
-		showErrorMessageBox("Game Layout Configuration Error", fmt.Sprintf("Task Bar Trade Center could not load its game layout configuration.\n\n%v", err))
-		return
-	}
-	loadPriceCacheFromDisk()
-	loadSettingsFromDisk()
 	createAppWindow()
+	setAppStatus(AppStatusStarting)
 	addTrayIcon()
-	installMarketClickHook()
-
-	if EnablePriceHUD {
-		createOverlayWindow()
-	}
-
-	go attachGameAndWatchHoveredItems()
-	go checkUpdatesOnStartup()
+	startedAt := time.Now()
+	go initializeApplication(startedAt)
 	runOverlayMessageLoop()
-	uninstallMarketClickHook()
-	removeTrayIcon()
+	shutdownApplication()
+	closeAppStorage()
+	if AppHWND != 0 {
+		removeTrayIcon()
+	}
 	if GameProcessHandle != 0 {
 		procCloseHandle.Call(GameProcessHandle)
 		GameProcessHandle = 0
 	}
+}
+
+func initializeApplication(startedAt time.Time) {
+	initAppStorage()
+	fmt.Printf("%s is starting...\n", AppName)
+	fmt.Printf("startup tray_ready=%s\n", time.Since(startedAt))
+	cleanOldVersion()
+	GameReady.Store(false)
+
+	if err := loadItemsJSON(); err != nil {
+		failApplicationInitialization(fmt.Errorf("items database: %w", err))
+		return
+	}
+	loadPriceCacheFromDisk()
+	loadSettingsFromDisk()
+	notifyApplicationStarted()
+	if err := loadLocalGameLayout(); err != nil {
+		failApplicationInitialization(fmt.Errorf("game layout: %w", err))
+		return
+	}
+
+	fmt.Printf("startup local_ready=%s\n", time.Since(startedAt))
+	procPostMessageW.Call(AppHWND, WM_APP_LOCAL_READY, 0, 0)
+}
+
+func failApplicationInitialization(err error) {
+	fmt.Printf("Application initialization failed: %v\n", err)
+	notifyApplicationStarted()
+	setConfigurationStatus(ConfigStatusRefreshFailed, err.Error())
+	setAppStatus(AppStatusInitializationFailed)
+}
+
+func startMonitoringAfterLocalInitialization() {
+	if !AppInitialized.CompareAndSwap(false, true) {
+		return
+	}
+	if EnablePriceHUD {
+		createOverlayWindow()
+	}
+	installMarketClickHook()
+	go attachGameAndWatchHoveredItems()
+	go checkUpdatesOnStartup()
+	go refreshGameLayoutInBackground()
+	fmt.Println("startup monitor_ready")
+}
+
+func shutdownApplication() {
+	uninstallMarketClickHook()
 }
 
 func attachGameAndWatchHoveredItems() {
@@ -186,7 +218,7 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 					fmt.Printf("Item ID read mode: %s\n", readMode)
 					if EnablePriceHUD {
 						ShowOverlay.Store(true)
-						setCurrentPriceText("Loading price...")
+						setCurrentPriceText(tr("hud.loading"))
 						redrawOverlay()
 					}
 					go fetchPriceAndUpdate(config)
@@ -214,12 +246,21 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 }
 
 func handleGameClosed() bool {
+	shouldClose := askGameClosedOnUIThread()
 	resetGameProcess()
-	if !showYesNoMessageBox("TaskBarHero Closed", "TaskBarHero was closed. Do you want to close Task Bar Trade Center too?") {
+	if !shouldClose {
 		return false
 	}
 	requestAppShutdown()
 	return true
+}
+
+func askGameClosedOnUIThread() bool {
+	if AppHWND == 0 {
+		return showYesNoMessageBox(tr("dialog.game_closed.title"), tr("dialog.game_closed.body"))
+	}
+	result, _, _ := procSendMessageW.Call(AppHWND, WM_APP_GAME_CLOSED_PROMPT, 0, 0)
+	return result != 0
 }
 
 func resetGameProcess() {
@@ -285,8 +326,21 @@ func checkSingleInstance() (uintptr, bool) {
 	return mutex, true
 }
 
+func activateExistingInstance() bool {
+	className, _ := syscall.UTF16PtrFromString(appWindowClassName())
+	for i := 0; i < 10; i++ {
+		hwnd, _, _ := procFindWindowW.Call(uintptr(unsafe.Pointer(className)), 0)
+		if hwnd != 0 {
+			procPostMessageW.Call(hwnd, WM_APP_OPEN_TRAY_MENU, 0, 0)
+			return true
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return false
+}
+
 func showAlreadyRunningMessage() {
-	text, _ := syscall.UTF16PtrFromString("Task Bar Trade Center is already running.")
+	text, _ := syscall.UTF16PtrFromString(tr("dialog.already_running"))
 	caption, _ := syscall.UTF16PtrFromString("Task Bar Trade Center")
 	// MB_OK = 0x00000000 | MB_ICONWARNING = 0x00000030
 	procMessageBoxW.Call(0, uintptr(unsafe.Pointer(text)), uintptr(unsafe.Pointer(caption)), 0x00000000|0x00000030)

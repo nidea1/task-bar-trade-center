@@ -10,11 +10,11 @@ import (
 //go:embed items.json
 var embeddedItemsJSON []byte
 
-func loadItemsJSON() {
+func loadItemsJSON() error {
 	var db []ItemConfig
 	if err := json.Unmarshal(embeddedItemsJSON, &db); err != nil {
 		fmt.Printf("Embedded items database could not be loaded: %v\n", err)
-		return
+		return err
 	}
 	for _, item := range db {
 		AllItemMap[item.ID] = item
@@ -23,4 +23,5 @@ func loadItemsJSON() {
 		}
 	}
 	fmt.Printf("Database loaded: %d marketable items active.\n", len(ItemMap))
+	return nil
 }

@@ -153,7 +153,7 @@ func collectComponent(panelPixels []bool, visited []bool, cols int, rows int, st
 }
 
 func activeOverlayHeight() int32 {
-	data := parsePriceOverlayView(getCurrentPriceText())
+	data := currentPriceOverlayView()
 	return calculateRequiredHeight(data, OverlayMode.Load())
 }
 

@@ -84,7 +84,9 @@ type NOTIFYICONDATAW struct {
 }
 
 type MarketData struct {
-	OverlayText     string
+	// OverlayText is read only for legacy cache compatibility. New cache entries
+	// render directly from Analysis so changing the UI language is immediate.
+	OverlayText     string `json:"OverlayText,omitempty"`
 	CachedAt        time.Time
 	Analysis        MarketAnalysis
 	OrderBook       MarketOrderBook

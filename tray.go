@@ -7,7 +7,7 @@ import (
 )
 
 func createAppWindow() {
-	className, _ := syscall.UTF16PtrFromString(AppProcessName + "AppWindow")
+	className, _ := syscall.UTF16PtrFromString(appWindowClassName())
 	windowTitle, _ := syscall.UTF16PtrFromString(AppName)
 	hInstance, _, _ := procGetModuleHandleW.Call(0)
 	cxIcon := getSystemMetric(SM_CXICON)
@@ -41,6 +41,10 @@ func createAppWindow() {
 	}
 }
 
+func appWindowClassName() string {
+	return AppProcessName + "AppWindow"
+}
+
 func addTrayIcon() {
 	if AppHWND == 0 || TrayIconAdded {
 		return
@@ -63,6 +67,7 @@ func addTrayIcon() {
 
 	procShellNotifyIcon.Call(NIM_SETVERSION, uintptr(unsafe.Pointer(&nid)))
 	TrayIconAdded = true
+	updateTrayIconTooltip()
 }
 
 func loadAppIcon(hInstance uintptr, size int32) uintptr {
@@ -108,8 +113,10 @@ func newNotifyIconData() NOTIFYICONDATAW {
 }
 
 func setAppStatus(status int32) {
-	AppStatus.Store(status)
+	previous := AppStatus.Swap(status)
 	requestTrayTooltipUpdate()
+	requestStatusRefresh()
+	notifyRuntimeStateChange(previous, status)
 }
 
 func requestTrayTooltipUpdate() {
@@ -117,6 +124,13 @@ func requestTrayTooltipUpdate() {
 		return
 	}
 	procPostMessageW.Call(AppHWND, WM_TRAY_TIP_UPDATE, 0, 0)
+}
+
+func requestStatusRefresh() {
+	if AppHWND == 0 {
+		return
+	}
+	procPostMessageW.Call(AppHWND, WM_APP_STATUS_REFRESH, 0, 0)
 }
 
 func updateTrayIconTooltip() {
@@ -141,20 +155,10 @@ func showTrayNotification(title, message string) {
 }
 
 func trayTooltipText() string {
-	switch AppStatus.Load() {
-	case AppStatusWaitingForGame:
-		return AppName + " - Waiting for TaskBarHero"
-	case AppStatusWaitingForGameAssembly:
-		return AppName + " - Loading game"
-	case AppStatusReady:
-		return AppName
-	case AppStatusAttachFailed:
-		return AppName + " - Administrator permission required"
-	case AppStatusGameLayoutIncompatible:
-		return AppName + " - Game memory layout needs update"
-	default:
+	if AppStatus.Load() == AppStatusReady {
 		return AppName
 	}
+	return AppName + " - " + appStatusText()
 }
 
 func appWndProc(hWnd uintptr, msg uint32, wParam uintptr, lParam uintptr) uintptr {
@@ -167,6 +171,23 @@ func appWndProc(hWnd uintptr, msg uint32, wParam uintptr, lParam uintptr) uintpt
 		}
 	case WM_TRAY_TIP_UPDATE:
 		updateTrayIconTooltip()
+		return 0
+	case WM_APP_LOCAL_READY:
+		startMonitoringAfterLocalInitialization()
+		return 0
+	case WM_APP_TRAY_NOTIFICATION:
+		flushTrayNotifications()
+		return 0
+	case WM_APP_STATUS_REFRESH:
+		updateTrayIconTooltip()
+		return 0
+	case WM_APP_GAME_CLOSED_PROMPT:
+		if showYesNoMessageBox(tr("dialog.game_closed.title"), tr("dialog.game_closed.body")) {
+			return 1
+		}
+		return 0
+	case WM_APP_OPEN_TRAY_MENU:
+		showTrayMenu()
 		return 0
 	case WM_COMMAND:
 		handleTrayCommand(uint32(wParam & 0xffff))
@@ -210,8 +231,10 @@ func showTrayMenu() {
 	ready := GameReady.Load()
 	scope := currentMarketScope()
 
-	appendTrayMenuItem(menu, MF_STRING|MF_GRAYED, 0, "Currency & Region: "+formatMarketScope(scope))
+	appendTrayMenuItem(menu, MF_STRING|MF_GRAYED, 0, tr("menu.status", appStatusText()))
+	appendTrayMenuItem(menu, MF_STRING|MF_GRAYED, 0, tr("menu.currency_region", formatMarketScope(scope)))
 	appendMarketScopeMenus(menu, scope)
+	appendLanguageMenu(menu)
 	appendTraySeparator(menu)
 
 	refreshFlags := uint32(MF_STRING)
@@ -222,18 +245,30 @@ func showTrayMenu() {
 	if !ready || cacheSize == 0 || refreshing {
 		clearFlags |= MF_GRAYED
 	}
-	appendTrayMenuItem(menu, refreshFlags, MenuRefreshPriceCache, "Refresh cached prices")
-	appendTrayMenuItem(menu, clearFlags, MenuClearPriceCache, "Clear cache")
-	overlayModeText := "Switch to Compact mode"
+	appendTrayMenuItem(menu, refreshFlags, MenuRefreshPriceCache, tr("menu.refresh_cache"))
+	appendTrayMenuItem(menu, clearFlags, MenuClearPriceCache, tr("menu.clear_cache"))
+	overlayModeText := tr("menu.compact")
 	if OverlayMode.Load() == OverlayModeCompact {
-		overlayModeText = "Switch to Detail mode"
+		overlayModeText = tr("menu.detail")
 	}
 	appendTrayMenuItem(menu, MF_STRING, MenuToggleOverlayMode, overlayModeText)
-	appendTrayMenuItem(menu, MF_STRING, MenuUpdateConfigs, "Update configurations")
-	appendTrayMenuItem(menu, MF_STRING, MenuCheckForUpdates, "Check for updates...")
+	appendTrayMenuItem(menu, MF_STRING, MenuUpdateConfigs, tr("menu.update_configs"))
+	appendTrayMenuItem(menu, MF_STRING, MenuCheckForUpdates, tr("menu.check_updates"))
+	if AppStatus.Load() == AppStatusAttachFailed {
+		appendTrayMenuItem(menu, MF_STRING, MenuRestartAdministrator, tr("menu.restart_admin"))
+	}
+	if UpdateStatus.Load() == UpdateStatusAvailable {
+		appendTrayMenuItem(menu, MF_STRING, MenuInstallUpdate, tr("menu.install_update"))
+	}
+	if UpdateStatus.Load() == UpdateStatusFailed {
+		_, releaseURL := updateActionURLs()
+		if releaseURL != "" {
+			appendTrayMenuItem(menu, MF_STRING, MenuOpenRelease, tr("menu.open_release"))
+		}
+	}
 	appendTraySeparator(menu)
-	appendTrayMenuItem(menu, MF_STRING|MF_GRAYED, 0, "v"+AppVersion+" - Created by "+AppCreatorName)
-	appendTrayMenuItem(menu, MF_STRING, MenuExit, "Exit")
+	appendTrayMenuItem(menu, MF_STRING|MF_GRAYED, 0, tr("menu.created_by", AppVersion, AppCreatorName))
+	appendTrayMenuItem(menu, MF_STRING, MenuExit, tr("menu.exit"))
 
 	var cursor POINT
 	procGetCursorPos.Call(uintptr(unsafe.Pointer(&cursor)))
@@ -251,6 +286,28 @@ func appendMarketScopeMenus(menu uintptr, scope MarketScope) {
 	currencyMenu, _, _ := procCreatePopupMenu.Call()
 	if currencyMenu != 0 {
 		for index, currency := range supportedMarketCurrencies {
+			if currency.Code == "USD" {
+				for regionIndex, region := range supportedMarketRegions {
+					if region.CurrencyCode != "USD" {
+						continue
+					}
+					flags := uint32(MF_STRING)
+					if scope.Currency.Code == "USD" && scope.Region.CountryCode == region.CountryCode {
+						flags |= MF_CHECKED
+					}
+					label := "USD — " + region.Name
+					if region.CountryCode == "TR" {
+						if currentDisplayLanguage() == "tr-TR" {
+							label = "USD — Türkiye/MENA"
+						} else {
+							label = "USD — Turkey/MENA"
+						}
+					}
+					appendTrayMenuItem(currencyMenu, flags, MenuRegionBase+uint32(regionIndex), label)
+				}
+				continue
+			}
+
 			if hasAdditionalRegionSelection(currency) {
 				eurRegionMenu, _, _ := procCreatePopupMenu.Call()
 				if eurRegionMenu == 0 {
@@ -277,8 +334,24 @@ func appendMarketScopeMenus(menu uintptr, scope MarketScope) {
 			}
 			appendTrayMenuItem(currencyMenu, flags, MenuCurrencyBase+uint32(index), marketCurrencyMenuLabel(currency, scope))
 		}
-		appendTrayPopupMenu(menu, currencyMenu, "Currency")
+		appendTrayPopupMenu(menu, currencyMenu, tr("menu.currency"))
 	}
+}
+
+func appendLanguageMenu(menu uintptr) {
+	languageMenu, _, _ := procCreatePopupMenu.Call()
+	if languageMenu == 0 {
+		return
+	}
+	current := currentDisplayLanguage()
+	for index, locale := range supportedAppLocales {
+		flags := uint32(MF_STRING)
+		if locale.Code == current {
+			flags |= MF_CHECKED
+		}
+		appendTrayMenuItem(languageMenu, flags, MenuLanguageBase+uint32(index), locale.Name)
+	}
+	appendTrayPopupMenu(menu, languageMenu, tr("menu.language"))
 }
 
 func appendTrayPopupMenu(menu uintptr, popupMenu uintptr, text string) {
@@ -291,6 +364,10 @@ func appendTraySeparator(menu uintptr) {
 }
 
 func handleTrayCommand(commandID uint32) {
+	if language, ok := appLanguageForMenuCommand(commandID); ok {
+		selectDisplayLanguage(language)
+		return
+	}
 	if currency, ok := marketCurrencyForMenuCommand(commandID); ok {
 		scope, changed, selected := selectMarketCurrency(currency.Code)
 		if selected && changed {
@@ -352,9 +429,29 @@ func handleTrayCommand(commandID uint32) {
 		go runManualUpdateCheck()
 	case MenuUpdateConfigs:
 		go updateGameLayoutConfigs()
+	case MenuRestartAdministrator:
+		requestElevatedRestart()
+	case MenuInstallUpdate:
+		installAvailableUpdate()
+	case MenuOpenRelease:
+		_, releaseURL := updateActionURLs()
+		if releaseURL != "" {
+			openURLInBrowser(releaseURL)
+		}
 	case MenuExit:
 		requestAppShutdown()
 	}
+}
+
+func appLanguageForMenuCommand(commandID uint32) (string, bool) {
+	if commandID < MenuLanguageBase {
+		return "", false
+	}
+	index := int(commandID - MenuLanguageBase)
+	if index < 0 || index >= len(supportedAppLocales) {
+		return "", false
+	}
+	return supportedAppLocales[index].Code, true
 }
 
 // requestAppShutdown posts WM_CLOSE to the application window. It is safe to

@@ -60,6 +60,44 @@ func TestLoadGameLayoutFromFile(t *testing.T) {
 	}
 }
 
+func TestLoadLocalGameLayoutUsesCacheWithoutRemoteRequest(t *testing.T) {
+	cachePath := filepath.Join(t.TempDir(), "game-layout-cache.json")
+	if err := os.WriteFile(cachePath, embeddedGameLayoutJSON, 0600); err != nil {
+		t.Fatalf("write cache: %v", err)
+	}
+	serverCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		serverCalls++
+	}))
+	defer server.Close()
+
+	oldCachePath := GameLayoutCacheFilePath
+	oldURL := gameLayoutURL
+	oldLayout := ActiveGameLayout
+	oldSource := GameLayoutSource
+	oldEnv := os.Getenv(gameLayoutPathEnvironment)
+	t.Cleanup(func() {
+		GameLayoutCacheFilePath = oldCachePath
+		gameLayoutURL = oldURL
+		ActiveGameLayout = oldLayout
+		GameLayoutSource = oldSource
+		_ = os.Setenv(gameLayoutPathEnvironment, oldEnv)
+	})
+	GameLayoutCacheFilePath = cachePath
+	gameLayoutURL = server.URL
+	_ = os.Unsetenv(gameLayoutPathEnvironment)
+
+	if err := loadLocalGameLayout(); err != nil {
+		t.Fatalf("loadLocalGameLayout returned error: %v", err)
+	}
+	if GameLayoutSource != gameLayoutSourceCache {
+		t.Fatalf("source = %q, want cache", GameLayoutSource)
+	}
+	if serverCalls != 0 {
+		t.Fatalf("local load made %d remote requests", serverCalls)
+	}
+}
+
 func TestApplyEmbeddedAOBFallback(t *testing.T) {
 	layout, err := applyEmbeddedAOBFallback(GameLayout{}, embeddedGameLayoutJSON)
 	if err != nil {
@@ -297,10 +335,10 @@ func TestPointerReadWarningIsShownOnlyOncePerSession(t *testing.T) {
 	messageCount := 0
 	showErrorMessageBoxMock = func(title, message string) {
 		messageCount++
-		if title != "Game Memory Layout Update Required" {
+		if title != tr("dialog.layout_incompatible.title") {
 			t.Errorf("title = %q", title)
 		}
-		if !strings.Contains(message, "restart Task Bar Trade Center") {
+		if !strings.Contains(message, "Diagnostic log:") && !strings.Contains(message, "Tanılama günlüğü:") {
 			t.Errorf("message did not explain how to recover: %q", message)
 		}
 	}
@@ -352,28 +390,12 @@ func TestUpdateGameLayoutConfigs(t *testing.T) {
 	gameLayoutURL = server.URL
 	previousLayout := ActiveGameLayout
 	previousSource := GameLayoutSource
-	oldShowInfo := showInfoMessageBoxMock
-	oldShowError := showErrorMessageBoxMock
 
 	t.Cleanup(func() {
 		gameLayoutURL = oldURL
 		ActiveGameLayout = previousLayout
 		GameLayoutSource = previousSource
-		showInfoMessageBoxMock = oldShowInfo
-		showErrorMessageBoxMock = oldShowError
 	})
-
-	var infoCalled bool
-	showInfoMessageBoxMock = func(title, message string) {
-		infoCalled = true
-		if title != "Update Configs" {
-			t.Errorf("expected title 'Update Configs', got %q", title)
-		}
-	}
-
-	showErrorMessageBoxMock = func(title, message string) {
-		t.Errorf("error dialog shown: %s - %s", title, message)
-	}
 
 	// Put layout health into incompatible state to verify it resets
 	GameLayoutReadHealth.mu.Lock()
@@ -382,8 +404,8 @@ func TestUpdateGameLayoutConfigs(t *testing.T) {
 
 	updateGameLayoutConfigs()
 
-	if !infoCalled {
-		t.Error("expected info box to be called on successful update")
+	if ConfigurationStatus.Load() != ConfigStatusCurrent {
+		t.Errorf("configuration status = %d, want current", ConfigurationStatus.Load())
 	}
 
 	GameLayoutMu.RLock()

@@ -174,8 +174,8 @@ func TestLegacyCacheCompatibilityAndStaleFallback(t *testing.T) {
 	}
 
 	legacy := diskCache["Minor Ruby"]
-	if !isFreshMarketCache(legacy, now) {
-		t.Fatal("expected recent legacy cache to be fresh")
+	if isFreshMarketCache(legacy, now) {
+		t.Fatal("expected text-only legacy cache to be refreshed")
 	}
 
 	legacyFormat := MarketData{
@@ -190,8 +190,12 @@ func TestLegacyCacheCompatibilityAndStaleFallback(t *testing.T) {
 	if isFreshMarketCache(expired, now) {
 		t.Fatal("expected old cache not to be fresh")
 	}
-	if overlay, ok := staleMarketOverlayText(expired, true); !ok || overlay != "stale overlay" {
-		t.Fatalf("stale overlay = %q, %v; want stale overlay, true", overlay, ok)
+	if _, ok := staleMarketAnalysis(expired, true); ok {
+		t.Fatal("expected text-only cache not to be used as stale analysis")
+	}
+	analysis := MarketAnalysis{UpdatedAt: now, HasSuggested: true, SuggestedPrice: 1}
+	if stale, ok := staleMarketAnalysis(MarketData{Analysis: analysis}, true); !ok || stale.SuggestedPrice != 1 {
+		t.Fatalf("stale analysis = %+v, %v; want suggested analysis, true", stale, ok)
 	}
 }
 
@@ -203,6 +207,10 @@ func assertFloatEqual(t *testing.T, got float64, want float64) {
 }
 
 func TestNewAnalysisFeatures(t *testing.T) {
+	originalLanguage := currentDisplayLanguagePreference()
+	applyDisplayLanguagePreference("en-US")
+	t.Cleanup(func() { applyDisplayLanguagePreference(originalLanguage) })
+
 	// 1. calculateDealTag
 	t.Run("calculateDealTag", func(t *testing.T) {
 		tests := []struct {
@@ -218,7 +226,7 @@ func TestNewAnalysisFeatures(t *testing.T) {
 					HasLowestSell:      true,
 					HasWeeklyAverage:   true,
 				},
-				want: "Undervalued", // 8.0 < 8.5
+				want: "undervalued", // 8.0 < 8.5
 			},
 			{
 				name: "Overpriced above weekly average by 20%+",
@@ -228,7 +236,7 @@ func TestNewAnalysisFeatures(t *testing.T) {
 					HasLowestSell:      true,
 					HasWeeklyAverage:   true,
 				},
-				want: "Overvalued", // 12.1 > 12.0
+				want: "overvalued", // 12.1 > 12.0
 			},
 			{
 				name: "Normal price within range",
@@ -266,7 +274,7 @@ func TestNewAnalysisFeatures(t *testing.T) {
 					HasDailySales:    true,
 					DailySalesVolume: 5,
 				},
-				want: "Verified", // score = 2+2+1+1+1 = 7 >= 5
+				want: "verified", // score = 2+2+1+1+1 = 7 >= 5
 			},
 			{
 				name: "Medium confidence with partial data",
@@ -274,14 +282,14 @@ func TestNewAnalysisFeatures(t *testing.T) {
 					HasOrderBook:     true,
 					HasWeeklyAverage: true,
 				},
-				want: "Estimated", // score = 2+1 = 3 >= 3
+				want: "estimated", // score = 2+1 = 3 >= 3
 			},
 			{
 				name: "Low confidence with minimal data",
 				analysis: MarketAnalysis{
 					HasWeeklyAverage: true,
 				},
-				want: "Speculative", // score = 1
+				want: "speculative", // score = 1
 			},
 		}
 
@@ -294,14 +302,14 @@ func TestNewAnalysisFeatures(t *testing.T) {
 
 	// 3. calculateVolumeActivity
 	t.Run("calculateVolumeActivity", func(t *testing.T) {
-		if got := calculateVolumeActivity(15.0, 10.0); got != "Active" {
-			t.Errorf("expected Active, got %q", got)
+		if got := calculateVolumeActivity(15.0, 10.0); got != "active" {
+			t.Errorf("expected active, got %q", got)
 		}
-		if got := calculateVolumeActivity(4.0, 10.0); got != "Slow" {
-			t.Errorf("expected Slow, got %q", got)
+		if got := calculateVolumeActivity(4.0, 10.0); got != "slow" {
+			t.Errorf("expected slow, got %q", got)
 		}
-		if got := calculateVolumeActivity(8.0, 10.0); got != "Normal" {
-			t.Errorf("expected Normal, got %q", got)
+		if got := calculateVolumeActivity(8.0, 10.0); got != "normal" {
+			t.Errorf("expected normal, got %q", got)
 		}
 	})
 

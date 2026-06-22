@@ -24,15 +24,8 @@ var (
 )
 
 func isFreshMarketCache(data MarketData, now time.Time) bool {
-	if data.OverlayText == "" {
-		return false
-	}
-	if isLegacyMarketOverlayText(data.OverlayText) {
-		return false
-	}
-
 	if data.Analysis.UpdatedAt.IsZero() {
-		return !data.CachedAt.IsZero() && now.Sub(data.CachedAt) < marketOrderCacheTTL
+		return false
 	}
 
 	if data.Analysis.HasOrderBook {
@@ -52,11 +45,11 @@ func isFreshMarketCache(data MarketData, now time.Time) bool {
 	return true
 }
 
-func staleMarketOverlayText(data MarketData, exists bool) (string, bool) {
-	if !exists || data.OverlayText == "" {
-		return "", false
+func staleMarketAnalysis(data MarketData, exists bool) (MarketAnalysis, bool) {
+	if !exists || data.Analysis.UpdatedAt.IsZero() {
+		return MarketAnalysis{}, false
 	}
-	return data.OverlayText, true
+	return data.Analysis, true
 }
 
 func isLegacyMarketOverlayText(text string) bool {
@@ -163,6 +156,9 @@ func parseItemOrdersHistogramResponse(body []byte) (MarketOrderBook, bool) {
 	if pricePrefix == "" && priceSuffix == "" {
 		pricePrefix = "$"
 	}
+	if pricePrefix == "$" && strings.TrimSpace(priceSuffix) == "USD" {
+		priceSuffix = ""
+	}
 
 	return MarketOrderBook{
 		HighestBuyPrice: highestBuy,
@@ -233,9 +229,8 @@ func marketDataFromPriceOverview(marketHashName string, body []byte, now time.Ti
 	}
 
 	return MarketData{
-		OverlayText: buildMarketOverlayText(analysis),
-		CachedAt:    now,
-		Analysis:    analysis,
+		CachedAt: now,
+		Analysis: analysis,
 	}, true
 }
 
@@ -480,7 +475,7 @@ func buildMarketOverlayText(analysis MarketAnalysis) string {
 
 func formatAnalysisPrice(price float64, ok bool, analysis MarketAnalysis) string {
 	if !ok || price <= 0 {
-		return "N/A"
+		return tr("value.na")
 	}
 	prefix := analysis.PricePrefix
 	suffix := analysis.PriceSuffix
@@ -492,18 +487,18 @@ func formatAnalysisPrice(price float64, ok bool, analysis MarketAnalysis) string
 
 func formatAnalysisVolume(volume int, ok bool, activity string) string {
 	if !ok {
-		return "N/A"
+		return tr("value.na")
 	}
-	result := formatIntWithCommas(volume) + " units"
+	result := formatIntWithCommas(volume) + " " + tr("value.units")
 	if activity != "" {
-		result += " (" + activity + ")"
+		result += " (" + localizedSemanticValue(activity) + ")"
 	}
 	return result
 }
 
 func formatTrendPercent(percent float64, hasTrend bool) string {
 	if !hasTrend {
-		return "N/A"
+		return tr("value.na")
 	}
 	if percent > 0 {
 		return fmt.Sprintf("+%.0f%%", percent)
@@ -513,18 +508,18 @@ func formatTrendPercent(percent float64, hasTrend bool) string {
 
 func formatSpread(analysis MarketAnalysis) string {
 	if !analysis.HasSpread {
-		return "N/A"
+		return tr("value.na")
 	}
 	result := fmt.Sprintf("%.0f%%", analysis.SpreadPercent)
 	if analysis.IsWideSpread {
-		result += " Wide"
+		result += " " + tr("value.wide")
 	}
 	return result
 }
 
 func formatOrderCounts(buyCount int, sellCount int, hasOrderBook bool) string {
 	if !hasOrderBook {
-		return "N/A"
+		return tr("value.na")
 	}
 	return fmt.Sprintf("%sB / %sS", formatIntWithCommas(buyCount), formatIntWithCommas(sellCount))
 }
@@ -536,13 +531,13 @@ func formatRelativeTime(updatedAt time.Time, now time.Time) string {
 	}
 	switch {
 	case delta < time.Minute:
-		return "just now"
+		return tr("time.just_now")
 	case delta < time.Hour:
-		return fmt.Sprintf("%dm ago", int(delta.Minutes()))
+		return tr("time.minutes_ago", int(delta.Minutes()))
 	case delta < 24*time.Hour:
-		return fmt.Sprintf("%dh ago", int(delta.Hours()))
+		return tr("time.hours_ago", int(delta.Hours()))
 	default:
-		return fmt.Sprintf("%dd ago", int(delta.Hours()/24))
+		return tr("time.days_ago", int(delta.Hours()/24))
 	}
 }
 
@@ -579,10 +574,10 @@ func calculateDealTag(analysis MarketAnalysis) string {
 		return ""
 	}
 	if isGoodBuy {
-		return "Undervalued"
+		return "undervalued"
 	}
 	if isOverpriced {
-		return "Overvalued"
+		return "overvalued"
 	}
 	return ""
 }
@@ -607,11 +602,11 @@ func calculateConfidence(analysis MarketAnalysis) string {
 
 	switch {
 	case score >= 5:
-		return "Verified"
+		return "verified"
 	case score >= 3:
-		return "Estimated"
+		return "estimated"
 	default:
-		return "Speculative"
+		return "speculative"
 	}
 }
 
@@ -622,11 +617,11 @@ func calculateVolumeActivity(dailyVolume float64, weeklyDailyAvg float64) string
 	ratio := dailyVolume / weeklyDailyAvg
 	switch {
 	case ratio >= 1.5:
-		return "Active"
+		return "active"
 	case ratio <= 0.5:
-		return "Slow"
+		return "slow"
 	default:
-		return "Normal"
+		return "normal"
 	}
 }
 
@@ -912,7 +907,12 @@ func parseSteamFormattedPrice(value string) (float64, string, string, bool) {
 	if !ok {
 		return 0, "", "", false
 	}
-	return price, strings.TrimSpace(value[:matchIndex[0]]), strings.TrimSpace(value[matchIndex[1]:]), true
+	prefix := strings.TrimSpace(value[:matchIndex[0]])
+	suffix := strings.TrimSpace(value[matchIndex[1]:])
+	if prefix == "$" && strings.TrimSpace(suffix) == "USD" {
+		suffix = ""
+	}
+	return price, prefix, suffix, true
 }
 
 func normalizeDecimalString(value string) string {

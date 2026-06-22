@@ -36,24 +36,24 @@ func fetchPriceAndUpdateWithScope(config ItemConfig, useCache bool, scope Market
 
 	existingCache, hasExistingCache := marketCacheEntry(scope, marketHashName)
 	if useCache && hasExistingCache && isFreshMarketCache(existingCache, now) {
-		logMarketPrice(config, scope, marketHashName, existingCache.OverlayText, "cache")
-		updatePriceOverlay(config.ID, scope, existingCache.OverlayText)
+		logMarketPrice(config, scope, marketHashName, existingCache.Analysis, "cache")
+		updatePriceOverlay(config.ID, scope, existingCache.Analysis)
 		return
 	}
 
 	data, err := fetchMarketData(config, marketHashName, now, scope)
 	if err != nil {
-		if overlayText, ok := staleMarketOverlayText(existingCache, hasExistingCache); ok {
-			logMarketPrice(config, scope, marketHashName, overlayText, "stale-cache")
+		if analysis, ok := staleMarketAnalysis(existingCache, hasExistingCache); ok {
+			logMarketPrice(config, scope, marketHashName, analysis, "stale-cache")
 			fmt.Printf("[MARKET:error] Steam market analysis failed, using stale cache: %v\n", err)
-			updatePriceOverlay(config.ID, scope, overlayText)
+			updatePriceOverlay(config.ID, scope, analysis)
 			return
 		}
 
-		overlayText := buildMarketOverlayText(unavailableMarketAnalysis(marketHashName, now))
-		logMarketPrice(config, scope, marketHashName, overlayText, "error")
+		analysis := unavailableMarketAnalysis(marketHashName, now)
+		logMarketPrice(config, scope, marketHashName, analysis, "error")
 		fmt.Printf("[MARKET:error] Steam market analysis failed: %v\n", err)
-		updatePriceOverlay(config.ID, scope, overlayText)
+		updatePriceOverlay(config.ID, scope, analysis)
 		return
 	}
 
@@ -66,8 +66,8 @@ func fetchPriceAndUpdateWithScope(config ItemConfig, useCache bool, scope Market
 	if !useCache {
 		source = "refresh"
 	}
-	logMarketPrice(config, scope, marketHashName, data.OverlayText, source)
-	updatePriceOverlay(config.ID, scope, data.OverlayText)
+	logMarketPrice(config, scope, marketHashName, data.Analysis, source)
+	updatePriceOverlay(config.ID, scope, data.Analysis)
 }
 
 func fetchMarketData(config ItemConfig, marketHashName string, now time.Time, scope MarketScope) (MarketData, error) {
@@ -141,9 +141,8 @@ func fetchMarketData(config ItemConfig, marketHashName string, now time.Time, sc
 func marketDataFromSources(marketHashName string, orderBook MarketOrderBook, hasOrderBook bool, history []MarketSalePoint, now time.Time) MarketData {
 	analysis := buildMarketAnalysis(marketHashName, orderBook, hasOrderBook, history, now)
 	data := MarketData{
-		OverlayText: buildMarketOverlayText(analysis),
-		CachedAt:    now,
-		Analysis:    analysis,
+		CachedAt: now,
+		Analysis: analysis,
 	}
 	if hasOrderBook {
 		data.OrderBook = orderBook
@@ -261,15 +260,15 @@ func buildMarketHashName(config ItemConfig) string {
 	return fmt.Sprintf("%s (%s) A", config.Name["en-US"], gradeFormatted)
 }
 
-func logMarketPrice(config ItemConfig, scope MarketScope, marketHashName string, priceText string, source string) {
-	fmt.Printf("[MARKET:%s] [%s] %s (ID: %d, grade: %s, type: %s) | %s => %s\n", source, formatMarketScope(scope), config.Name["en-US"], config.ID, config.Grade, config.Type, marketHashName, priceText)
+func logMarketPrice(config ItemConfig, scope MarketScope, marketHashName string, analysis MarketAnalysis, source string) {
+	fmt.Printf("[MARKET:%s] [%s] %s (ID: %d, grade: %s, type: %s) | %s => suggested=%s\n", source, formatMarketScope(scope), config.Name["en-US"], config.ID, config.Grade, config.Type, marketHashName, formatAnalysisPrice(analysis.SuggestedPrice, analysis.HasSuggested, analysis))
 }
 
-func updatePriceOverlay(itemID int, scope MarketScope, priceText string) {
+func updatePriceOverlay(itemID int, scope MarketScope, analysis MarketAnalysis) {
 	if ActiveItemID.Load() != int32(itemID) || currentMarketScope() != scope {
 		return
 	}
-	setCurrentPriceText(priceText)
+	setCurrentMarketAnalysis(analysis)
 	redrawOverlay()
 }
 
@@ -284,7 +283,7 @@ func refreshActiveMarketPrice() {
 		return
 	}
 
-	setCurrentPriceText("Loading price...")
+	setCurrentPriceText(tr("hud.loading"))
 	redrawOverlay()
 	go fetchPriceAndUpdate(config)
 }

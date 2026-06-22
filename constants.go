@@ -5,7 +5,7 @@ const (
 	AppShortName    = "TBTC"
 	AppProcessName  = "tbtc"
 	AppCreatorName  = "nidea1"
-	AppVersion      = "0.3.6"
+	AppVersion      = "0.4.0"
 	GameProcessName = "TaskBarHero.exe"
 
 	EnablePriceHUD           = true
@@ -38,18 +38,23 @@ const (
 	WS_EX_TOOLWINDOW  = 0x00000080
 	LWA_COLORKEY      = 0x00000001
 
-	CS_HREDRAW         = 0x0002
-	CS_VREDRAW         = 0x0001
-	WM_PAINT           = 0x000F
-	WM_CLOSE           = 0x0010
-	WM_DESTROY         = 0x0002
-	WM_COMMAND         = 0x0111
-	WM_OVERLAY_UPDATE  = 0x8001
-	WM_TRAY_ICON       = 0x8002
-	WM_TRAY_TIP_UPDATE = 0x8003
-	SW_HIDE            = 0
-	SW_SHOWDEFAULT     = 10
-	SW_SHOWNA          = 8
+	CS_HREDRAW                = 0x0002
+	CS_VREDRAW                = 0x0001
+	WM_PAINT                  = 0x000F
+	WM_CLOSE                  = 0x0010
+	WM_DESTROY                = 0x0002
+	WM_COMMAND                = 0x0111
+	WM_OVERLAY_UPDATE         = 0x8001
+	WM_TRAY_ICON              = 0x8002
+	WM_TRAY_TIP_UPDATE        = 0x8003
+	WM_APP_LOCAL_READY        = 0x8004
+	WM_APP_TRAY_NOTIFICATION  = 0x8005
+	WM_APP_STATUS_REFRESH     = 0x8006
+	WM_APP_GAME_CLOSED_PROMPT = 0x8007
+	WM_APP_OPEN_TRAY_MENU     = 0x8008
+	SW_HIDE                   = 0
+	SW_SHOWDEFAULT            = 10
+	SW_SHOWNA                 = 8
 
 	SWP_NOACTIVATE = 0x0010
 	SWP_SHOWWINDOW = 0x0040
@@ -113,15 +118,19 @@ const (
 
 	TPM_RIGHTBUTTON = 0x00000002
 
-	TrayIconID            = 1
-	MenuRefreshPriceCache = 1001
-	MenuClearPriceCache   = 1002
-	MenuExit              = 1003
-	MenuToggleOverlayMode = 1004
-	MenuCheckForUpdates   = 1005
-	MenuUpdateConfigs     = 1006
-	MenuCurrencyBase      = 1100
-	MenuRegionBase        = 1200
+	TrayIconID               = 1
+	MenuRefreshPriceCache    = 1001
+	MenuClearPriceCache      = 1002
+	MenuExit                 = 1003
+	MenuToggleOverlayMode    = 1004
+	MenuCheckForUpdates      = 1005
+	MenuUpdateConfigs        = 1006
+	MenuRestartAdministrator = 1007
+	MenuInstallUpdate        = 1008
+	MenuOpenRelease          = 1009
+	MenuCurrencyBase         = 1100
+	MenuRegionBase           = 1200
+	MenuLanguageBase         = 1300
 
 	OverlayModeDetail  = 0
 	OverlayModeCompact = 1
@@ -130,9 +139,30 @@ const (
 )
 
 const (
-	AppStatusWaitingForGame = iota
+	AppStatusStarting = iota
+	AppStatusWaitingForGame
 	AppStatusWaitingForGameAssembly
 	AppStatusReady
 	AppStatusAttachFailed
 	AppStatusGameLayoutIncompatible
+	AppStatusInitializationFailed
+)
+
+const (
+	ConfigStatusUnknown = iota
+	ConfigStatusLocalCache
+	ConfigStatusEmbedded
+	ConfigStatusDevelopment
+	ConfigStatusRefreshing
+	ConfigStatusCurrent
+	ConfigStatusRefreshFailed
+)
+
+const (
+	UpdateStatusUnknown = iota
+	UpdateStatusChecking
+	UpdateStatusUpToDate
+	UpdateStatusAvailable
+	UpdateStatusFailed
+	UpdateStatusDownloading
 )
