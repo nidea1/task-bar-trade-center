@@ -110,17 +110,42 @@ func loadPriceCacheFromDisk() int {
 		return 0
 	}
 
+	normalizedCache, migrated := normalizePriceCache(diskCache)
 	PriceCacheMu.Lock()
-	for marketHashName, data := range diskCache {
-		if marketHashName != "" && !data.CachedAt.IsZero() {
-			PriceCache[marketHashName] = data
-		}
+	for cacheKey, data := range normalizedCache {
+		PriceCache[cacheKey] = data
+	}
+	if migrated {
+		writePriceCacheFileLocked()
 	}
 	count := len(PriceCache)
 	PriceCacheMu.Unlock()
 
 	fmt.Printf("Price cache loaded from disk: %d item(s).\n", count)
 	return count
+}
+
+func normalizePriceCache(diskCache map[string]MarketData) (map[string]MarketData, bool) {
+	normalized := make(map[string]MarketData, len(diskCache))
+	legacy := make(map[string]MarketData)
+	for cacheKey, data := range diskCache {
+		if cacheKey == "" || data.CachedAt.IsZero() {
+			continue
+		}
+		if _, _, ok := parseMarketCacheKey(cacheKey); ok {
+			normalized[cacheKey] = data
+			continue
+		}
+		legacy[cacheKey] = data
+	}
+
+	for marketHashName, data := range legacy {
+		cacheKey := marketCacheKey(defaultMarketScope(), marketHashName)
+		if _, exists := normalized[cacheKey]; !exists {
+			normalized[cacheKey] = data
+		}
+	}
+	return normalized, len(legacy) > 0
 }
 
 func writePriceCacheFileLocked() {
@@ -140,7 +165,9 @@ func writePriceCacheFileLocked() {
 }
 
 type AppSettings struct {
-	OverlayMode int32 `json:"overlay_mode"`
+	OverlayMode    int32  `json:"overlay_mode"`
+	MarketCurrency string `json:"market_currency"`
+	MarketCountry  string `json:"market_country"`
 }
 
 func loadSettingsFromDisk() {
@@ -165,7 +192,9 @@ func loadSettingsFromDisk() {
 	}
 
 	OverlayMode.Store(settings.OverlayMode)
-	fmt.Printf("Settings loaded from disk: overlayMode=%d\n", settings.OverlayMode)
+	scope := marketScopeFromSettings(settings.MarketCurrency, settings.MarketCountry)
+	setMarketScope(scope.Currency.Code, scope.Region.CountryCode)
+	fmt.Printf("Settings loaded from disk: overlayMode=%d market=%s\n", settings.OverlayMode, formatMarketScope(scope))
 }
 
 func saveSettingsToDisk() {
@@ -173,8 +202,11 @@ func saveSettingsToDisk() {
 		return
 	}
 
+	scope := currentMarketScope()
 	settings := AppSettings{
-		OverlayMode: OverlayMode.Load(),
+		OverlayMode:    OverlayMode.Load(),
+		MarketCurrency: scope.Currency.Code,
+		MarketCountry:  scope.Region.CountryCode,
 	}
 
 	bytes, err := json.MarshalIndent(settings, "", "  ")

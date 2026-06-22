@@ -207,13 +207,21 @@ func marketDataFromPriceOverview(marketHashName string, body []byte, now time.Ti
 	}
 
 	analysis := unavailableMarketAnalysis(marketHashName, now)
-	if lowest, ok := parseSteamPriceString(payload.LowestPrice, false); ok {
+	priceFormatSet := false
+	if lowest, pricePrefix, priceSuffix, ok := parseSteamFormattedPrice(payload.LowestPrice); ok {
 		analysis.LowestSellPrice = lowest
 		analysis.HasLowestSell = true
+		analysis.PricePrefix = pricePrefix
+		analysis.PriceSuffix = priceSuffix
+		priceFormatSet = true
 	}
-	if median, ok := parseSteamPriceString(payload.MedianPrice, false); ok {
+	if median, pricePrefix, priceSuffix, ok := parseSteamFormattedPrice(payload.MedianPrice); ok {
 		analysis.WeeklyAveragePrice = median
 		analysis.HasWeeklyAverage = true
+		if !priceFormatSet {
+			analysis.PricePrefix = pricePrefix
+			analysis.PriceSuffix = priceSuffix
+		}
 	}
 	if volume, ok := parseFirstInt(payload.Volume); ok {
 		analysis.DailySalesVolume = volume
@@ -892,6 +900,19 @@ func parseSteamPriceString(value string, integerStringIsCents bool) (float64, bo
 		return 0, false
 	}
 	return price, true
+}
+
+func parseSteamFormattedPrice(value string) (float64, string, string, bool) {
+	value = strings.TrimSpace(html.UnescapeString(value))
+	matchIndex := numberPattern.FindStringIndex(value)
+	if matchIndex == nil {
+		return 0, "", "", false
+	}
+	price, ok := parseSteamPriceString(value, false)
+	if !ok {
+		return 0, "", "", false
+	}
+	return price, strings.TrimSpace(value[:matchIndex[0]]), strings.TrimSpace(value[matchIndex[1]:]), true
 }
 
 func normalizeDecimalString(value string) string {

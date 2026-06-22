@@ -11,6 +11,7 @@ Task Bar Trade Center is a Windows tray utility for TaskBarHero, created by nide
 - Shows `Waiting for TaskBarHero` in the tray tooltip while waiting for the game.
 - When TaskBarHero closes, asks whether Task Bar Trade Center should exit; choosing No returns to the waiting state.
 - Shows a compact market price overlay for marketable items (supports **Detail** and **Compact** modes).
+- Lets you select a Steam Market currency and compatible country/region from the tray menu.
 - Opens the active item's Steam Market listing with middle mouse button while the price overlay is visible.
 - Uses `assets/icon.png` as the Windows application and tray icon.
 - Embeds `items.json` into the executable, so release builds are single-file.
@@ -20,6 +21,7 @@ Task Bar Trade Center is a Windows tray utility for TaskBarHero, created by nide
   - `Refresh cached prices`
   - `Clear cache`
   - `Switch to Compact/Detail mode`
+  - `Currency` (with EUR country submenu)
   - `Check for updates...`
   - `Exit`
 
@@ -29,6 +31,14 @@ The pricing HUD overlay can be toggled between two modes from the tray context m
 
 - **Detail Mode (Default):** Shows comprehensive statistics, including suggested pricing, weekly averages, daily volume, trend percentages, spreads, buy/sell orders, and a deal assessment tag (e.g. "Undervalued", "Overvalued").
 - **Compact Mode:** A minimal HUD layout focused purely on critical metrics (Suggested, Last Sold, Lowest Sell, Highest Buy, Weekly Average, Daily Sales) to minimize screen footprint.
+
+## Market currency and region
+
+The tray menu displays the active Steam Market pair, for example `Currency & Region: EUR — Germany`. The `Currency` menu selects every non-EUR entry as a complete currency-country pair, such as `USD — United States`. EUR appears in that same menu as a submenu whose entries select its country. The default is `USD — United States`.
+
+Supported currencies are USD, EUR, GBP, PHP, JPY, KRW, CNY, INR, IDR, THB, VND, BRL, PLN, CAD, and AUD. EUR supports Germany, France, Italy, Spain, Netherlands, Austria, Belgium, Portugal, Finland, and Ireland; every other supported currency uses its primary Steam Market country.
+
+Prices are requested directly from Steam with the selected `country` and `currency` parameters. The app does not convert prices with exchange rates. When Steam does not provide a selected-currency detail metric, the overlay shows `N/A` instead of mixing in USD data.
 
 ## Screenshots
 
@@ -58,7 +68,7 @@ go build -o .tmp/tbtc-dev.exe .
 Release builds write logs, settings, and cache under the user's local app data folder:
 
 ```text
-%LOCALAPPDATA%\Task Bar Trade Center\config\settings.json      - Persists user preferences (e.g., overlay mode)
+%LOCALAPPDATA%\Task Bar Trade Center\config\settings.json      - Persists user preferences (e.g., overlay mode, market currency, and country)
 %LOCALAPPDATA%\Task Bar Trade Center\config\game-layout-cache.json - Last valid game memory layout downloaded from GitHub
 %LOCALAPPDATA%\Task Bar Trade Center\logs\tbtc.log - Debug logs (automatically capped at 5MB)
 %LOCALAPPDATA%\Task Bar Trade Center\cache\price-cache.json    - Persisted price cache

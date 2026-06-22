@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Added Steam Market currency selection for USD, EUR, GBP, PHP, JPY, KRW, CNY, INR, IDR, THB, VND, BRL, PLN, CAD, and AUD.
+- Added country-aware market requests, with an EUR country submenu for Germany, France, Italy, Spain, Netherlands, Austria, Belgium, Portugal, Finland, and Ireland.
+
+### Changed
+- Separated price cache entries by selected currency and country, migrating existing entries to USD/United States.
+- Prevented stale price responses from a previous currency or country selection from updating the overlay.
+
 ## [0.3.6] - 2026-06-20
 
 ### Added

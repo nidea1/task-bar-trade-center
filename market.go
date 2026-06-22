@@ -18,42 +18,47 @@ const (
 )
 
 func fetchPriceAndUpdate(config ItemConfig) {
-	fetchPriceAndUpdateWithCache(config, true)
+	fetchPriceAndUpdateWithScope(config, true, currentMarketScope())
 }
 
 func refreshPriceAndUpdate(config ItemConfig) {
-	fetchPriceAndUpdateWithCache(config, false)
+	fetchPriceAndUpdateWithScope(config, false, currentMarketScope())
 }
 
 func fetchPriceAndUpdateWithCache(config ItemConfig, useCache bool) {
+	fetchPriceAndUpdateWithScope(config, useCache, currentMarketScope())
+}
+
+func fetchPriceAndUpdateWithScope(config ItemConfig, useCache bool, scope MarketScope) {
 	marketHashName := buildMarketHashName(config)
+	cacheKey := marketCacheKey(scope, marketHashName)
 	now := time.Now()
 
-	existingCache, hasExistingCache := marketCacheEntry(marketHashName)
+	existingCache, hasExistingCache := marketCacheEntry(scope, marketHashName)
 	if useCache && hasExistingCache && isFreshMarketCache(existingCache, now) {
-		logMarketPrice(config, marketHashName, existingCache.OverlayText, "cache")
-		updatePriceOverlay(config.ID, existingCache.OverlayText)
+		logMarketPrice(config, scope, marketHashName, existingCache.OverlayText, "cache")
+		updatePriceOverlay(config.ID, scope, existingCache.OverlayText)
 		return
 	}
 
-	data, err := fetchMarketData(config, marketHashName, now)
+	data, err := fetchMarketData(config, marketHashName, now, scope)
 	if err != nil {
 		if overlayText, ok := staleMarketOverlayText(existingCache, hasExistingCache); ok {
-			logMarketPrice(config, marketHashName, overlayText, "stale-cache")
+			logMarketPrice(config, scope, marketHashName, overlayText, "stale-cache")
 			fmt.Printf("[MARKET:error] Steam market analysis failed, using stale cache: %v\n", err)
-			updatePriceOverlay(config.ID, overlayText)
+			updatePriceOverlay(config.ID, scope, overlayText)
 			return
 		}
 
 		overlayText := buildMarketOverlayText(unavailableMarketAnalysis(marketHashName, now))
-		logMarketPrice(config, marketHashName, overlayText, "error")
+		logMarketPrice(config, scope, marketHashName, overlayText, "error")
 		fmt.Printf("[MARKET:error] Steam market analysis failed: %v\n", err)
-		updatePriceOverlay(config.ID, overlayText)
+		updatePriceOverlay(config.ID, scope, overlayText)
 		return
 	}
 
 	PriceCacheMu.Lock()
-	PriceCache[marketHashName] = data
+	PriceCache[cacheKey] = data
 	writePriceCacheFileLocked()
 	PriceCacheMu.Unlock()
 
@@ -61,11 +66,11 @@ func fetchPriceAndUpdateWithCache(config ItemConfig, useCache bool) {
 	if !useCache {
 		source = "refresh"
 	}
-	logMarketPrice(config, marketHashName, data.OverlayText, source)
-	updatePriceOverlay(config.ID, data.OverlayText)
+	logMarketPrice(config, scope, marketHashName, data.OverlayText, source)
+	updatePriceOverlay(config.ID, scope, data.OverlayText)
 }
 
-func fetchMarketData(config ItemConfig, marketHashName string, now time.Time) (MarketData, error) {
+func fetchMarketData(config ItemConfig, marketHashName string, now time.Time, scope MarketScope) (MarketData, error) {
 	client := &http.Client{Timeout: steamRequestTimeout}
 	referer := steamMarketListingURL(config)
 	var requestErrors []string
@@ -78,16 +83,18 @@ func fetchMarketData(config ItemConfig, marketHashName string, now time.Time) (M
 	if err != nil {
 		requestErrors = append(requestErrors, "listing: "+err.Error())
 	} else {
-		orderBook, hasOrderBook = parseSSRItemOrderBook(listingBody)
-		history = parseSSRPriceHistory(listingBody)
-		if len(history) == 0 {
-			history = parseLegacySaleHistoryFromListing(listingBody)
+		if isUSMarketScope(scope) {
+			orderBook, hasOrderBook = parseSSRItemOrderBook(listingBody)
+			history = parseSSRPriceHistory(listingBody)
+			if len(history) == 0 {
+				history = parseLegacySaleHistoryFromListing(listingBody)
+			}
 		}
 
 		if !hasOrderBook {
 			itemNameID := parseItemNameID(listingBody)
 			if itemNameID != "" {
-				body, _, err := fetchItemOrdersHistogram(client, itemNameID, referer)
+				body, _, err := fetchItemOrdersHistogram(client, itemNameID, referer, scope)
 				if err != nil {
 					requestErrors = append(requestErrors, "histogram: "+err.Error())
 				} else {
@@ -100,8 +107,8 @@ func fetchMarketData(config ItemConfig, marketHashName string, now time.Time) (M
 		}
 	}
 
-	if len(history) == 0 {
-		body, _, err := fetchSaleHistory(client, marketHashName, referer)
+	if isUSMarketScope(scope) && len(history) == 0 {
+		body, _, err := fetchSaleHistory(client, marketHashName, referer, scope)
 		if err != nil {
 			requestErrors = append(requestErrors, "pricehistory: "+err.Error())
 		} else {
@@ -116,7 +123,7 @@ func fetchMarketData(config ItemConfig, marketHashName string, now time.Time) (M
 		return marketDataFromSources(marketHashName, orderBook, hasOrderBook, history, now), nil
 	}
 
-	body, _, err := fetchPriceOverview(client, marketHashName)
+	body, _, err := fetchPriceOverview(client, marketHashName, scope)
 	if err != nil {
 		requestErrors = append(requestErrors, "priceoverview: "+err.Error())
 	} else if data, ok := marketDataFromPriceOverview(marketHashName, body, now); ok {
@@ -149,30 +156,46 @@ func marketDataFromSources(marketHashName string, orderBook MarketOrderBook, has
 	return data
 }
 
-func fetchItemOrdersHistogram(client *http.Client, itemNameID string, referer string) ([]byte, int, error) {
+func fetchItemOrdersHistogram(client *http.Client, itemNameID string, referer string, scope MarketScope) ([]byte, int, error) {
+	return steamGet(client, itemOrdersHistogramURL(itemNameID, scope), referer)
+}
+
+func fetchSaleHistory(client *http.Client, marketHashName string, referer string, scope MarketScope) ([]byte, int, error) {
+	return steamGet(client, priceHistoryURL(marketHashName, scope), referer)
+}
+
+func priceHistoryURL(marketHashName string, scope MarketScope) string {
 	apiURL := fmt.Sprintf(
-		"https://steamcommunity.com/market/itemordershistogram?country=US&language=english&currency=1&item_nameid=%s&two_factor=0",
+		"https://steamcommunity.com/market/pricehistory/?country=%s&currency=%d&appid=%d&market_hash_name=%s",
+		url.QueryEscape(scope.Region.CountryCode),
+		scope.Currency.SteamCurrencyID,
+		steamMarketAppID,
+		url.QueryEscape(marketHashName),
+	)
+	return apiURL
+}
+
+func fetchPriceOverview(client *http.Client, marketHashName string, scope MarketScope) ([]byte, int, error) {
+	return steamGet(client, priceOverviewURL(marketHashName, scope), "")
+}
+
+func itemOrdersHistogramURL(itemNameID string, scope MarketScope) string {
+	return fmt.Sprintf(
+		"https://steamcommunity.com/market/itemordershistogram?country=%s&language=english&currency=%d&item_nameid=%s&two_factor=0",
+		url.QueryEscape(scope.Region.CountryCode),
+		scope.Currency.SteamCurrencyID,
 		url.QueryEscape(itemNameID),
 	)
-	return steamGet(client, apiURL, referer)
 }
 
-func fetchSaleHistory(client *http.Client, marketHashName string, referer string) ([]byte, int, error) {
-	apiURL := fmt.Sprintf(
-		"https://steamcommunity.com/market/pricehistory/?appid=%d&market_hash_name=%s",
+func priceOverviewURL(marketHashName string, scope MarketScope) string {
+	return fmt.Sprintf(
+		"https://steamcommunity.com/market/priceoverview/?country=%s&currency=%d&appid=%d&market_hash_name=%s",
+		url.QueryEscape(scope.Region.CountryCode),
+		scope.Currency.SteamCurrencyID,
 		steamMarketAppID,
 		url.QueryEscape(marketHashName),
 	)
-	return steamGet(client, apiURL, referer)
-}
-
-func fetchPriceOverview(client *http.Client, marketHashName string) ([]byte, int, error) {
-	apiURL := fmt.Sprintf(
-		"https://steamcommunity.com/market/priceoverview/?country=US&currency=1&appid=%d&market_hash_name=%s",
-		steamMarketAppID,
-		url.QueryEscape(marketHashName),
-	)
-	return steamGet(client, apiURL, "")
 }
 
 func steamGet(client *http.Client, targetURL string, referer string) ([]byte, int, error) {
@@ -203,10 +226,10 @@ func steamGet(client *http.Client, targetURL string, referer string) ([]byte, in
 	return body, resp.StatusCode, nil
 }
 
-func marketCacheEntry(marketHashName string) (MarketData, bool) {
+func marketCacheEntry(scope MarketScope, marketHashName string) (MarketData, bool) {
 	PriceCacheMu.RLock()
 	defer PriceCacheMu.RUnlock()
-	data, exists := PriceCache[marketHashName]
+	data, exists := PriceCache[marketCacheKey(scope, marketHashName)]
 	return data, exists
 }
 
@@ -238,16 +261,32 @@ func buildMarketHashName(config ItemConfig) string {
 	return fmt.Sprintf("%s (%s) A", config.Name["en-US"], gradeFormatted)
 }
 
-func logMarketPrice(config ItemConfig, marketHashName string, priceText string, source string) {
-	fmt.Printf("[MARKET:%s] %s (ID: %d, grade: %s, type: %s) | %s => %s\n", source, config.Name["en-US"], config.ID, config.Grade, config.Type, marketHashName, priceText)
+func logMarketPrice(config ItemConfig, scope MarketScope, marketHashName string, priceText string, source string) {
+	fmt.Printf("[MARKET:%s] [%s] %s (ID: %d, grade: %s, type: %s) | %s => %s\n", source, formatMarketScope(scope), config.Name["en-US"], config.ID, config.Grade, config.Type, marketHashName, priceText)
 }
 
-func updatePriceOverlay(itemID int, priceText string) {
-	if ActiveItemID.Load() != int32(itemID) {
+func updatePriceOverlay(itemID int, scope MarketScope, priceText string) {
+	if ActiveItemID.Load() != int32(itemID) || currentMarketScope() != scope {
 		return
 	}
 	setCurrentPriceText(priceText)
 	redrawOverlay()
+}
+
+func refreshActiveMarketPrice() {
+	if !ShowOverlay.Load() {
+		return
+	}
+
+	itemID := int(ActiveItemID.Load())
+	config, exists := ItemMap[itemID]
+	if !exists {
+		return
+	}
+
+	setCurrentPriceText("Loading price...")
+	redrawOverlay()
+	go fetchPriceAndUpdate(config)
 }
 
 func clearPriceCache() int {
@@ -275,7 +314,8 @@ func refreshCachedPricesInBackground() int {
 	}
 	requestTrayTooltipUpdate()
 
-	configs := cachedPriceConfigs()
+	scope := currentMarketScope()
+	configs := cachedPriceConfigs(scope)
 	if len(configs) == 0 {
 		PriceCacheRefreshing.Store(false)
 		requestTrayTooltipUpdate()
@@ -291,7 +331,7 @@ func refreshCachedPricesInBackground() int {
 		fmt.Printf("Refreshing cached prices: %d item(s).\n", len(configs))
 		for index, config := range configs {
 			fmt.Printf("Refreshing cached price %d/%d: %s\n", index+1, len(configs), config.Name["en-US"])
-			refreshPriceAndUpdate(config)
+			fetchPriceAndUpdateWithScope(config, false, scope)
 		}
 		fmt.Printf("Cached price refresh completed: %d item(s).\n", len(configs))
 	}()
@@ -299,11 +339,14 @@ func refreshCachedPricesInBackground() int {
 	return len(configs)
 }
 
-func cachedPriceConfigs() []ItemConfig {
+func cachedPriceConfigs(scope MarketScope) []ItemConfig {
 	PriceCacheMu.RLock()
 	cachedNames := make(map[string]struct{}, len(PriceCache))
-	for marketHashName := range PriceCache {
-		cachedNames[marketHashName] = struct{}{}
+	for cacheKey := range PriceCache {
+		cachedScope, marketHashName, ok := parseMarketCacheKey(cacheKey)
+		if ok && cachedScope == scope {
+			cachedNames[marketHashName] = struct{}{}
+		}
 	}
 	PriceCacheMu.RUnlock()
 

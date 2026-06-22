@@ -208,6 +208,11 @@ func showTrayMenu() {
 	cacheSize := priceCacheSize()
 	refreshing := PriceCacheRefreshing.Load()
 	ready := GameReady.Load()
+	scope := currentMarketScope()
+
+	appendTrayMenuItem(menu, MF_STRING|MF_GRAYED, 0, "Currency & Region: "+formatMarketScope(scope))
+	appendMarketScopeMenus(menu, scope)
+	appendTraySeparator(menu)
 
 	refreshFlags := uint32(MF_STRING)
 	if !ready || cacheSize == 0 || refreshing {
@@ -224,8 +229,8 @@ func showTrayMenu() {
 		overlayModeText = "Switch to Detail mode"
 	}
 	appendTrayMenuItem(menu, MF_STRING, MenuToggleOverlayMode, overlayModeText)
-	appendTrayMenuItem(menu, MF_STRING, MenuCheckForUpdates, "Check for updates...")
 	appendTrayMenuItem(menu, MF_STRING, MenuUpdateConfigs, "Update configurations")
+	appendTrayMenuItem(menu, MF_STRING, MenuCheckForUpdates, "Check for updates...")
 	appendTraySeparator(menu)
 	appendTrayMenuItem(menu, MF_STRING|MF_GRAYED, 0, "v"+AppVersion+" - Created by "+AppCreatorName)
 	appendTrayMenuItem(menu, MF_STRING, MenuExit, "Exit")
@@ -242,11 +247,69 @@ func appendTrayMenuItem(menu uintptr, flags uint32, id uint32, text string) {
 	procAppendMenuW.Call(menu, uintptr(flags), uintptr(id), uintptr(unsafe.Pointer(textUTF16)))
 }
 
+func appendMarketScopeMenus(menu uintptr, scope MarketScope) {
+	currencyMenu, _, _ := procCreatePopupMenu.Call()
+	if currencyMenu != 0 {
+		for index, currency := range supportedMarketCurrencies {
+			if hasAdditionalRegionSelection(currency) {
+				eurRegionMenu, _, _ := procCreatePopupMenu.Call()
+				if eurRegionMenu == 0 {
+					appendTrayMenuItem(currencyMenu, MF_STRING|MF_GRAYED, 0, marketCurrencyMenuLabel(currency, scope))
+					continue
+				}
+				for regionIndex, region := range supportedMarketRegions {
+					if region.CurrencyCode != currency.Code {
+						continue
+					}
+					flags := uint32(MF_STRING)
+					if region.CurrencyCode == scope.Currency.Code && region.CountryCode == scope.Region.CountryCode {
+						flags |= MF_CHECKED
+					}
+					appendTrayMenuItem(eurRegionMenu, flags, MenuRegionBase+uint32(regionIndex), region.Name)
+				}
+				appendTrayPopupMenu(currencyMenu, eurRegionMenu, marketCurrencyMenuLabel(currency, scope))
+				continue
+			}
+
+			flags := uint32(MF_STRING)
+			if currency.Code == scope.Currency.Code {
+				flags |= MF_CHECKED
+			}
+			appendTrayMenuItem(currencyMenu, flags, MenuCurrencyBase+uint32(index), marketCurrencyMenuLabel(currency, scope))
+		}
+		appendTrayPopupMenu(menu, currencyMenu, "Currency")
+	}
+}
+
+func appendTrayPopupMenu(menu uintptr, popupMenu uintptr, text string) {
+	textUTF16, _ := syscall.UTF16PtrFromString(text)
+	procAppendMenuW.Call(menu, MF_POPUP, popupMenu, uintptr(unsafe.Pointer(textUTF16)))
+}
+
 func appendTraySeparator(menu uintptr) {
 	procAppendMenuW.Call(menu, MF_SEPARATOR, 0, 0)
 }
 
 func handleTrayCommand(commandID uint32) {
+	if currency, ok := marketCurrencyForMenuCommand(commandID); ok {
+		scope, changed, selected := selectMarketCurrency(currency.Code)
+		if selected && changed {
+			fmt.Printf("Market currency changed to %s.\n", formatMarketScope(scope))
+			saveSettingsToDisk()
+			refreshActiveMarketPrice()
+		}
+		return
+	}
+	if region, ok := marketRegionForMenuCommand(commandID); ok {
+		scope, changed, selected := selectMarketRegion(region.CurrencyCode, region.CountryCode)
+		if selected && changed {
+			fmt.Printf("Market region changed to %s.\n", formatMarketScope(scope))
+			saveSettingsToDisk()
+			refreshActiveMarketPrice()
+		}
+		return
+	}
+
 	switch commandID {
 	case MenuRefreshPriceCache:
 		if !GameReady.Load() {

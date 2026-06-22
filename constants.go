@@ -107,6 +107,8 @@ const (
 
 	MF_STRING    = 0x00000000
 	MF_GRAYED    = 0x00000001
+	MF_CHECKED   = 0x00000008
+	MF_POPUP     = 0x00000010
 	MF_SEPARATOR = 0x00000800
 
 	TPM_RIGHTBUTTON = 0x00000002
@@ -118,6 +120,8 @@ const (
 	MenuToggleOverlayMode = 1004
 	MenuCheckForUpdates   = 1005
 	MenuUpdateConfigs     = 1006
+	MenuCurrencyBase      = 1100
+	MenuRegionBase        = 1200
 
 	OverlayModeDetail  = 0
 	OverlayModeCompact = 1
