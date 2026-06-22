@@ -35,7 +35,7 @@ func fetchPriceAndUpdateWithScope(config ItemConfig, useCache bool, scope Market
 	now := time.Now()
 
 	existingCache, hasExistingCache := marketCacheEntry(scope, marketHashName)
-	if useCache && hasExistingCache && isFreshMarketCache(existingCache, now) {
+	if useCache && hasExistingCache && isFreshMarketCache(existingCache, now) && !requiresUSDFallbackRefresh(scope, existingCache.Analysis) {
 		logMarketPrice(config, scope, marketHashName, existingCache.Analysis, "cache")
 		updatePriceOverlay(config.ID, scope, existingCache.Analysis)
 		return
@@ -50,7 +50,7 @@ func fetchPriceAndUpdateWithScope(config ItemConfig, useCache bool, scope Market
 			return
 		}
 
-		analysis := unavailableMarketAnalysis(marketHashName, now)
+		analysis := unavailableMarketAnalysis(marketHashName, now, scope.Currency)
 		logMarketPrice(config, scope, marketHashName, analysis, "error")
 		fmt.Printf("[MARKET:error] Steam market analysis failed: %v\n", err)
 		updatePriceOverlay(config.ID, scope, analysis)
@@ -71,8 +71,22 @@ func fetchPriceAndUpdateWithScope(config ItemConfig, useCache bool, scope Market
 }
 
 func fetchMarketData(config ItemConfig, marketHashName string, now time.Time, scope MarketScope) (MarketData, error) {
+	data, err := fetchMarketDataForScope(config, marketHashName, now, scope)
+	if err != nil || scope == defaultMarketScope() || hasCompleteMarketAnalysis(data.Analysis) {
+		return data, err
+	}
+
+	data.Analysis.USDDataFallbackAttempted = true
+	usdData, usdErr := fetchMarketDataForScope(config, marketHashName, now, defaultMarketScope())
+	if usdErr != nil {
+		return data, nil
+	}
+	return mergeMarketDataWithUSDFallback(data, usdData, scope), nil
+}
+
+func fetchMarketDataForScope(config ItemConfig, marketHashName string, now time.Time, scope MarketScope) (MarketData, error) {
 	client := &http.Client{Timeout: steamRequestTimeout}
-	referer := steamMarketListingURL(config)
+	referer := steamMarketListingURLForScope(config, scope)
 	var requestErrors []string
 
 	var orderBook MarketOrderBook
@@ -83,7 +97,7 @@ func fetchMarketData(config ItemConfig, marketHashName string, now time.Time, sc
 	if err != nil {
 		requestErrors = append(requestErrors, "listing: "+err.Error())
 	} else {
-		if isUSMarketScope(scope) {
+		if isSSRListingForScope(listingBody, scope) {
 			orderBook, hasOrderBook = parseSSRItemOrderBook(listingBody)
 			history = parseSSRPriceHistory(listingBody)
 			if len(history) == 0 {
@@ -107,7 +121,7 @@ func fetchMarketData(config ItemConfig, marketHashName string, now time.Time, sc
 		}
 	}
 
-	if isUSMarketScope(scope) && len(history) == 0 {
+	if len(history) == 0 {
 		body, _, err := fetchSaleHistory(client, marketHashName, referer, scope)
 		if err != nil {
 			requestErrors = append(requestErrors, "pricehistory: "+err.Error())
@@ -120,13 +134,13 @@ func fetchMarketData(config ItemConfig, marketHashName string, now time.Time, sc
 	}
 
 	if hasOrderBook || len(history) > 0 {
-		return marketDataFromSources(marketHashName, orderBook, hasOrderBook, history, now), nil
+		return marketDataFromSources(marketHashName, orderBook, hasOrderBook, history, now, scope.Currency), nil
 	}
 
 	body, _, err := fetchPriceOverview(client, marketHashName, scope)
 	if err != nil {
 		requestErrors = append(requestErrors, "priceoverview: "+err.Error())
-	} else if data, ok := marketDataFromPriceOverview(marketHashName, body, now); ok {
+	} else if data, ok := marketDataFromPriceOverview(marketHashName, body, now, scope.Currency); ok {
 		return data, nil
 	} else {
 		requestErrors = append(requestErrors, "priceoverview: response did not contain price data")
@@ -138,8 +152,165 @@ func fetchMarketData(config ItemConfig, marketHashName string, now time.Time, sc
 	return MarketData{}, fmt.Errorf("%s", strings.Join(requestErrors, "; "))
 }
 
-func marketDataFromSources(marketHashName string, orderBook MarketOrderBook, hasOrderBook bool, history []MarketSalePoint, now time.Time) MarketData {
-	analysis := buildMarketAnalysis(marketHashName, orderBook, hasOrderBook, history, now)
+const (
+	usdFallbackSuggested uint16 = 1 << iota
+	usdFallbackLowestSell
+	usdFallbackHighestBuy
+	usdFallbackWeeklyAverage
+	usdFallbackSaleP75
+	usdFallbackLastSold
+)
+
+func hasCompleteMarketAnalysis(analysis MarketAnalysis) bool {
+	return analysis.HasOrderBook && analysis.HasSaleHistory
+}
+
+func requiresUSDFallbackRefresh(scope MarketScope, analysis MarketAnalysis) bool {
+	if scope == defaultMarketScope() || hasCompleteMarketAnalysis(analysis) {
+		return false
+	}
+	if !analysis.USDDataFallbackAttempted {
+		return true
+	}
+	if analysis.USDFallbackMetrics != 0 && analysis.PricePrefix == "$" && scope.Currency.PricePrefix != "$" {
+		return true
+	}
+	return false
+}
+
+func calculateExchangeRate(local MarketAnalysis, usd MarketAnalysis) (float64, bool) {
+	if local.HasLowestSell && local.LowestSellPrice > 0 && usd.HasLowestSell && usd.LowestSellPrice > 0 {
+		return local.LowestSellPrice / usd.LowestSellPrice, true
+	}
+	if local.HasHighestBuy && local.HighestBuyPrice > 0 && usd.HasHighestBuy && usd.HighestBuyPrice > 0 {
+		return local.HighestBuyPrice / usd.HighestBuyPrice, true
+	}
+	if local.HasWeeklyAverage && local.WeeklyAveragePrice > 0 && usd.HasWeeklyAverage && usd.WeeklyAveragePrice > 0 {
+		return local.WeeklyAveragePrice / usd.WeeklyAveragePrice, true
+	}
+	if local.HasSuggested && local.SuggestedPrice > 0 && usd.HasSuggested && usd.SuggestedPrice > 0 {
+		return local.SuggestedPrice / usd.SuggestedPrice, true
+	}
+	if local.HasLastSold && local.LastSoldPrice > 0 && usd.HasLastSold && usd.LastSoldPrice > 0 {
+		return local.LastSoldPrice / usd.LastSoldPrice, true
+	}
+	if local.HasRecentSaleP75 && local.RecentSaleP75Price > 0 && usd.HasRecentSaleP75 && usd.RecentSaleP75Price > 0 {
+		return local.RecentSaleP75Price / usd.RecentSaleP75Price, true
+	}
+	return 0, false
+}
+
+func mergeMarketDataWithUSDFallback(local MarketData, usd MarketData, targetScope MarketScope) MarketData {
+	analysis := &local.Analysis
+	usdAnalysis := usd.Analysis
+	analysis.USDDataFallbackAttempted = true
+
+	currencyCode := targetScope.Currency.Code
+	rate := 1.0
+	if currencyCode != "USD" {
+		if r, ok := calculateExchangeRate(*analysis, usdAnalysis); ok {
+			rate = r
+			setExchangeRate(currencyCode, rate)
+		} else {
+			rate = getExchangeRate(currencyCode)
+		}
+	}
+
+	if analysis.PricePrefix == "" && analysis.PriceSuffix == "" {
+		analysis.PricePrefix = targetScope.Currency.PricePrefix
+		analysis.PriceSuffix = targetScope.Currency.PriceSuffix
+		if analysis.PricePrefix == "" && analysis.PriceSuffix == "" {
+			analysis.PricePrefix = "$"
+		}
+	}
+
+	if usdAnalysis.HasOrderBook {
+		if !analysis.HasOrderBook {
+			analysis.HasOrderBook = true
+			analysis.BuyOrderCount = usdAnalysis.BuyOrderCount
+			analysis.SellOrderCount = usdAnalysis.SellOrderCount
+			local.OrderBook = usd.OrderBook
+			local.OrderCachedAt = usd.OrderCachedAt
+			if rate != 1.0 {
+				local.OrderBook.HighestBuyPrice *= rate
+				local.OrderBook.LowestSellPrice *= rate
+				local.OrderBook.PricePrefix = analysis.PricePrefix
+				local.OrderBook.PriceSuffix = analysis.PriceSuffix
+			}
+		}
+		if !analysis.HasLowestSell && usdAnalysis.HasLowestSell {
+			analysis.LowestSellPrice = usdAnalysis.LowestSellPrice * rate
+			analysis.HasLowestSell = true
+			analysis.USDFallbackMetrics |= usdFallbackLowestSell
+		}
+		if !analysis.HasHighestBuy && usdAnalysis.HasHighestBuy {
+			analysis.HighestBuyPrice = usdAnalysis.HighestBuyPrice * rate
+			analysis.HasHighestBuy = true
+			analysis.USDFallbackMetrics |= usdFallbackHighestBuy
+		}
+		if !analysis.HasSpread && usdAnalysis.HasSpread {
+			analysis.SpreadPercent = usdAnalysis.SpreadPercent
+			analysis.HasSpread = true
+			analysis.IsWideSpread = usdAnalysis.IsWideSpread
+		}
+	}
+
+	if usdAnalysis.HasSaleHistory {
+		if !analysis.HasSaleHistory {
+			analysis.HasSaleHistory = true
+			local.History = make([]MarketSalePoint, len(usd.History))
+			copy(local.History, usd.History)
+			local.HistoryCachedAt = usd.HistoryCachedAt
+			if rate != 1.0 {
+				for i := range local.History {
+					local.History[i].Price *= rate
+				}
+			}
+		}
+		if !analysis.HasTrend && usdAnalysis.HasTrend {
+			analysis.TrendPercent = usdAnalysis.TrendPercent
+			analysis.HasTrend = true
+		}
+		if !analysis.HasRecentSaleP75 && usdAnalysis.HasRecentSaleP75 {
+			analysis.RecentSaleP75Price = usdAnalysis.RecentSaleP75Price * rate
+			analysis.HasRecentSaleP75 = true
+			analysis.USDFallbackMetrics |= usdFallbackSaleP75
+		}
+		if !analysis.HasLastSold && usdAnalysis.HasLastSold {
+			analysis.LastSoldPrice = usdAnalysis.LastSoldPrice * rate
+			analysis.HasLastSold = true
+			analysis.USDFallbackMetrics |= usdFallbackLastSold
+		}
+		if !analysis.HasWeeklyAverage && usdAnalysis.HasWeeklyAverage {
+			analysis.WeeklyAveragePrice = usdAnalysis.WeeklyAveragePrice * rate
+			analysis.HasWeeklyAverage = true
+			analysis.USDFallbackMetrics |= usdFallbackWeeklyAverage
+		}
+		if !analysis.HasDailySales && usdAnalysis.HasDailySales {
+			analysis.DailySalesVolume = usdAnalysis.DailySalesVolume
+			analysis.HasDailySales = true
+			analysis.VolumeActivity = usdAnalysis.VolumeActivity
+		}
+		if !analysis.HasWeeklyDailyAvgVolume && usdAnalysis.HasWeeklyDailyAvgVolume {
+			analysis.WeeklyDailyAvgVolume = usdAnalysis.WeeklyDailyAvgVolume
+			analysis.HasWeeklyDailyAvgVolume = true
+		}
+	}
+
+	if !analysis.HasSuggested && usdAnalysis.HasSuggested {
+		analysis.SuggestedPrice = usdAnalysis.SuggestedPrice * rate
+		analysis.HasSuggested = true
+		analysis.USDFallbackMetrics |= usdFallbackSuggested
+	}
+	if analysis.USDFallbackMetrics != 0 {
+		analysis.Confidence = "estimated"
+		analysis.HasConfidence = true
+	}
+	return local
+}
+
+func marketDataFromSources(marketHashName string, orderBook MarketOrderBook, hasOrderBook bool, history []MarketSalePoint, now time.Time, currency MarketCurrency) MarketData {
+	analysis := buildMarketAnalysis(marketHashName, orderBook, hasOrderBook, history, now, currency)
 	data := MarketData{
 		CachedAt: now,
 		Analysis: analysis,

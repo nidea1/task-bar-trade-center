@@ -109,6 +109,7 @@ var englishMessages = map[string]string{
 	"hud.daily_sales":                      "Daily Sales",
 	"hud.orders":                           "Orders",
 	"hud.open_market":                      "Middle Click: Open Steam Market",
+	"hud.usd_fallback":                     "Detailed stats use USD market data",
 	"hud.loading":                          "Loading price…",
 	"value.na":                             "N/A",
 	"value.units":                          "units",
@@ -216,6 +217,7 @@ func init() {
 	localizedMessages["tr-TR"]["notification.update"] = "Güncelleme — %s"
 	localizedMessages["tr-TR"]["notification.action_required"] = "İşlem için tray simgesine sağ tıklayın."
 	localizedMessages["tr-TR"]["notification.admin_restart_failed"] = "Yönetici olarak yeniden başlatılamadı."
+	localizedMessages["tr-TR"]["hud.usd_fallback"] = "Detay metrikleri USD piyasa verisini kullanır"
 }
 
 func tr(key string, args ...any) string {

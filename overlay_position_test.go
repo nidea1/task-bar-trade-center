@@ -8,18 +8,23 @@ func TestMarketOverlayRectFallsBackToCursorWhenTooltipMemoryIsUnavailable(t *tes
 	originalShowOverlay := ShowOverlay.Load()
 	originalLastOverlayRect := LastOverlayRect
 	originalHasLastOverlayRect := HasLastOverlayRect
+	originalCursorScreenPosition := cursorScreenPosition
 	t.Cleanup(func() {
 		GameProcessHandle = originalProcessHandle
 		GameAssemblyBase = originalGameAssemblyBase
 		ShowOverlay.Store(originalShowOverlay)
 		LastOverlayRect = originalLastOverlayRect
 		HasLastOverlayRect = originalHasLastOverlayRect
+		cursorScreenPosition = originalCursorScreenPosition
 	})
 
 	GameProcessHandle = 0
 	GameAssemblyBase = 0
 	ShowOverlay.Store(true)
 	HasLastOverlayRect = false
+	cursorScreenPosition = func() (POINT, bool) {
+		return POINT{X: 100, Y: 100}, true
+	}
 
 	rect, ok := marketOverlayRect()
 	if !ok {

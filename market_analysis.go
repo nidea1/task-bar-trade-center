@@ -15,6 +15,7 @@ import (
 var (
 	jsonParseCallPattern     = regexp.MustCompile(`JSON\.parse\("((?:\\.|[^"\\])*)"\)`)
 	ssrOrderBookPattern      = regexp.MustCompile(`(?s)"amtMaxBuyOrder"\s*:\s*(\d+).*?"amtMinSellOrder"\s*:\s*(\d+).*?"cBuyOrders"\s*:\s*(\d+).*?"cSellOrders"\s*:\s*(\d+)`)
+	ssrCurrencyPattern       = regexp.MustCompile(`"eCurrency"\s*:\s*(\d+)`)
 	ssrPriceHistoryPattern   = regexp.MustCompile(`"time"\s*:\s*(\d+)\s*,\s*"price_median"\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*,\s*"purchases"\s*:\s*(\d+)`)
 	itemNameIDPattern        = regexp.MustCompile(`Market_LoadOrderSpread\(\s*(\d+)\s*\)`)
 	legacySaleHistoryPattern = regexp.MustCompile(`(?s)var\s+line1\s*=\s*(\[.*?\]);`)
@@ -88,6 +89,21 @@ func parseSSRItemOrderBook(body []byte) (MarketOrderBook, bool) {
 		SellOrderCount:  sellOrders,
 		PricePrefix:     "$",
 	}, true
+}
+
+func isSSRListingForScope(body []byte, scope MarketScope) bool {
+	text := searchableListingText(body)
+	matches := ssrCurrencyPattern.FindAllStringSubmatch(text, -1)
+	for _, match := range matches {
+		if len(match) != 2 {
+			continue
+		}
+		currencyID, ok := parseInt(match[1])
+		if ok && currencyID == scope.Currency.SteamCurrencyID {
+			return true
+		}
+	}
+	return false
 }
 
 func parseSSRPriceHistory(body []byte) []MarketSalePoint {
@@ -188,7 +204,7 @@ func parseSaleHistoryResponse(body []byte) []MarketSalePoint {
 	return parseSaleHistoryValue(raw)
 }
 
-func marketDataFromPriceOverview(marketHashName string, body []byte, now time.Time) (MarketData, bool) {
+func marketDataFromPriceOverview(marketHashName string, body []byte, now time.Time, currency MarketCurrency) (MarketData, bool) {
 	var payload struct {
 		Success     bool   `json:"success"`
 		LowestPrice string `json:"lowest_price"`
@@ -202,7 +218,7 @@ func marketDataFromPriceOverview(marketHashName string, body []byte, now time.Ti
 		return MarketData{}, false
 	}
 
-	analysis := unavailableMarketAnalysis(marketHashName, now)
+	analysis := unavailableMarketAnalysis(marketHashName, now, currency)
 	priceFormatSet := false
 	if lowest, pricePrefix, priceSuffix, ok := parseSteamFormattedPrice(payload.LowestPrice); ok {
 		analysis.LowestSellPrice = lowest
@@ -234,8 +250,8 @@ func marketDataFromPriceOverview(marketHashName string, body []byte, now time.Ti
 	}, true
 }
 
-func buildMarketAnalysis(marketHashName string, orderBook MarketOrderBook, hasOrderBook bool, history []MarketSalePoint, now time.Time) MarketAnalysis {
-	analysis := unavailableMarketAnalysis(marketHashName, now)
+func buildMarketAnalysis(marketHashName string, orderBook MarketOrderBook, hasOrderBook bool, history []MarketSalePoint, now time.Time, currency MarketCurrency) MarketAnalysis {
+	analysis := unavailableMarketAnalysis(marketHashName, now, currency)
 	if hasOrderBook {
 		analysis.HasOrderBook = true
 		analysis.LowestSellPrice = orderBook.LowestSellPrice
@@ -330,10 +346,16 @@ func buildMarketAnalysis(marketHashName string, orderBook MarketOrderBook, hasOr
 	return analysis
 }
 
-func unavailableMarketAnalysis(marketHashName string, now time.Time) MarketAnalysis {
+func unavailableMarketAnalysis(marketHashName string, now time.Time, currency MarketCurrency) MarketAnalysis {
+	prefix := currency.PricePrefix
+	suffix := currency.PriceSuffix
+	if prefix == "" && suffix == "" {
+		prefix = "$"
+	}
 	return MarketAnalysis{
 		MarketHashName: marketHashName,
-		PricePrefix:    "$",
+		PricePrefix:    prefix,
+		PriceSuffix:    suffix,
 		UpdatedAt:      now,
 	}
 }
@@ -483,6 +505,10 @@ func formatAnalysisPrice(price float64, ok bool, analysis MarketAnalysis) string
 		prefix = "$"
 	}
 	return fmt.Sprintf("%s%.2f%s", prefix, price, suffix)
+}
+
+func formatUSDAnalysisPrice(price float64, ok bool) string {
+	return formatAnalysisPrice(price, ok, MarketAnalysis{PricePrefix: "$"})
 }
 
 func formatAnalysisVolume(volume int, ok bool, activity string) string {

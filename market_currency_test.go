@@ -147,6 +147,7 @@ func TestMarketScopeURLBuilders(t *testing.T) {
 			assertMarketURLScope(t, priceOverviewURL("Minor Ruby", scope), scope, tt.wantID)
 			assertMarketURLScope(t, itemOrdersHistogramURL("12345", scope), scope, tt.wantID)
 			assertMarketURLScope(t, priceHistoryURL("Minor Ruby", scope), scope, tt.wantID)
+			assertMarketURLScope(t, steamMarketListingURLForScope(ItemConfig{Name: map[string]string{"en-US": "Minor Ruby"}}, scope), scope, tt.wantID)
 		})
 	}
 }
@@ -184,7 +185,7 @@ func TestPriceOverviewFormattingAndCacheMigration(t *testing.T) {
 		}
 	}
 
-	data, ok := marketDataFromPriceOverview("Minor Ruby", []byte(`{"success":true,"median_price":"0,05€","volume":"4"}`), time.Now())
+	data, ok := marketDataFromPriceOverview("Minor Ruby", []byte(`{"success":true,"median_price":"0,05€","volume":"4"}`), time.Now(), MarketCurrency{Code: "EUR", PriceSuffix: "€"})
 	if !ok || data.Analysis.PricePrefix != "" || data.Analysis.PriceSuffix != "€" {
 		t.Fatalf("median-only EUR format = %+v, ok=%t", data.Analysis, ok)
 	}

@@ -74,6 +74,9 @@ func calculateRequiredHeight(data PriceOverlayView, mode int32) int32 {
 	if data.Updated != "" {
 		y += 12
 	}
+	if data.FallbackNotice != "" {
+		y += 12
+	}
 
 	y += 34
 	return y
@@ -192,6 +195,14 @@ func drawDetailOverlay(hdc uintptr, rect RECT) {
 		}
 	})
 
+	if data.FallbackNotice != "" {
+		fallbackRect := RECT{Left: bodyLeft, Top: y + 2, Right: bodyRight, Bottom: y + 12}
+		withOverlayFont(hdc, 10, FW_NORMAL, func() {
+			drawOverlayText(hdc, data.FallbackNotice, fallbackRect, colorRGB(178, 150, 92), DT_CENTER|DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS)
+		})
+		y = fallbackRect.Bottom
+	}
+
 	updatedText := data.Updated
 	if parsed, err := time.Parse(time.RFC3339, data.Updated); err == nil {
 		updatedText = formatRelativeTime(parsed, time.Now())
@@ -289,6 +300,14 @@ func drawCompactOverlay(hdc uintptr, rect RECT) {
 		}
 	})
 
+	if data.FallbackNotice != "" {
+		fallbackRect := RECT{Left: bodyLeft, Top: y + 2, Right: bodyRight, Bottom: y + 12}
+		withOverlayFont(hdc, 10, FW_NORMAL, func() {
+			drawOverlayText(hdc, data.FallbackNotice, fallbackRect, colorRGB(178, 150, 92), DT_CENTER|DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS)
+		})
+		y = fallbackRect.Bottom
+	}
+
 	updatedText := data.Updated
 	if parsed, err := time.Parse(time.RFC3339, data.Updated); err == nil {
 		updatedText = formatRelativeTime(parsed, time.Now())
@@ -331,12 +350,12 @@ func currentPriceOverlayView() PriceOverlayView {
 
 func priceOverlayViewFromAnalysis(analysis MarketAnalysis) PriceOverlayView {
 	view := PriceOverlayView{
-		Suggested:  formatAnalysisPrice(analysis.SuggestedPrice, analysis.HasSuggested, analysis),
-		LowestSell: formatAnalysisPrice(analysis.LowestSellPrice, analysis.HasLowestSell, analysis),
-		HighestBuy: formatAnalysisPrice(analysis.HighestBuyPrice, analysis.HasHighestBuy, analysis),
+		Suggested:  formatOverlayAnalysisPrice(analysis.SuggestedPrice, analysis.HasSuggested, analysis, usdFallbackSuggested),
+		LowestSell: formatOverlayAnalysisPrice(analysis.LowestSellPrice, analysis.HasLowestSell, analysis, usdFallbackLowestSell),
+		HighestBuy: formatOverlayAnalysisPrice(analysis.HighestBuyPrice, analysis.HasHighestBuy, analysis, usdFallbackHighestBuy),
 		DailySales: formatAnalysisVolume(analysis.DailySalesVolume, analysis.HasDailySales, analysis.VolumeActivity),
-		WeeklyAvg:  formatAnalysisPrice(analysis.WeeklyAveragePrice, analysis.HasWeeklyAverage, analysis),
-		LastSold:   formatAnalysisPrice(analysis.LastSoldPrice, analysis.HasLastSold, analysis),
+		WeeklyAvg:  formatOverlayAnalysisPrice(analysis.WeeklyAveragePrice, analysis.HasWeeklyAverage, analysis, usdFallbackWeeklyAverage),
+		LastSold:   formatOverlayAnalysisPrice(analysis.LastSoldPrice, analysis.HasLastSold, analysis, usdFallbackLastSold),
 		Trend:      formatTrendPercent(analysis.TrendPercent, analysis.HasTrend),
 		Spread:     formatSpread(analysis),
 		Orders:     formatOrderCounts(analysis.BuyOrderCount, analysis.SellOrderCount, analysis.HasOrderBook),
@@ -344,12 +363,16 @@ func priceOverlayViewFromAnalysis(analysis MarketAnalysis) PriceOverlayView {
 		Confidence: analysis.Confidence,
 	}
 	if analysis.HasRecentSaleP75 {
-		view.SaleP75 = formatAnalysisPrice(analysis.RecentSaleP75Price, true, analysis)
+		view.SaleP75 = formatOverlayAnalysisPrice(analysis.RecentSaleP75Price, true, analysis, usdFallbackSaleP75)
 	}
 	if !analysis.UpdatedAt.IsZero() {
 		view.Updated = analysis.UpdatedAt.Format(time.RFC3339)
 	}
 	return view
+}
+
+func formatOverlayAnalysisPrice(price float64, ok bool, analysis MarketAnalysis, usdFallbackMetric uint16) string {
+	return formatAnalysisPrice(price, ok, analysis)
 }
 
 func parsePriceOverlayView(text string) PriceOverlayView {

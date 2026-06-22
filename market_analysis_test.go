@@ -55,6 +55,15 @@ func TestParseSSRMarketData(t *testing.T) {
 	if history[0].Volume != 4 {
 		t.Fatalf("history volume = %d, want 4", history[0].Volume)
 	}
+
+	usd, ok := marketScopeFor("USD", "TR")
+	if !ok || !isSSRListingForScope(body, usd) {
+		t.Fatal("expected USD SSR data to apply to the USD/TR scope")
+	}
+	eur, ok := marketScopeFor("EUR", "DE")
+	if !ok || isSSRListingForScope(body, eur) {
+		t.Fatal("USD SSR data must not apply to the EUR/DE scope")
+	}
 }
 
 func TestSaleHistoryAnalysis(t *testing.T) {
@@ -72,7 +81,7 @@ func TestSaleHistoryAnalysis(t *testing.T) {
 		t.Fatalf("history length = %d, want 3", len(history))
 	}
 
-	analysis := buildMarketAnalysis("Example", MarketOrderBook{}, false, history, now)
+	analysis := buildMarketAnalysis("Example", MarketOrderBook{}, false, history, now, MarketCurrency{Code: "USD", PricePrefix: "$"})
 	if analysis.DailySalesVolume != 2 {
 		t.Fatalf("daily sales = %d, want 2", analysis.DailySalesVolume)
 	}
@@ -157,6 +166,95 @@ func TestCalculateSuggestedPrice(t *testing.T) {
 			}
 			assertFloatEqual(t, got, tt.want)
 		})
+	}
+}
+
+func TestMergeMarketDataWithUSDFallback(t *testing.T) {
+	originalLanguage := currentDisplayLanguagePreference()
+	applyDisplayLanguagePreference("en-US")
+	t.Cleanup(func() { applyDisplayLanguagePreference(originalLanguage) })
+
+	now := time.Now().UTC()
+	local := MarketData{
+		CachedAt: now,
+		Analysis: MarketAnalysis{
+			PriceSuffix:        "€",
+			SuggestedPrice:     0.05,
+			LowestSellPrice:    0.06,
+			WeeklyAveragePrice: 0.07,
+			DailySalesVolume:   3528,
+			HasSuggested:       true,
+			HasLowestSell:      true,
+			HasWeeklyAverage:   true,
+			HasDailySales:      true,
+			UpdatedAt:          now,
+		},
+	}
+	usd := MarketData{
+		CachedAt:        now,
+		OrderCachedAt:   now,
+		HistoryCachedAt: now,
+		OrderBook: MarketOrderBook{
+			HighestBuyPrice: 0.03,
+			LowestSellPrice: 0.08,
+			BuyOrderCount:   62,
+			SellOrderCount:  12162,
+			PricePrefix:     "$",
+		},
+		History: []MarketSalePoint{{Time: now.Add(-time.Hour).Unix(), Price: 0.08, Volume: 100}},
+		Analysis: MarketAnalysis{
+			PricePrefix:             "$",
+			HighestBuyPrice:         0.03,
+			LowestSellPrice:         0.08,
+			WeeklyAveragePrice:      0.08,
+			RecentSaleP75Price:      0.08,
+			LastSoldPrice:           0.08,
+			DailySalesVolume:        3200,
+			BuyOrderCount:           62,
+			SellOrderCount:          12162,
+			TrendPercent:            10,
+			SpreadPercent:           62.5,
+			HasHighestBuy:           true,
+			HasLowestSell:           true,
+			HasWeeklyAverage:        true,
+			HasRecentSaleP75:        true,
+			HasLastSold:             true,
+			HasDailySales:           true,
+			HasOrderBook:            true,
+			HasSaleHistory:          true,
+			HasTrend:                true,
+			HasSpread:               true,
+			HasWeeklyDailyAvgVolume: true,
+			WeeklyDailyAvgVolume:    450,
+			UpdatedAt:               now,
+		},
+	}
+
+	eurDE, _ := marketScopeFor("EUR", "DE")
+	merged := mergeMarketDataWithUSDFallback(local, usd, eurDE)
+	analysis := merged.Analysis
+	assertFloatEqual(t, analysis.LowestSellPrice, 0.06)
+	assertFloatEqual(t, analysis.WeeklyAveragePrice, 0.07)
+	if !analysis.HasOrderBook || !analysis.HasSaleHistory || analysis.Confidence != "estimated" {
+		t.Fatalf("merged analysis did not contain USD fallback data: %+v", analysis)
+	}
+	if analysis.USDFallbackMetrics&(usdFallbackHighestBuy|usdFallbackSaleP75|usdFallbackLastSold) == 0 {
+		t.Fatalf("USD fallback fields were not marked: %b", analysis.USDFallbackMetrics)
+	}
+
+	view := priceOverlayViewFromAnalysis(analysis)
+	if view.LowestSell != "0.06€" || view.WeeklyAvg != "0.07€" || view.Suggested != "0.05€" {
+		t.Fatalf("local currency values = %+v", view)
+	}
+	if view.HighestBuy != "0.02€" || view.LastSold != "0.06€" || view.SaleP75 != "0.06€" {
+		t.Fatalf("USD fallback values = %+v", view)
+	}
+	if view.FallbackNotice != "" {
+		t.Fatalf("fallback notice = %q, want empty", view.FallbackNotice)
+	}
+
+	if !requiresUSDFallbackRefresh(eurDE, local.Analysis) || requiresUSDFallbackRefresh(eurDE, analysis) {
+		t.Fatal("USD fallback cache refresh state was not tracked correctly")
 	}
 }
 

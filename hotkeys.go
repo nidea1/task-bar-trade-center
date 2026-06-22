@@ -53,13 +53,22 @@ func openActiveItemMarketLink() {
 		return
 	}
 
-	marketURL := steamMarketListingURL(config)
+	marketURL := steamMarketListingURLForScope(config, currentMarketScope())
 	fmt.Printf("Opening Steam market listing for %s: %s\n", config.Name["en-US"], marketURL)
 	openURLInBrowser(marketURL)
 }
 
 func steamMarketListingURL(config ItemConfig) string {
 	return fmt.Sprintf("https://steamcommunity.com/market/listings/%d/%s", steamMarketAppID, url.PathEscape(buildMarketHashName(config)))
+}
+
+func steamMarketListingURLForScope(config ItemConfig, scope MarketScope) string {
+	return fmt.Sprintf(
+		"%s?country=%s&currency=%d",
+		steamMarketListingURL(config),
+		url.QueryEscape(scope.Region.CountryCode),
+		scope.Currency.SteamCurrencyID,
+	)
 }
 
 func openURLInBrowser(targetURL string) {

@@ -79,6 +79,7 @@ func startMonitoringAfterLocalInitialization() {
 	go attachGameAndWatchHoveredItems()
 	go checkUpdatesOnStartup()
 	go refreshGameLayoutInBackground()
+	go fetchExchangeRatesFromAPI()
 	fmt.Println("startup monitor_ready")
 }
 

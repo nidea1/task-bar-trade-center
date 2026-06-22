@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-22
+
+### Added
+- Implemented USD market data fallback for region/currency selections returning incomplete Steam Market API responses. Missing metrics (such as order books, histories, and volumes) are automatically fetched in USD, converted using exchange rates, and marked as estimated.
+- Added live exchange rate tracking fetched from the Frankfurter API (`https://api.frankfurter.dev`) on startup with local hardcoded fallbacks for offline support.
+- Added localization for the USD fallback warning on the overlay HUD in both English and Turkish.
+- Added support for currency-specific prefixes/suffixes (e.g. `€`, `₱`, `¥`, `₹`, `Rp`, `฿`, `₫`, `zł`, `CDN$`, `A$`) for proper price display.
+
+### Changed
+- Appended `country` and `currency` query parameters to Steam Market links opened via hotkeys to ensure users land on their selected market page.
+- Refactored `cursorScreenPosition` in `overlay_position.go` as a variable to improve unit test control.
+
 ## [0.4.1] - 2026-06-22
 
 ### Changed

@@ -1,15 +1,20 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
+	"time"
 )
 
 type MarketCurrency struct {
 	Code            string
 	SteamCurrencyID int
 	DefaultCountry  string
+	PricePrefix     string
+	PriceSuffix     string
 }
 
 type MarketRegion struct {
@@ -24,21 +29,21 @@ type MarketScope struct {
 }
 
 var supportedMarketCurrencies = []MarketCurrency{
-	{Code: "USD", SteamCurrencyID: 1, DefaultCountry: "US"},
-	{Code: "EUR", SteamCurrencyID: 3, DefaultCountry: "DE"},
-	{Code: "GBP", SteamCurrencyID: 2, DefaultCountry: "GB"},
-	{Code: "PHP", SteamCurrencyID: 12, DefaultCountry: "PH"},
-	{Code: "JPY", SteamCurrencyID: 8, DefaultCountry: "JP"},
-	{Code: "KRW", SteamCurrencyID: 16, DefaultCountry: "KR"},
-	{Code: "CNY", SteamCurrencyID: 23, DefaultCountry: "CN"},
-	{Code: "INR", SteamCurrencyID: 24, DefaultCountry: "IN"},
-	{Code: "IDR", SteamCurrencyID: 10, DefaultCountry: "ID"},
-	{Code: "THB", SteamCurrencyID: 14, DefaultCountry: "TH"},
-	{Code: "VND", SteamCurrencyID: 15, DefaultCountry: "VN"},
-	{Code: "BRL", SteamCurrencyID: 7, DefaultCountry: "BR"},
-	{Code: "PLN", SteamCurrencyID: 6, DefaultCountry: "PL"},
-	{Code: "CAD", SteamCurrencyID: 20, DefaultCountry: "CA"},
-	{Code: "AUD", SteamCurrencyID: 21, DefaultCountry: "AU"},
+	{Code: "USD", SteamCurrencyID: 1, DefaultCountry: "US", PricePrefix: "$"},
+	{Code: "EUR", SteamCurrencyID: 3, DefaultCountry: "DE", PriceSuffix: "€"},
+	{Code: "GBP", SteamCurrencyID: 2, DefaultCountry: "GB", PricePrefix: "£"},
+	{Code: "PHP", SteamCurrencyID: 12, DefaultCountry: "PH", PricePrefix: "₱"},
+	{Code: "JPY", SteamCurrencyID: 8, DefaultCountry: "JP", PricePrefix: "¥"},
+	{Code: "KRW", SteamCurrencyID: 16, DefaultCountry: "KR", PricePrefix: "₩"},
+	{Code: "CNY", SteamCurrencyID: 23, DefaultCountry: "CN", PricePrefix: "¥"},
+	{Code: "INR", SteamCurrencyID: 24, DefaultCountry: "IN", PricePrefix: "₹"},
+	{Code: "IDR", SteamCurrencyID: 10, DefaultCountry: "ID", PricePrefix: "Rp"},
+	{Code: "THB", SteamCurrencyID: 14, DefaultCountry: "TH", PricePrefix: "฿"},
+	{Code: "VND", SteamCurrencyID: 15, DefaultCountry: "VN", PriceSuffix: "₫"},
+	{Code: "BRL", SteamCurrencyID: 7, DefaultCountry: "BR", PricePrefix: "R$"},
+	{Code: "PLN", SteamCurrencyID: 6, DefaultCountry: "PL", PriceSuffix: "zł"},
+	{Code: "CAD", SteamCurrencyID: 20, DefaultCountry: "CA", PricePrefix: "CDN$ "},
+	{Code: "AUD", SteamCurrencyID: 21, DefaultCountry: "AU", PricePrefix: "A$ "},
 }
 
 var supportedMarketRegions = []MarketRegion{
@@ -216,10 +221,6 @@ func hasAdditionalRegionSelection(currency MarketCurrency) bool {
 	return currency.Code == "EUR"
 }
 
-func isUSMarketScope(scope MarketScope) bool {
-	return scope.Currency.Code == "USD" && scope.Region.CountryCode == "US"
-}
-
 func marketCurrencyForMenuCommand(commandID uint32) (MarketCurrency, bool) {
 	if commandID < MenuCurrencyBase {
 		return MarketCurrency{}, false
@@ -240,4 +241,79 @@ func marketRegionForMenuCommand(commandID uint32) (MarketRegion, bool) {
 		return MarketRegion{}, false
 	}
 	return supportedMarketRegions[index], true
+}
+
+var fallbackExchangeRates = map[string]float64{
+	"USD": 1.0,
+	"EUR": 0.92,
+	"GBP": 0.79,
+	"PHP": 58.5,
+	"JPY": 155.0,
+	"KRW": 1380.0,
+	"CNY": 7.25,
+	"INR": 83.5,
+	"IDR": 16400.0,
+	"THB": 36.7,
+	"VND": 25400.0,
+	"BRL": 5.4,
+	"PLN": 4.0,
+	"CAD": 1.37,
+	"AUD": 1.50,
+}
+
+var (
+	exchangeRateCache = make(map[string]float64)
+	exchangeRateMu    sync.RWMutex
+)
+
+func getExchangeRate(currencyCode string) float64 {
+	exchangeRateMu.RLock()
+	rate, exists := exchangeRateCache[currencyCode]
+	exchangeRateMu.RUnlock()
+	if exists {
+		return rate
+	}
+	if fallbackRate, ok := fallbackExchangeRates[currencyCode]; ok {
+		return fallbackRate
+	}
+	return 1.0
+}
+
+func setExchangeRate(currencyCode string, rate float64) {
+	if rate <= 0 {
+		return
+	}
+	exchangeRateMu.Lock()
+	exchangeRateCache[currencyCode] = rate
+	exchangeRateMu.Unlock()
+}
+
+func fetchExchangeRatesFromAPI() {
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get("https://api.frankfurter.dev/v1/latest?base=USD")
+	if err != nil {
+		fmt.Printf("[CURRENCY] Failed to fetch exchange rates from Frankfurter: %v\n", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Printf("[CURRENCY] Frankfurter API returned status %s\n", resp.Status)
+		return
+	}
+
+	var data struct {
+		Rates map[string]float64 `json:"rates"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		fmt.Printf("[CURRENCY] Failed to decode exchange rates: %v\n", err)
+		return
+	}
+
+	exchangeRateMu.Lock()
+	for currency, rate := range data.Rates {
+		exchangeRateCache[currency] = rate
+	}
+	exchangeRateMu.Unlock()
+	fmt.Printf("[CURRENCY] Successfully updated %d exchange rates from Frankfurter\n", len(data.Rates))
 }

@@ -41,7 +41,7 @@ The tray menu displays the active Steam Market pair, for example `Currency & Reg
 
 Supported currencies are USD, EUR, GBP, PHP, JPY, KRW, CNY, INR, IDR, THB, VND, BRL, PLN, CAD, and AUD. EUR supports Germany, France, Italy, Spain, Netherlands, Austria, Belgium, Portugal, Finland, and Ireland; every other supported currency uses its primary Steam Market country.
 
-Prices are requested directly from Steam with the selected `country` and `currency` parameters. The app does not convert prices with exchange rates. When Steam does not provide a selected-currency detail metric, the overlay shows `N/A` instead of mixing in USD data.
+Prices are requested directly from Steam with the selected `country` and `currency` parameters. The app does not convert prices with exchange rates. When Steam does not provide a selected-currency order book or sale history, the overlay keeps available local prices and labels the supplemental USD metrics as USD market data.
 
 ## Screenshots
 

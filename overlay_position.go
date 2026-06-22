@@ -22,7 +22,7 @@ func marketOverlayRect() (RECT, bool) {
 	return RECT{}, false
 }
 
-func cursorScreenPosition() (POINT, bool) {
+var cursorScreenPosition = func() (POINT, bool) {
 	var cursor POINT
 	result, _, _ := procGetCursorPos.Call(uintptr(unsafe.Pointer(&cursor)))
 	return cursor, result != 0

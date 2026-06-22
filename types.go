@@ -134,21 +134,23 @@ type MarketAnalysis struct {
 	DealTag              string
 	VolumeActivity       string
 
-	HasSuggested            bool
-	HasLowestSell           bool
-	HasHighestBuy           bool
-	HasWeeklyAverage        bool
-	HasRecentSaleP75        bool
-	HasLastSold             bool
-	HasDailySales           bool
-	HasOrderBook            bool
-	HasSaleHistory          bool
-	HasTrend                bool
-	HasSpread               bool
-	HasDealTag              bool
-	HasConfidence           bool
-	HasWeeklyDailyAvgVolume bool
-	IsWideSpread            bool
+	HasSuggested             bool
+	HasLowestSell            bool
+	HasHighestBuy            bool
+	HasWeeklyAverage         bool
+	HasRecentSaleP75         bool
+	HasLastSold              bool
+	HasDailySales            bool
+	HasOrderBook             bool
+	HasSaleHistory           bool
+	HasTrend                 bool
+	HasSpread                bool
+	HasDealTag               bool
+	HasConfidence            bool
+	HasWeeklyDailyAvgVolume  bool
+	IsWideSpread             bool
+	USDFallbackMetrics       uint16
+	USDDataFallbackAttempted bool
 }
 
 type ItemConfig struct {
@@ -160,19 +162,20 @@ type ItemConfig struct {
 }
 
 type PriceOverlayView struct {
-	Suggested  string
-	LowestSell string
-	HighestBuy string
-	DailySales string
-	WeeklyAvg  string
-	LastSold   string
-	Updated    string
-	Trend      string
-	Spread     string
-	DealTag    string
-	Confidence string
-	Orders     string
-	SaleP75    string
+	Suggested      string
+	LowestSell     string
+	HighestBuy     string
+	DailySales     string
+	WeeklyAvg      string
+	LastSold       string
+	Updated        string
+	Trend          string
+	Spread         string
+	DealTag        string
+	Confidence     string
+	Orders         string
+	SaleP75        string
+	FallbackNotice string
 }
 
 type WindowSearchState struct {
