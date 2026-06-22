@@ -1,0 +1,20 @@
+{
+  "hud.daily_sales": "Tägliche Verkäufe",
+  "hud.highest_buy": "Höchster Kauf",
+  "hud.last_sold": "Zuletzt verkauft",
+  "hud.lowest_sell": "Niedrigster Verkauf",
+  "hud.open_market": "Mittelklick: Steam-Markt öffnen",
+  "hud.suggested": "Empfohlen",
+  "hud.weekly_average": "Wochendurchschnitt",
+  "menu.exit": "Beenden",
+  "menu.status": "Status: %s",
+  "status.admin_required": "Administratorberechtigung erforderlich",
+  "status.attaching": "Verbindung zu TaskBarHero…",
+  "status.ready": "Bereit",
+  "status.starting": "Wird gestartet…",
+  "status.waiting_game": "Warte auf TaskBarHero",
+  "time.days_ago": "vor %d Tagen",
+  "time.hours_ago": "vor %d Std.",
+  "time.just_now": "gerade eben",
+  "time.minutes_ago": "vor %d Min."
+}

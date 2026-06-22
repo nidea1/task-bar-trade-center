@@ -1,0 +1,17 @@
+{
+  "hud.daily_sales": "일일 판매",
+  "hud.highest_buy": "최고 구매",
+  "hud.last_sold": "최근 판매",
+  "hud.lowest_sell": "최저 판매",
+  "hud.suggested": "추천",
+  "hud.weekly_average": "주간 평균",
+  "menu.exit": "종료",
+  "menu.status": "상태: %s",
+  "status.ready": "준비됨",
+  "status.starting": "시작 중…",
+  "status.waiting_game": "TaskBarHero 대기 중",
+  "time.days_ago": "%d일 전",
+  "time.hours_ago": "%d시간 전",
+  "time.just_now": "방금",
+  "time.minutes_ago": "%d분 전"
+}

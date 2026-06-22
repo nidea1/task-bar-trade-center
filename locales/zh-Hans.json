@@ -1,0 +1,17 @@
+{
+  "hud.daily_sales": "每日销量",
+  "hud.highest_buy": "最高求购",
+  "hud.last_sold": "最近成交",
+  "hud.lowest_sell": "最低售价",
+  "hud.suggested": "建议",
+  "hud.weekly_average": "每周平均",
+  "menu.exit": "退出",
+  "menu.status": "状态: %s",
+  "status.ready": "就绪",
+  "status.starting": "正在启动…",
+  "status.waiting_game": "正在等待 TaskBarHero",
+  "time.days_ago": "%d天前",
+  "time.hours_ago": "%d小时前",
+  "time.just_now": "刚刚",
+  "time.minutes_ago": "%d分钟前"
+}

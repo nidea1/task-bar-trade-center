@@ -1,0 +1,17 @@
+{
+  "hud.daily_sales": "Päivämyynti",
+  "hud.highest_buy": "Korkein osto",
+  "hud.last_sold": "Viimeksi myyty",
+  "hud.lowest_sell": "Alin myynti",
+  "hud.suggested": "Ehdotettu",
+  "hud.weekly_average": "Viikkokeskiarvo",
+  "menu.exit": "Lopeta",
+  "menu.status": "Tila: %s",
+  "status.ready": "Valmis",
+  "status.starting": "Käynnistetään…",
+  "status.waiting_game": "Odotetaan TaskBarHeroa",
+  "time.days_ago": "%d pv sitten",
+  "time.hours_ago": "%d h sitten",
+  "time.just_now": "juuri nyt",
+  "time.minutes_ago": "%d min sitten"
+}

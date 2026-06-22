@@ -1,0 +1,17 @@
+{
+  "hud.daily_sales": "Dagelijkse verkoop",
+  "hud.highest_buy": "Hoogste koop",
+  "hud.last_sold": "Laatst verkocht",
+  "hud.lowest_sell": "Laagste verkoop",
+  "hud.suggested": "Voorgesteld",
+  "hud.weekly_average": "Wekelijks gem.",
+  "menu.exit": "Afsluiten",
+  "menu.status": "Status: %s",
+  "status.ready": "Gereed",
+  "status.starting": "Starten…",
+  "status.waiting_game": "Wachten op TaskBarHero",
+  "time.days_ago": "%d d geleden",
+  "time.hours_ago": "%d u geleden",
+  "time.just_now": "zojuist",
+  "time.minutes_ago": "%d min geleden"
+}

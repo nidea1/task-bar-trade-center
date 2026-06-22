@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-22
+
+### Added
+- Completed 100% of Turkish (`tr-TR`) translations, filling in all missing keys.
+- Integrated dynamic localization utilizing Go's `embed` package to bundle JSON translation assets directly inside the compiled executable.
+
+### Changed
+- Refactored hardcoded dictionary maps out of Go code into structured JSON files under a new `locales/` directory.
+
 ## [0.5.0] - 2026-06-22
 
 ### Added

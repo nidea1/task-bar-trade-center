@@ -1,0 +1,17 @@
+{
+  "hud.daily_sales": "दैनिक बिक्री",
+  "hud.highest_buy": "उच्चतम खरीद",
+  "hud.last_sold": "अंतिम बिक्री",
+  "hud.lowest_sell": "न्यूनतम बिक्री",
+  "hud.suggested": "सुझाया गया",
+  "hud.weekly_average": "साप्ताहिक औसत",
+  "menu.exit": "बाहर निकलें",
+  "menu.status": "स्थिति: %s",
+  "status.ready": "तैयार",
+  "status.starting": "शुरू हो रहा है…",
+  "status.waiting_game": "TaskBarHero की प्रतीक्षा में",
+  "time.days_ago": "%d दि. पहले",
+  "time.hours_ago": "%d घं. पहले",
+  "time.just_now": "अभी",
+  "time.minutes_ago": "%d मि. पहले"
+}

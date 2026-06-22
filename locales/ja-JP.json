@@ -1,0 +1,18 @@
+{
+  "hud.daily_sales": "日次販売",
+  "hud.highest_buy": "最高購入",
+  "hud.last_sold": "最終販売",
+  "hud.lowest_sell": "最安販売",
+  "hud.suggested": "推奨",
+  "hud.weekly_average": "週間平均",
+  "menu.exit": "終了",
+  "menu.status": "状態: %s",
+  "status.attaching": "TaskBarHero に接続中…",
+  "status.ready": "準備完了",
+  "status.starting": "起動中…",
+  "status.waiting_game": "TaskBarHero を待機中",
+  "time.days_ago": "%d日前",
+  "time.hours_ago": "%d時間前",
+  "time.just_now": "たった今",
+  "time.minutes_ago": "%d分前"
+}

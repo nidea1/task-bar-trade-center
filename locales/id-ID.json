@@ -1,0 +1,17 @@
+{
+  "hud.daily_sales": "Penjualan harian",
+  "hud.highest_buy": "Beli tertinggi",
+  "hud.last_sold": "Terakhir terjual",
+  "hud.lowest_sell": "Jual terendah",
+  "hud.suggested": "Disarankan",
+  "hud.weekly_average": "Rata-rata mingguan",
+  "menu.exit": "Keluar",
+  "menu.status": "Status: %s",
+  "status.ready": "Siap",
+  "status.starting": "Memulai…",
+  "status.waiting_game": "Menunggu TaskBarHero",
+  "time.days_ago": "%d hr lalu",
+  "time.hours_ago": "%d jam lalu",
+  "time.just_now": "baru saja",
+  "time.minutes_ago": "%d mnt lalu"
+}

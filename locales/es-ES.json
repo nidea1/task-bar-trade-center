@@ -1,0 +1,19 @@
+{
+  "hud.daily_sales": "Ventas diarias",
+  "hud.highest_buy": "Compra más alta",
+  "hud.last_sold": "Última venta",
+  "hud.lowest_sell": "Venta más baja",
+  "hud.suggested": "Sugerido",
+  "hud.weekly_average": "Promedio semanal",
+  "menu.exit": "Salir",
+  "menu.status": "Estado: %s",
+  "status.admin_required": "Se requiere permiso de administrador",
+  "status.attaching": "Conectando con TaskBarHero…",
+  "status.ready": "Listo",
+  "status.starting": "Iniciando…",
+  "status.waiting_game": "Esperando a TaskBarHero",
+  "time.days_ago": "hace %d d",
+  "time.hours_ago": "hace %d h",
+  "time.just_now": "ahora",
+  "time.minutes_ago": "hace %d min"
+}

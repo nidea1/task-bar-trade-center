@@ -1,0 +1,17 @@
+{
+  "hud.daily_sales": "ยอดขายรายวัน",
+  "hud.highest_buy": "ราคาซื้อสูงสุด",
+  "hud.last_sold": "ขายล่าสุด",
+  "hud.lowest_sell": "ราคาขายต่ำสุด",
+  "hud.suggested": "แนะนำ",
+  "hud.weekly_average": "เฉลี่ยรายสัปดาห์",
+  "menu.exit": "ออก",
+  "menu.status": "สถานะ: %s",
+  "status.ready": "พร้อม",
+  "status.starting": "กำลังเริ่ม…",
+  "status.waiting_game": "กำลังรอ TaskBarHero",
+  "time.days_ago": "%d วันที่แล้ว",
+  "time.hours_ago": "%d ชั่วโมงที่แล้ว",
+  "time.just_now": "เมื่อสักครู่",
+  "time.minutes_ago": "%d นาทีที่แล้ว"
+}

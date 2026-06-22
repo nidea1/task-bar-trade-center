@@ -1,0 +1,17 @@
+{
+  "hud.daily_sales": "Bán hằng ngày",
+  "hud.highest_buy": "Mua cao nhất",
+  "hud.last_sold": "Bán gần nhất",
+  "hud.lowest_sell": "Bán thấp nhất",
+  "hud.suggested": "Đề xuất",
+  "hud.weekly_average": "Trung bình tuần",
+  "menu.exit": "Thoát",
+  "menu.status": "Trạng thái: %s",
+  "status.ready": "Sẵn sàng",
+  "status.starting": "Đang khởi động…",
+  "status.waiting_game": "Đang chờ TaskBarHero",
+  "time.days_ago": "%d ngày trước",
+  "time.hours_ago": "%d giờ trước",
+  "time.just_now": "vừa xong",
+  "time.minutes_ago": "%d phút trước"
+}

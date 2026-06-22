@@ -1,0 +1,17 @@
+{
+  "hud.daily_sales": "Vendas diárias",
+  "hud.highest_buy": "Maior compra",
+  "hud.last_sold": "Última venda",
+  "hud.lowest_sell": "Menor venda",
+  "hud.suggested": "Sugerido",
+  "hud.weekly_average": "Média semanal",
+  "menu.exit": "Sair",
+  "menu.status": "Status: %s",
+  "status.ready": "Pronto",
+  "status.starting": "Iniciando…",
+  "status.waiting_game": "Aguardando TaskBarHero",
+  "time.days_ago": "há %d d",
+  "time.hours_ago": "há %d h",
+  "time.just_now": "agora",
+  "time.minutes_ago": "há %d min"
+}
