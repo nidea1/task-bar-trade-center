@@ -288,7 +288,7 @@ func (resolver *hoveredItemAOBResolver) read(processHandle uintptr, moduleBase u
 	}
 
 	if resolver.resolvedBase != 0 {
-		return readHoveredItemID(processHandle, resolver.resolvedBase, layout.HoveredItemPointerOffsets, layout.HoveredItemKeyOffset)
+		return readHoveredItemID(processHandle, resolver.resolvedBase, layout.HoveredItemPointerOffsets, layout.HoveredItemItemPtrOffset, layout.HoveredItemKeyOffset)
 	}
 
 	var readableID int32
@@ -296,7 +296,7 @@ func (resolver *hoveredItemAOBResolver) read(processHandle uintptr, moduleBase u
 	var readableRaw int32
 	readableCandidateFound := false
 	for _, candidate := range resolver.candidates {
-		itemID, readMode, rawValue, ok := readHoveredItemID(processHandle, candidate, layout.HoveredItemPointerOffsets, layout.HoveredItemKeyOffset)
+		itemID, readMode, rawValue, ok := readHoveredItemID(processHandle, candidate, layout.HoveredItemPointerOffsets, layout.HoveredItemItemPtrOffset, layout.HoveredItemKeyOffset)
 		if !ok {
 			continue
 		}

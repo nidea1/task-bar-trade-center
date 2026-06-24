@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	gameLayoutSchemaVersion       = 2
+	gameLayoutSchemaVersion       = 3
 	gameLayoutRequestTimeout      = 5 * time.Second
 	gameLayoutPointerFailureAfter = 3 * time.Second
 
@@ -40,6 +40,7 @@ type gameLayoutDocument struct {
 	HoveredItem   struct {
 		PointerBaseOffset string                `json:"pointer_base_offset"`
 		PointerOffsets    []string              `json:"pointer_offsets"`
+		ItemPtrOffset     string                `json:"item_ptr_offset"`
 		KeyOffset         string                `json:"key_offset"`
 		PointerBaseAOB    gameLayoutAOBDocument `json:"pointer_base_aob"`
 	} `json:"hovered_item"`
@@ -67,6 +68,7 @@ type gameLayoutAOBDocument struct {
 type GameLayout struct {
 	HoveredItemPointerBaseOffset uintptr
 	HoveredItemPointerOffsets    []uintptr
+	HoveredItemItemPtrOffset     uintptr
 	HoveredItemKeyOffset         uintptr
 	HoveredItemPointerBaseAOB    AOBPattern
 
@@ -319,6 +321,15 @@ func parseGameLayout(raw []byte) (GameLayout, error) {
 	if err != nil {
 		return GameLayout{}, err
 	}
+	hoveredItemPtrOffset := uintptr(0)
+	if document.HoveredItem.ItemPtrOffset != "" {
+		val, err := parseLayoutOffset("hovered_item.item_ptr_offset", document.HoveredItem.ItemPtrOffset)
+		if err != nil {
+			return GameLayout{}, err
+		}
+		hoveredItemPtrOffset = val
+	}
+
 	hoveredKeyOffset, err := parseLayoutOffset("hovered_item.key_offset", document.HoveredItem.KeyOffset)
 	if err != nil {
 		return GameLayout{}, err
@@ -394,6 +405,7 @@ func parseGameLayout(raw []byte) (GameLayout, error) {
 	return GameLayout{
 		HoveredItemPointerBaseOffset:   hoveredBase,
 		HoveredItemPointerOffsets:      hoveredOffsets,
+		HoveredItemItemPtrOffset:       hoveredItemPtrOffset,
 		HoveredItemKeyOffset:           hoveredKeyOffset,
 		HoveredItemPointerBaseAOB:      hoveredPointerBaseAOB,
 		TooltipXPointerBaseOffset:      xBase,
@@ -559,21 +571,32 @@ func recordPointerReadResultAt(now time.Time, kind pointerReadKind, success bool
 // resets the layout pointer read health, and updates the app status.
 func updateGameLayoutConfigs() {
 	setConfigurationStatus(ConfigStatusRefreshing, "")
-	bustedURL := fmt.Sprintf("%s?nocache=%d", gameLayoutURL, time.Now().UnixNano())
-	raw, err := downloadGameLayout(bustedURL, gameLayoutHTTPClient)
+	localLayoutPath := strings.TrimSpace(os.Getenv(gameLayoutPathEnvironment))
+	var raw []byte
+	var layout GameLayout
+	var err error
+	var loadedFromLocal bool
+
+	if localLayoutPath != "" {
+		layout, err = loadGameLayoutFromFile(localLayoutPath)
+		loadedFromLocal = true
+	} else {
+		bustedURL := fmt.Sprintf("%s?nocache=%d", gameLayoutURL, time.Now().UnixNano())
+		raw, err = downloadGameLayout(bustedURL, gameLayoutHTTPClient)
+		if err == nil {
+			layout, err = parseGameLayout(raw)
+			if err == nil {
+				layout, err = applyEmbeddedAOBFallback(layout, embeddedGameLayoutJSON)
+			}
+		}
+	}
+
 	if err != nil {
 		setConfigurationStatus(ConfigStatusRefreshFailed, err.Error())
 		return
 	}
-	layout, err := parseGameLayout(raw)
-	if err == nil {
-		layout, err = applyEmbeddedAOBFallback(layout, embeddedGameLayoutJSON)
-	}
-	if err != nil {
-		setConfigurationStatus(ConfigStatusRefreshFailed, err.Error())
-		return
-	}
-	if GameLayoutCacheFilePath != "" {
+
+	if !loadedFromLocal && GameLayoutCacheFilePath != "" {
 		if err := writeGameLayoutCache(GameLayoutCacheFilePath, raw); err != nil {
 			fmt.Printf("Game layout cache could not be written: %v\n", err)
 		}
@@ -581,7 +604,11 @@ func updateGameLayoutConfigs() {
 
 	GameLayoutMu.Lock()
 	ActiveGameLayout = layout
-	GameLayoutSource = gameLayoutSourceRemote
+	if loadedFromLocal {
+		GameLayoutSource = gameLayoutSourceLocalDevelopment
+	} else {
+		GameLayoutSource = gameLayoutSourceRemote
+	}
 	GameLayoutMu.Unlock()
 
 	GameLayoutReadHealth.reset()

@@ -1,9 +1,10 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "hovered_item": {
     "pointer_base_offset": "0x05DF8198",
     "pointer_offsets": ["0x40", "0x88", "0x10", "0xB8", "0x8", "0x20", "0x338"],
-    "key_offset": "0x1A4",
+    "item_ptr_offset": "0x10",
+    "key_offset": "0x30",
     "pointer_base_aob": {
       "pattern": "48 83 EC 28 80 3D ?? ?? ?? ?? 00 75 13 48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? C6 05 ?? ?? ?? ?? 01 48 8B 05 ?? ?? ?? ?? 48 8B 80 B8 00 00 00 0F B6 00 48 83 C4 28 C3",
       "displacement_offset": 35,

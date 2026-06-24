@@ -181,17 +181,11 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 		layout := ActiveGameLayout
 		GameLayoutMu.RUnlock()
 
-		baseAddress := gameAssemblyBase + layout.HoveredItemPointerBaseOffset
-		offsets := layout.HoveredItemPointerOffsets
-
-		currentItemID, readMode, rawValue, ok := readHoveredItemID(pHandle, baseAddress, offsets, layout.HoveredItemKeyOffset)
-		if !ok {
-			currentItemID, readMode, rawValue, ok = aobResolver.read(pHandle, gameAssemblyBase, layout)
-		}
+		currentItemID, readMode, rawValue, ok := aobResolver.read(pHandle, gameAssemblyBase, layout)
 		if !ok {
 			recordPointerReadResult(pointerReadHoveredItem, false)
 			if !lastReadFailed {
-				fmt.Printf("Memory read failed. The pointer/offset chain may be outdated. %s\n", describePointerChainFailure(pHandle, baseAddress, offsets, layout.HoveredItemKeyOffset))
+				fmt.Printf("Memory read failed. The AOB pattern or pointer/offset chain may be outdated.\n")
 				lastReadFailed = true
 			}
 			ActiveItemID.Store(0)

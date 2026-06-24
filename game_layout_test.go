@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -202,8 +203,11 @@ func TestParseGameLayoutValidatesOffsetsAndPlacementCalibrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseGameLayout returned error: %v", err)
 	}
-	if layout.HoveredItemKeyOffset != 0x1A4 {
-		t.Fatalf("hovered item key offset = 0x%X, want 0x1A4", layout.HoveredItemKeyOffset)
+	if layout.HoveredItemItemPtrOffset != 0x10 {
+		t.Fatalf("hovered item item_ptr_offset = 0x%X, want 0x10", layout.HoveredItemItemPtrOffset)
+	}
+	if layout.HoveredItemKeyOffset != 0x30 {
+		t.Fatalf("hovered item key offset = 0x%X, want 0x30", layout.HoveredItemKeyOffset)
 	}
 	if len(layout.TooltipXPointerOffsets) != 7 || len(layout.TooltipYPointerOffsets) != 7 {
 		t.Fatalf("tooltip pointer offset lengths = %d and %d, want 7", len(layout.TooltipXPointerOffsets), len(layout.TooltipYPointerOffsets))
@@ -258,11 +262,11 @@ func TestParseGameLayoutRejectsUnsupportedAndIncompleteDocuments(t *testing.T) {
 	}{
 		{
 			name: "unsupported schema",
-			raw:  []byte(strings.Replace(string(embeddedGameLayoutJSON), `"schema_version": 2`, `"schema_version": 3`, 1)),
+			raw:  []byte(strings.Replace(string(embeddedGameLayoutJSON), `"schema_version": 3`, `"schema_version": 4`, 1)),
 		},
 		{
 			name: "missing pointer value",
-			raw:  []byte(strings.Replace(string(embeddedGameLayoutJSON), `"key_offset": "0x1A4"`, `"key_offset": ""`, 1)),
+			raw:  []byte(strings.Replace(string(embeddedGameLayoutJSON), `"key_offset": "0x30"`, `"key_offset": ""`, 1)),
 		},
 		{
 			name: "empty pointer chain",
@@ -423,4 +427,85 @@ func TestUpdateGameLayoutConfigs(t *testing.T) {
 	if incomp {
 		t.Error("expected incompatibility state to be reset")
 	}
+}
+
+func TestScanOffsets(t *testing.T) {
+	pid := findProcessID(GameProcessName)
+	if pid == 0 {
+		t.Log("TaskBarHero.exe is not running, skipping inspection")
+		return
+	}
+	pHandle, ok := openGameProcess(pid)
+	if !ok {
+		t.Fatalf("Could not open game process")
+	}
+	defer procCloseHandle.Call(pHandle)
+
+	gameAssemblyBase := getModuleBaseAddress(pHandle, "GameAssembly.dll")
+	if gameAssemblyBase == 0 {
+		t.Fatalf("Could not find GameAssembly.dll base address")
+	}
+
+	_ = loadItemsJSON()
+	_ = loadGameLayout()
+
+	GameLayoutMu.RLock()
+	layout := ActiveGameLayout
+	GameLayoutMu.RUnlock()
+
+	pattern := layout.HoveredItemPointerBaseAOB
+	candidates, err := findAOBPointerBaseCandidates(pHandle, gameAssemblyBase, pattern)
+	if err != nil {
+		t.Fatalf("AOB scan error: %v", err)
+	}
+
+	t.Logf("Found %d base candidates", len(candidates))
+	t.Log("Starting 30-second deep scan. Please hover over a marketable item in the game...")
+
+	var scanObjectDeep func(uintptr, int, string, map[uintptr]bool)
+	scanObjectDeep = func(addr uintptr, depth int, path string, visited map[uintptr]bool) {
+		if depth > 4 || addr == 0 || visited[addr] || addr < 0x10000 {
+			return
+		}
+		visited[addr] = true
+
+		// 1. Scan direct fields for itemID
+		for offset := uintptr(0); offset < 0x300; offset += 4 {
+			val, ok := readInt32(pHandle, addr+offset)
+			if !ok {
+				continue
+			}
+			if item, exists := AllItemMap[int(val)]; exists && item.Marketable {
+				t.Logf("  [MATCH] Path: %s + Offset 0x%X = %d (%s)", path, offset, val, item.Name["en-US"])
+			}
+		}
+
+		// 2. Dereference sub-pointers and recurse
+		for offset := uintptr(0); offset < 0x200; offset += 8 {
+			subPtr, ok := readUintptr(pHandle, addr+offset)
+			if ok && subPtr != 0 && subPtr != addr {
+				scanObjectDeep(subPtr, depth+1, fmt.Sprintf("%s -> [+0x%X]", path, offset), visited)
+			}
+		}
+	}
+
+	for i := 0; i < 60; i++ {
+		for idx, candidate := range candidates {
+			// Resolve full pointer chain
+			itemObjectPointerAddress, ok := resolvePointerChainAddress(pHandle, candidate, layout.HoveredItemPointerOffsets)
+			if !ok {
+				continue
+			}
+			itemObject, ok := readUintptr(pHandle, itemObjectPointerAddress)
+			if !ok || itemObject == 0 {
+				continue
+			}
+
+			t.Logf("[Active Hover] Candidate [%d] resolved itemObject: 0x%X. Scanning...", idx, itemObject)
+			visited := make(map[uintptr]bool)
+			scanObjectDeep(itemObject, 1, fmt.Sprintf("itemObject(0x%X)", itemObject), visited)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	t.Log("Scan finished.")
 }

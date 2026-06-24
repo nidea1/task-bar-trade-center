@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-24
+
+### Added
+- Upgraded game layout configuration to schema version 3 to support dereferencing of sub-pointers through the introduction of `item_ptr_offset` for hovered items.
+- Added `TestScanOffsets` in `game_layout_test.go` to inspect active hovered items and scan nested memory object paths.
+
+### Changed
+- Refactored hovered item scanning in `app.go` to delegate entirely to the AOB pointer resolver.
+- Refactored tooltip position lookup in `memory.go` to directly invoke AOB resolution.
+- Updated `readHoveredItemID` in `memory.go` to resolve double-dereferenced hovered item keys.
+- Updated embedded fallback configuration `game-layout.json` to schema version 3.
+
 ## [0.6.2] - 2026-06-24
 
 ### Changed
