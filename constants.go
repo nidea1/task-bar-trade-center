@@ -5,7 +5,7 @@ const (
 	AppShortName    = "TBTC"
 	AppProcessName  = "tbtc"
 	AppCreatorName  = "nidea1"
-	AppVersion      = "0.6.1"
+	AppVersion      = "0.6.2"
 	GameProcessName = "TaskBarHero.exe"
 
 	EnablePriceHUD           = true
