@@ -15,6 +15,8 @@ import (
 var (
 	jsonParseCallPattern     = regexp.MustCompile(`JSON\.parse\("((?:\\.|[^"\\])*)"\)`)
 	ssrOrderBookPattern      = regexp.MustCompile(`(?s)"amtMaxBuyOrder"\s*:\s*(\d+|null).*?"amtMinSellOrder"\s*:\s*(\d+|null).*?"cBuyOrders"\s*:\s*(\d+).*?"cSellOrders"\s*:\s*(\d+)`)
+	ssrBuyOrdersPattern      = regexp.MustCompile(`"rgCompactBuyOrders"\s*:\s*\[\s*(\d+)\s*,\s*(\d+)`)
+	ssrSellOrdersPattern     = regexp.MustCompile(`"rgCompactSellOrders"\s*:\s*\[\s*(\d+)\s*,\s*(\d+)`)
 	ssrCurrencyPattern       = regexp.MustCompile(`"eCurrency"\s*:\s*(\d+)`)
 	ssrPriceHistoryPattern   = regexp.MustCompile(`"time"\s*:\s*(\d+)\s*,\s*"price_median"\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*,\s*"purchases"\s*:\s*(\d+)`)
 	itemNameIDPattern        = regexp.MustCompile(`Market_LoadOrderSpread\(\s*(\d+)\s*\)`)
@@ -92,12 +94,32 @@ func parseSSRItemOrderBook(body []byte) (MarketOrderBook, bool) {
 	buyOrders, _ := parseInt(match[3])
 	sellOrders, _ := parseInt(match[4])
 
+	var highestBuyQty int
+	if highestBuyCents > 0 {
+		if buyMatch := ssrBuyOrdersPattern.FindStringSubmatch(text); len(buyMatch) == 3 {
+			if priceCents, ok := parseInt(buyMatch[1]); ok && priceCents == highestBuyCents {
+				highestBuyQty, _ = parseInt(buyMatch[2])
+			}
+		}
+	}
+
+	var lowestSellQty int
+	if lowestSellCents > 0 {
+		if sellMatch := ssrSellOrdersPattern.FindStringSubmatch(text); len(sellMatch) == 3 {
+			if priceCents, ok := parseInt(sellMatch[1]); ok && priceCents == lowestSellCents {
+				lowestSellQty, _ = parseInt(sellMatch[2])
+			}
+		}
+	}
+
 	return MarketOrderBook{
-		HighestBuyPrice: centsToPrice(highestBuyCents),
-		LowestSellPrice: centsToPrice(lowestSellCents),
-		BuyOrderCount:   buyOrders,
-		SellOrderCount:  sellOrders,
-		PricePrefix:     "$",
+		HighestBuyPrice:    centsToPrice(highestBuyCents),
+		LowestSellPrice:    centsToPrice(lowestSellCents),
+		HighestBuyQuantity: highestBuyQty,
+		LowestSellQuantity: lowestSellQty,
+		BuyOrderCount:      buyOrders,
+		SellOrderCount:     sellOrders,
+		PricePrefix:        "$",
 	}, true
 }
 
@@ -186,13 +208,18 @@ func parseItemOrdersHistogramResponse(body []byte) (MarketOrderBook, bool) {
 		priceSuffix = ""
 	}
 
+	highestBuyQty := parseGraphFirstQuantity(rawObject["buy_order_graph"])
+	lowestSellQty := parseGraphFirstQuantity(rawObject["sell_order_graph"])
+
 	return MarketOrderBook{
-		HighestBuyPrice: highestBuy,
-		LowestSellPrice: lowestSell,
-		BuyOrderCount:   buyOrders,
-		SellOrderCount:  sellOrders,
-		PricePrefix:     pricePrefix,
-		PriceSuffix:     priceSuffix,
+		HighestBuyPrice:    highestBuy,
+		LowestSellPrice:    lowestSell,
+		HighestBuyQuantity: highestBuyQty,
+		LowestSellQuantity: lowestSellQty,
+		BuyOrderCount:      buyOrders,
+		SellOrderCount:     sellOrders,
+		PricePrefix:        pricePrefix,
+		PriceSuffix:        priceSuffix,
 	}, true
 }
 
@@ -266,6 +293,8 @@ func buildMarketAnalysis(marketHashName string, orderBook MarketOrderBook, hasOr
 		analysis.HasOrderBook = true
 		analysis.LowestSellPrice = orderBook.LowestSellPrice
 		analysis.HighestBuyPrice = orderBook.HighestBuyPrice
+		analysis.LowestSellQuantity = orderBook.LowestSellQuantity
+		analysis.HighestBuyQuantity = orderBook.HighestBuyQuantity
 		analysis.BuyOrderCount = orderBook.BuyOrderCount
 		analysis.SellOrderCount = orderBook.SellOrderCount
 		analysis.HasLowestSell = orderBook.LowestSellPrice > 0
@@ -1000,5 +1029,45 @@ func parseFloat(value string) (float64, bool) {
 }
 
 func centsToPrice(cents int) float64 {
-	return float64(cents) / 100
-}
+		return float64(cents) / 100
+	}
+
+	func parseGraphFirstQuantity(raw json.RawMessage) int {
+		if len(raw) == 0 {
+			return 0
+		}
+		var arrays [][]interface{}
+		if err := json.Unmarshal(raw, &arrays); err == nil && len(arrays) > 0 && len(arrays[0]) >= 2 {
+			if qty, ok := parseInterfaceInt(arrays[0][1]); ok {
+				return qty
+			}
+		}
+		var objects []map[string]interface{}
+		if err := json.Unmarshal(raw, &objects); err == nil && len(objects) > 0 {
+			if qtyVal, exists := objects[0]["volume"]; exists {
+				if qty, ok := parseInterfaceInt(qtyVal); ok {
+					return qty
+				}
+			}
+			if qtyVal, exists := objects[0]["quantity"]; exists {
+				if qty, ok := parseInterfaceInt(qtyVal); ok {
+					return qty
+				}
+			}
+		}
+		return 0
+	}
+
+	func parseInterfaceInt(val interface{}) (int, bool) {
+		switch v := val.(type) {
+		case float64:
+			return int(v), true
+		case int:
+			return v, true
+		case string:
+			if parsed, ok := parseInt(v); ok {
+				return parsed, true
+			}
+		}
+		return 0, false
+	}

@@ -96,12 +96,14 @@ type MarketData struct {
 }
 
 type MarketOrderBook struct {
-	HighestBuyPrice float64
-	LowestSellPrice float64
-	BuyOrderCount   int
-	SellOrderCount  int
-	PricePrefix     string
-	PriceSuffix     string
+	HighestBuyPrice    float64
+	LowestSellPrice    float64
+	HighestBuyQuantity int
+	LowestSellQuantity int
+	BuyOrderCount      int
+	SellOrderCount     int
+	PricePrefix        string
+	PriceSuffix        string
 }
 
 type MarketSalePoint struct {
@@ -119,6 +121,8 @@ type MarketAnalysis struct {
 	SuggestedPrice     float64
 	LowestSellPrice    float64
 	HighestBuyPrice    float64
+	LowestSellQuantity int
+	HighestBuyQuantity int
 	WeeklyAveragePrice float64
 	RecentSaleP75Price float64
 	LastSoldPrice      float64

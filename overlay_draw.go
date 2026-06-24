@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"syscall"
 	"time"
@@ -349,10 +350,20 @@ func currentPriceOverlayView() PriceOverlayView {
 }
 
 func priceOverlayViewFromAnalysis(analysis MarketAnalysis) PriceOverlayView {
+	lowestSellStr := formatOverlayAnalysisPrice(analysis.LowestSellPrice, analysis.HasLowestSell, analysis, usdFallbackLowestSell)
+	if analysis.HasLowestSell && analysis.LowestSellQuantity > 1 {
+		lowestSellStr = fmt.Sprintf("%s (%d)", lowestSellStr, analysis.LowestSellQuantity)
+	}
+
+	highestBuyStr := formatOverlayAnalysisPrice(analysis.HighestBuyPrice, analysis.HasHighestBuy, analysis, usdFallbackHighestBuy)
+	if analysis.HasHighestBuy && analysis.HighestBuyQuantity > 1 {
+		highestBuyStr = fmt.Sprintf("%s (%d)", highestBuyStr, analysis.HighestBuyQuantity)
+	}
+
 	view := PriceOverlayView{
 		Suggested:  formatOverlayAnalysisPrice(analysis.SuggestedPrice, analysis.HasSuggested, analysis, usdFallbackSuggested),
-		LowestSell: formatOverlayAnalysisPrice(analysis.LowestSellPrice, analysis.HasLowestSell, analysis, usdFallbackLowestSell),
-		HighestBuy: formatOverlayAnalysisPrice(analysis.HighestBuyPrice, analysis.HasHighestBuy, analysis, usdFallbackHighestBuy),
+		LowestSell: lowestSellStr,
+		HighestBuy: highestBuyStr,
 		DailySales: formatAnalysisVolume(analysis.DailySalesVolume, analysis.HasDailySales, analysis.VolumeActivity),
 		WeeklyAvg:  formatOverlayAnalysisPrice(analysis.WeeklyAveragePrice, analysis.HasWeeklyAverage, analysis, usdFallbackWeeklyAverage),
 		LastSold:   formatOverlayAnalysisPrice(analysis.LastSoldPrice, analysis.HasLastSold, analysis, usdFallbackLastSold),
