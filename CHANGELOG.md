@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-06-24
+
+### Fixed
+- Fixed parsing of Steam Market Server-Side Rendered (SSR) order book payloads when the maximum buy order or minimum sell order prices are `null`.
+
 ## [0.7.0] - 2026-06-24
 
 ### Added

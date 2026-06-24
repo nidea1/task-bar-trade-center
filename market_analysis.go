@@ -14,7 +14,7 @@ import (
 
 var (
 	jsonParseCallPattern     = regexp.MustCompile(`JSON\.parse\("((?:\\.|[^"\\])*)"\)`)
-	ssrOrderBookPattern      = regexp.MustCompile(`(?s)"amtMaxBuyOrder"\s*:\s*(\d+).*?"amtMinSellOrder"\s*:\s*(\d+).*?"cBuyOrders"\s*:\s*(\d+).*?"cSellOrders"\s*:\s*(\d+)`)
+	ssrOrderBookPattern      = regexp.MustCompile(`(?s)"amtMaxBuyOrder"\s*:\s*(\d+|null).*?"amtMinSellOrder"\s*:\s*(\d+|null).*?"cBuyOrders"\s*:\s*(\d+).*?"cSellOrders"\s*:\s*(\d+)`)
 	ssrCurrencyPattern       = regexp.MustCompile(`"eCurrency"\s*:\s*(\d+)`)
 	ssrPriceHistoryPattern   = regexp.MustCompile(`"time"\s*:\s*(\d+)\s*,\s*"price_median"\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*,\s*"purchases"\s*:\s*(\d+)`)
 	itemNameIDPattern        = regexp.MustCompile(`Market_LoadOrderSpread\(\s*(\d+)\s*\)`)
@@ -68,14 +68,24 @@ func parseSSRItemOrderBook(body []byte) (MarketOrderBook, bool) {
 		return MarketOrderBook{}, false
 	}
 
-	highestBuyCents, ok := parseInt(match[1])
-	if !ok {
-		return MarketOrderBook{}, false
+	var highestBuyCents int
+	if match[1] != "null" {
+		var ok bool
+		highestBuyCents, ok = parseInt(match[1])
+		if !ok {
+			return MarketOrderBook{}, false
+		}
 	}
-	lowestSellCents, ok := parseInt(match[2])
-	if !ok {
-		return MarketOrderBook{}, false
+
+	var lowestSellCents int
+	if match[2] != "null" {
+		var ok bool
+		lowestSellCents, ok = parseInt(match[2])
+		if !ok {
+			return MarketOrderBook{}, false
+		}
 	}
+
 	if highestBuyCents <= 0 && lowestSellCents <= 0 {
 		return MarketOrderBook{}, false
 	}

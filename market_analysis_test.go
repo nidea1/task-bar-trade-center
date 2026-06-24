@@ -66,6 +66,23 @@ func TestParseSSRMarketData(t *testing.T) {
 	}
 }
 
+func TestParseSSRMarketDataWithNullPrices(t *testing.T) {
+	body := []byte(`<script>JSON.parse("{\"state\":{\"data\":{\"amtMaxBuyOrder\":230,\"amtMinSellOrder\":null,\"eCurrency\":1,\"cBuyOrders\":2311,\"cSellOrders\":0},\"queryKey\":[\"market\",\"orderbook\",3678970,\"Example\"]}}")</script>`)
+
+	orderBook, ok := parseSSRItemOrderBook(body)
+	if !ok {
+		t.Fatal("expected SSR order book to parse even with null min sell order price")
+	}
+	assertFloatEqual(t, orderBook.HighestBuyPrice, 2.30)
+	assertFloatEqual(t, orderBook.LowestSellPrice, 0.0)
+	if orderBook.BuyOrderCount != 2311 {
+		t.Fatalf("buy orders = %d, want 2311", orderBook.BuyOrderCount)
+	}
+	if orderBook.SellOrderCount != 0 {
+		t.Fatalf("sell orders = %d, want 0", orderBook.SellOrderCount)
+	}
+}
+
 func TestSaleHistoryAnalysis(t *testing.T) {
 	now := time.Unix(1700000000, 0)
 	body := []byte(fmt.Sprintf(`{
