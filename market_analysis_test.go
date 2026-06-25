@@ -470,3 +470,39 @@ func TestNewAnalysisFeatures(t *testing.T) {
 		}
 	})
 }
+
+func TestPHPScopeParserCallerRegression(t *testing.T) {
+	phpScope, ok := marketScopeFor("PHP", "PH")
+	if !ok {
+		t.Fatal("expected PHP scope to exist")
+	}
+
+	body := []byte(`<script>JSON.parse("{\"state\":{\"data\":{\"amtMaxBuyOrder\":25500,\"amtMinSellOrder\":25700,\"eCurrency\":12,\"cBuyOrders\":12,\"cSellOrders\":3},\"queryKey\":[\"market\",\"orderbook\",3678970,\"Example\"]}}")</script>`)
+
+	if !isSSRListingForScope(body, phpScope) {
+		t.Fatal("expected isSSRListingForScope to return true for eCurrency: 12 and PHP scope")
+	}
+
+	orderBook, ok := parseSSRItemOrderBook(body)
+	if !ok {
+		t.Fatal("expected SSR order book to parse")
+	}
+
+	if phpScope.Currency.Code != "USD" && orderBook.PricePrefix == "$" {
+		orderBook.PricePrefix = phpScope.Currency.PricePrefix
+		orderBook.PriceSuffix = phpScope.Currency.PriceSuffix
+	}
+
+	if orderBook.PricePrefix != "₱" {
+		t.Fatalf("expected orderBook.PricePrefix to be corrected to ₱, got %q", orderBook.PricePrefix)
+	}
+
+	now := time.Now()
+	data := marketDataFromSources("Example", orderBook, true, nil, now, phpScope.Currency)
+	if data.Analysis.PricePrefix != "₱" {
+		t.Fatalf("expected analysis.PricePrefix to be ₱, got %q", data.Analysis.PricePrefix)
+	}
+	if data.OrderBook.PricePrefix != "₱" {
+		t.Fatalf("expected orderBook.PricePrefix in MarketData to be ₱, got %q", data.OrderBook.PricePrefix)
+	}
+}
