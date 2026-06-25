@@ -28,12 +28,6 @@ func TestParseItemOrdersHistogramResponse(t *testing.T) {
 	}
 	assertFloatEqual(t, orderBook.HighestBuyPrice, 2.55)
 	assertFloatEqual(t, orderBook.LowestSellPrice, 2.57)
-	if orderBook.HighestBuyQuantity != 5 {
-		t.Fatalf("highest buy quantity = %d, want 5", orderBook.HighestBuyQuantity)
-	}
-	if orderBook.LowestSellQuantity != 1 {
-		t.Fatalf("lowest sell quantity = %d, want 1", orderBook.LowestSellQuantity)
-	}
 	if orderBook.BuyOrderCount != 51893 {
 		t.Fatalf("buy orders = %d, want 51893", orderBook.BuyOrderCount)
 	}
@@ -43,7 +37,7 @@ func TestParseItemOrdersHistogramResponse(t *testing.T) {
 }
 
 func TestParseSSRMarketData(t *testing.T) {
-	body := []byte(`<script>JSON.parse("{\"state\":{\"data\":{\"amtMaxBuyOrder\":255,\"amtMinSellOrder\":257,\"eCurrency\":1,\"cBuyOrders\":12,\"cSellOrders\":3,\"rgCompactBuyOrders\":[255,10],\"rgCompactSellOrders\":[257,8]},\"queryKey\":[\"market\",\"orderbook\",3678970,\"Example\"]}}")</script>
+	body := []byte(`<script>JSON.parse("{\"state\":{\"data\":{\"amtMaxBuyOrder\":255,\"amtMinSellOrder\":257,\"eCurrency\":1,\"cBuyOrders\":12,\"cSellOrders\":3},\"queryKey\":[\"market\",\"orderbook\",3678970,\"Example\"]}}")</script>
 <script>JSON.parse("{\"state\":{\"data\":{\"history\":[{\"time\":1700000000,\"price_median\":2.51,\"purchases\":4}]},\"queryKey\":[\"market\",\"pricehistory\",3678970,\"Example\"]}}")</script>`)
 
 	orderBook, ok := parseSSRItemOrderBook(body)
@@ -52,12 +46,6 @@ func TestParseSSRMarketData(t *testing.T) {
 	}
 	assertFloatEqual(t, orderBook.HighestBuyPrice, 2.55)
 	assertFloatEqual(t, orderBook.LowestSellPrice, 2.57)
-	if orderBook.HighestBuyQuantity != 10 {
-		t.Fatalf("highest buy quantity = %d, want 10", orderBook.HighestBuyQuantity)
-	}
-	if orderBook.LowestSellQuantity != 8 {
-		t.Fatalf("lowest sell quantity = %d, want 8", orderBook.LowestSellQuantity)
-	}
 
 	history := parseSSRPriceHistory(body)
 	if len(history) != 1 {
@@ -79,7 +67,7 @@ func TestParseSSRMarketData(t *testing.T) {
 }
 
 func TestParseSSRMarketDataWithNullPrices(t *testing.T) {
-	body := []byte(`<script>JSON.parse("{\"state\":{\"data\":{\"amtMaxBuyOrder\":230,\"amtMinSellOrder\":null,\"eCurrency\":1,\"cBuyOrders\":2311,\"cSellOrders\":0,\"rgCompactBuyOrders\":[230,20]},\"queryKey\":[\"market\",\"orderbook\",3678970,\"Example\"]}}")</script>`)
+	body := []byte(`<script>JSON.parse("{\"state\":{\"data\":{\"amtMaxBuyOrder\":230,\"amtMinSellOrder\":null,\"eCurrency\":1,\"cBuyOrders\":2311,\"cSellOrders\":0},\"queryKey\":[\"market\",\"orderbook\",3678970,\"Example\"]}}")</script>`)
 
 	orderBook, ok := parseSSRItemOrderBook(body)
 	if !ok {
@@ -92,12 +80,6 @@ func TestParseSSRMarketDataWithNullPrices(t *testing.T) {
 	}
 	if orderBook.SellOrderCount != 0 {
 		t.Fatalf("sell orders = %d, want 0", orderBook.SellOrderCount)
-	}
-	if orderBook.HighestBuyQuantity != 20 {
-		t.Fatalf("highest buy quantity = %d, want 20", orderBook.HighestBuyQuantity)
-	}
-	if orderBook.LowestSellQuantity != 0 {
-		t.Fatalf("lowest sell quantity = %d, want 0", orderBook.LowestSellQuantity)
 	}
 }
 

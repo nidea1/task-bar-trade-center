@@ -12,7 +12,7 @@ import (
 
 const (
 	steamMarketAppID    = 3678970
-	marketOrderCacheTTL = 5 * time.Minute
+	marketOrderCacheTTL = 30 * time.Minute
 	marketHistoryTTL    = 6 * time.Hour
 	steamRequestTimeout = 6 * time.Second
 )
@@ -229,8 +229,6 @@ func mergeMarketDataWithUSDFallback(local MarketData, usd MarketData, targetScop
 			analysis.HasOrderBook = true
 			analysis.BuyOrderCount = usdAnalysis.BuyOrderCount
 			analysis.SellOrderCount = usdAnalysis.SellOrderCount
-			analysis.LowestSellQuantity = usdAnalysis.LowestSellQuantity
-			analysis.HighestBuyQuantity = usdAnalysis.HighestBuyQuantity
 			local.OrderBook = usd.OrderBook
 			local.OrderCachedAt = usd.OrderCachedAt
 			if rate != 1.0 {
@@ -243,13 +241,11 @@ func mergeMarketDataWithUSDFallback(local MarketData, usd MarketData, targetScop
 		if !analysis.HasLowestSell && usdAnalysis.HasLowestSell {
 			analysis.LowestSellPrice = usdAnalysis.LowestSellPrice * rate
 			analysis.HasLowestSell = true
-			analysis.LowestSellQuantity = usdAnalysis.LowestSellQuantity
 			analysis.USDFallbackMetrics |= usdFallbackLowestSell
 		}
 		if !analysis.HasHighestBuy && usdAnalysis.HasHighestBuy {
 			analysis.HighestBuyPrice = usdAnalysis.HighestBuyPrice * rate
 			analysis.HasHighestBuy = true
-			analysis.HighestBuyQuantity = usdAnalysis.HighestBuyQuantity
 			analysis.USDFallbackMetrics |= usdFallbackHighestBuy
 		}
 		if !analysis.HasSpread && usdAnalysis.HasSpread {

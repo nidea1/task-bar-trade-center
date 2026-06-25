@@ -6,16 +6,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.8.0] - 2026-06-24
-
-### Added
-- Added order quantities to the highest buy and lowest sell price indicators on the overlay HUD when they exceed 1 (displayed as `Price (Quantity)`).
-- Documented step-by-step download, installation, and troubleshooting instructions in the README.
-
-### Changed
-- Reduced market order cache TTL (`marketOrderCacheTTL`) from 30 minutes to 5 minutes to provide more up-to-date pricing.
-- Extracted highest buy/lowest sell order quantities from both Steam Market SSR scripts and JSON API histograms.
-
 ## [0.7.1] - 2026-06-24
 
 ### Fixed

@@ -28,24 +28,6 @@ Task Bar Trade Center is a Windows tray utility for TaskBarHero, created by nide
   - `Language`
   - `Exit`
 
-## How to Download & Install
-
-If you are not familiar with GitHub or coding, you can download and run the application by following these simple steps:
-
-1. **Download the Program:**
-   - Go to the [Releases](https://github.com/nidea1/task-bar-trade-center/releases) page.
-   - Click on the latest release version at the top.
-   - Scroll down to the **Assets** section and click on `tbtc.exe` to download the executable file.
-
-2. **Run the Application:**
-   - Move the downloaded `tbtc.exe` file to a folder of your choice (e.g., your Desktop or a dedicated folder).
-   - Double-click `tbtc.exe` to run it.
-   - The application runs quietly in your Windows **System Tray** (the system area in the bottom-right corner of your screen, next to the clock). Look for the trade center icon there!
-
-3. **Important Troubleshooting Tips:**
-   - **Run as Administrator:** Since the application reads the game's memory space to dynamically locate tooltips and active item IDs, Windows might block it by default. If the price overlay does not show up in-game, right-click `tbtc.exe` and select **Run as administrator**.
-   - **Antivirus Exclusion:** Due to the memory reading behavior (`ReadProcessMemory`), some antivirus programs may flag it as a false-positive threat. This tool is completely safe (you can check the [Antivirus & Security Warnings](#antivirus--security-warnings) section below). If blocked, add an exclusion for `tbtc.exe` in your antivirus settings.
-
 ## UI Modes
 
 The pricing HUD overlay can be toggled between two modes from the tray context menu:
