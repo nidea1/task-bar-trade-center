@@ -134,6 +134,15 @@ func fetchMarketDataForScope(config ItemConfig, marketHashName string, now time.
 	}
 
 	if hasOrderBook || len(history) > 0 {
+		if hasOrderBook {
+			if orderBook.PricePrefix == "" && orderBook.PriceSuffix == "" {
+				orderBook.PricePrefix = scope.Currency.PricePrefix
+				orderBook.PriceSuffix = scope.Currency.PriceSuffix
+			} else if scope.Currency.Code != "USD" && orderBook.PricePrefix == "$" {
+				orderBook.PricePrefix = scope.Currency.PricePrefix
+				orderBook.PriceSuffix = scope.Currency.PriceSuffix
+			}
+		}
 		return marketDataFromSources(marketHashName, orderBook, hasOrderBook, history, now, scope.Currency), nil
 	}
 
