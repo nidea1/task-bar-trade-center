@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-06-25
+
+### Fixed
+- Fixed Steam Market SSR order book parsing so cached order book and overlay analysis prices keep the selected currency prefix/suffix instead of defaulting to `$` for non-USD markets.
+
 ## [0.8.0] - 2026-06-24
 
 ### Added

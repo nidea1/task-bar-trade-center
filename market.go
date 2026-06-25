@@ -98,7 +98,7 @@ func fetchMarketDataForScope(config ItemConfig, marketHashName string, now time.
 		requestErrors = append(requestErrors, "listing: "+err.Error())
 	} else {
 		if isSSRListingForScope(listingBody, scope) {
-			orderBook, hasOrderBook = parseSSRItemOrderBook(listingBody)
+			orderBook, hasOrderBook = parseSSRItemOrderBook(listingBody, scope.Currency)
 			history = parseSSRPriceHistory(listingBody)
 			if len(history) == 0 {
 				history = parseLegacySaleHistoryFromListing(listingBody)

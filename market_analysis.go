@@ -63,7 +63,7 @@ func isLegacyMarketOverlayText(text string) bool {
 		strings.Contains(text, "Range:")
 }
 
-func parseSSRItemOrderBook(body []byte) (MarketOrderBook, bool) {
+func parseSSRItemOrderBook(body []byte, currency MarketCurrency) (MarketOrderBook, bool) {
 	text := searchableListingText(body)
 	match := ssrOrderBookPattern.FindStringSubmatch(text)
 	if len(match) != 5 {
@@ -119,7 +119,8 @@ func parseSSRItemOrderBook(body []byte) (MarketOrderBook, bool) {
 		LowestSellQuantity: lowestSellQty,
 		BuyOrderCount:      buyOrders,
 		SellOrderCount:     sellOrders,
-		PricePrefix:        "$",
+		PricePrefix:        currency.PricePrefix,
+		PriceSuffix:        currency.PriceSuffix,
 	}, true
 }
 
@@ -1029,45 +1030,45 @@ func parseFloat(value string) (float64, bool) {
 }
 
 func centsToPrice(cents int) float64 {
-		return float64(cents) / 100
-	}
+	return float64(cents) / 100
+}
 
-	func parseGraphFirstQuantity(raw json.RawMessage) int {
-		if len(raw) == 0 {
-			return 0
+func parseGraphFirstQuantity(raw json.RawMessage) int {
+	if len(raw) == 0 {
+		return 0
+	}
+	var arrays [][]interface{}
+	if err := json.Unmarshal(raw, &arrays); err == nil && len(arrays) > 0 && len(arrays[0]) >= 2 {
+		if qty, ok := parseInterfaceInt(arrays[0][1]); ok {
+			return qty
 		}
-		var arrays [][]interface{}
-		if err := json.Unmarshal(raw, &arrays); err == nil && len(arrays) > 0 && len(arrays[0]) >= 2 {
-			if qty, ok := parseInterfaceInt(arrays[0][1]); ok {
+	}
+	var objects []map[string]interface{}
+	if err := json.Unmarshal(raw, &objects); err == nil && len(objects) > 0 {
+		if qtyVal, exists := objects[0]["volume"]; exists {
+			if qty, ok := parseInterfaceInt(qtyVal); ok {
 				return qty
 			}
 		}
-		var objects []map[string]interface{}
-		if err := json.Unmarshal(raw, &objects); err == nil && len(objects) > 0 {
-			if qtyVal, exists := objects[0]["volume"]; exists {
-				if qty, ok := parseInterfaceInt(qtyVal); ok {
-					return qty
-				}
-			}
-			if qtyVal, exists := objects[0]["quantity"]; exists {
-				if qty, ok := parseInterfaceInt(qtyVal); ok {
-					return qty
-				}
+		if qtyVal, exists := objects[0]["quantity"]; exists {
+			if qty, ok := parseInterfaceInt(qtyVal); ok {
+				return qty
 			}
 		}
-		return 0
 	}
+	return 0
+}
 
-	func parseInterfaceInt(val interface{}) (int, bool) {
-		switch v := val.(type) {
-		case float64:
-			return int(v), true
-		case int:
-			return v, true
-		case string:
-			if parsed, ok := parseInt(v); ok {
-				return parsed, true
-			}
+func parseInterfaceInt(val interface{}) (int, bool) {
+	switch v := val.(type) {
+	case float64:
+		return int(v), true
+	case int:
+		return v, true
+	case string:
+		if parsed, ok := parseInt(v); ok {
+			return parsed, true
 		}
-		return 0, false
 	}
+	return 0, false
+}

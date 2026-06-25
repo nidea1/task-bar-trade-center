@@ -46,7 +46,11 @@ func TestParseSSRMarketData(t *testing.T) {
 	body := []byte(`<script>JSON.parse("{\"state\":{\"data\":{\"amtMaxBuyOrder\":255,\"amtMinSellOrder\":257,\"eCurrency\":1,\"cBuyOrders\":12,\"cSellOrders\":3,\"rgCompactBuyOrders\":[255,10],\"rgCompactSellOrders\":[257,8]},\"queryKey\":[\"market\",\"orderbook\",3678970,\"Example\"]}}")</script>
 <script>JSON.parse("{\"state\":{\"data\":{\"history\":[{\"time\":1700000000,\"price_median\":2.51,\"purchases\":4}]},\"queryKey\":[\"market\",\"pricehistory\",3678970,\"Example\"]}}")</script>`)
 
-	orderBook, ok := parseSSRItemOrderBook(body)
+	usd, ok := marketScopeFor("USD", "TR")
+	if !ok {
+		t.Fatal("expected USD/TR scope to exist")
+	}
+	orderBook, ok := parseSSRItemOrderBook(body, usd.Currency)
 	if !ok {
 		t.Fatal("expected SSR order book to parse")
 	}
@@ -68,8 +72,7 @@ func TestParseSSRMarketData(t *testing.T) {
 		t.Fatalf("history volume = %d, want 4", history[0].Volume)
 	}
 
-	usd, ok := marketScopeFor("USD", "TR")
-	if !ok || !isSSRListingForScope(body, usd) {
+	if !isSSRListingForScope(body, usd) {
 		t.Fatal("expected USD SSR data to apply to the USD/TR scope")
 	}
 	eur, ok := marketScopeFor("EUR", "DE")
@@ -81,7 +84,11 @@ func TestParseSSRMarketData(t *testing.T) {
 func TestParseSSRMarketDataWithNullPrices(t *testing.T) {
 	body := []byte(`<script>JSON.parse("{\"state\":{\"data\":{\"amtMaxBuyOrder\":230,\"amtMinSellOrder\":null,\"eCurrency\":1,\"cBuyOrders\":2311,\"cSellOrders\":0,\"rgCompactBuyOrders\":[230,20]},\"queryKey\":[\"market\",\"orderbook\",3678970,\"Example\"]}}")</script>`)
 
-	orderBook, ok := parseSSRItemOrderBook(body)
+	usd, ok := marketScopeFor("USD", "TR")
+	if !ok {
+		t.Fatal("expected USD/TR scope to exist")
+	}
+	orderBook, ok := parseSSRItemOrderBook(body, usd.Currency)
 	if !ok {
 		t.Fatal("expected SSR order book to parse even with null min sell order price")
 	}
@@ -98,6 +105,44 @@ func TestParseSSRMarketDataWithNullPrices(t *testing.T) {
 	}
 	if orderBook.LowestSellQuantity != 0 {
 		t.Fatalf("lowest sell quantity = %d, want 0", orderBook.LowestSellQuantity)
+	}
+}
+
+func TestSSRMarketDataUsesSelectedCurrencyFormat(t *testing.T) {
+	now := time.Unix(1700000000, 0)
+	tests := []struct {
+		currency string
+		country  string
+	}{
+		{currency: "PHP", country: "PH"},
+		{currency: "EUR", country: "DE"},
+		{currency: "CAD", country: "CA"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.currency+"/"+tt.country, func(t *testing.T) {
+			scope, ok := marketScopeFor(tt.currency, tt.country)
+			if !ok {
+				t.Fatalf("expected %s/%s scope to exist", tt.currency, tt.country)
+			}
+			body := []byte(fmt.Sprintf(`<script>JSON.parse("{\"state\":{\"data\":{\"amtMaxBuyOrder\":392,\"amtMinSellOrder\":445,\"eCurrency\":%d,\"cBuyOrders\":16,\"cSellOrders\":121,\"rgCompactBuyOrders\":[392,3],\"rgCompactSellOrders\":[445,1]},\"queryKey\":[\"market\",\"orderbook\",3678970,\"Fate Helmet (Legendary) A\"]}}")</script>`, scope.Currency.SteamCurrencyID))
+			if !isSSRListingForScope(body, scope) {
+				t.Fatalf("expected SSR data to apply to the %s/%s scope", tt.currency, tt.country)
+			}
+
+			orderBook, ok := parseSSRItemOrderBook(body, scope.Currency)
+			if !ok {
+				t.Fatal("expected SSR order book to parse")
+			}
+			data := marketDataFromSources("Fate Helmet (Legendary) A", orderBook, true, nil, now, scope.Currency)
+
+			if data.OrderBook.PricePrefix != scope.Currency.PricePrefix || data.OrderBook.PriceSuffix != scope.Currency.PriceSuffix {
+				t.Fatalf("order book format = %q/%q, want %q/%q", data.OrderBook.PricePrefix, data.OrderBook.PriceSuffix, scope.Currency.PricePrefix, scope.Currency.PriceSuffix)
+			}
+			if data.Analysis.PricePrefix != scope.Currency.PricePrefix || data.Analysis.PriceSuffix != scope.Currency.PriceSuffix {
+				t.Fatalf("analysis format = %q/%q, want %q/%q", data.Analysis.PricePrefix, data.Analysis.PriceSuffix, scope.Currency.PricePrefix, scope.Currency.PriceSuffix)
+			}
+		})
 	}
 }
 
