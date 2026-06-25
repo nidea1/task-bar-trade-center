@@ -300,8 +300,10 @@ func buildMarketAnalysis(marketHashName string, orderBook MarketOrderBook, hasOr
 		analysis.HasLowestSell = orderBook.LowestSellPrice > 0
 		analysis.HasHighestBuy = orderBook.HighestBuyPrice > 0
 		if orderBook.PricePrefix != "" || orderBook.PriceSuffix != "" {
-			analysis.PricePrefix = orderBook.PricePrefix
-			analysis.PriceSuffix = orderBook.PriceSuffix
+			if !(currency.Code != "USD" && orderBook.PricePrefix == "$") {
+				analysis.PricePrefix = orderBook.PricePrefix
+				analysis.PriceSuffix = orderBook.PriceSuffix
+			}
 		}
 	}
 
