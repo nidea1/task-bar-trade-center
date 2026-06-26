@@ -3,9 +3,11 @@ package market
 import (
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nidea1/task-bar-trade-center/internal/catalog"
@@ -14,7 +16,14 @@ import (
 const (
 	SteamAppID          = 3678970
 	steamRequestTimeout = 6 * time.Second
+	steamRequestSpacing = 2500 * time.Millisecond
+	steamRequestJitter  = 0.15
 )
+
+var steamRequestLimiter = struct {
+	sync.Mutex
+	lastStartedAt time.Time
+}{}
 
 func FetchData(config catalog.ItemConfig, marketHashName string, now time.Time, scope MarketScope) (MarketData, error) {
 	data, err := fetchDataForScope(config, marketHashName, now, scope)
@@ -197,6 +206,7 @@ func steamGet(client *http.Client, targetURL string, referer string) ([]byte, in
 		req.Header.Set("Referer", referer)
 	}
 
+	waitForSteamRequestTurn()
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, 0, err
@@ -211,4 +221,27 @@ func steamGet(client *http.Client, targetURL string, referer string) ([]byte, in
 		return body, resp.StatusCode, fmt.Errorf("status %s", resp.Status)
 	}
 	return body, resp.StatusCode, nil
+}
+
+func waitForSteamRequestTurn() {
+	steamRequestLimiter.Lock()
+	defer steamRequestLimiter.Unlock()
+
+	if !steamRequestLimiter.lastStartedAt.IsZero() {
+		delay := jitteredSteamRequestSpacing()
+		if wait := time.Until(steamRequestLimiter.lastStartedAt.Add(delay)); wait > 0 {
+			time.Sleep(wait)
+		}
+	}
+	steamRequestLimiter.lastStartedAt = time.Now()
+}
+
+func jitteredSteamRequestSpacing() time.Duration {
+	if steamRequestJitter <= 0 {
+		return steamRequestSpacing
+	}
+	min := 1 - steamRequestJitter
+	max := 1 + steamRequestJitter
+	factor := min + rand.Float64()*(max-min)
+	return time.Duration(float64(steamRequestSpacing) * factor)
 }

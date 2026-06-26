@@ -95,9 +95,9 @@ func mergeMarketDataWithUSDFallback(local MarketData, usd MarketData, targetScop
 			if rate != 1.0 {
 				local.OrderBook.HighestBuyPrice *= rate
 				local.OrderBook.LowestSellPrice *= rate
-				local.OrderBook.PricePrefix = analysis.PricePrefix
-				local.OrderBook.PriceSuffix = analysis.PriceSuffix
 			}
+			local.OrderBook.PricePrefix = targetScope.Currency.PricePrefix
+			local.OrderBook.PriceSuffix = targetScope.Currency.PriceSuffix
 		}
 		if !analysis.HasLowestSell && usdAnalysis.HasLowestSell {
 			analysis.LowestSellPrice = usdAnalysis.LowestSellPrice * rate
@@ -169,7 +169,18 @@ func mergeMarketDataWithUSDFallback(local MarketData, usd MarketData, targetScop
 		analysis.Confidence = "estimated"
 		analysis.HasConfidence = true
 	}
+	normalizeAnalysisCurrencyFormat(analysis, targetScope.Currency)
 	return local
+}
+
+func normalizeAnalysisCurrencyFormat(analysis *MarketAnalysis, currency MarketCurrency) {
+	prefix := currency.PricePrefix
+	suffix := currency.PriceSuffix
+	if prefix == "" && suffix == "" {
+		prefix = "$"
+	}
+	analysis.PricePrefix = prefix
+	analysis.PriceSuffix = suffix
 }
 
 func marketDataFromSources(marketHashName string, orderBook MarketOrderBook, hasOrderBook bool, history []MarketSalePoint, now time.Time, currency MarketCurrency) MarketData {

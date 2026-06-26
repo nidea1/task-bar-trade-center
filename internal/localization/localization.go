@@ -8,7 +8,7 @@ import (
 	"sync"
 )
 
-const SystemPreference = "system"
+const SystemPreference = "sys"
 
 type Locale struct {
 	Code string

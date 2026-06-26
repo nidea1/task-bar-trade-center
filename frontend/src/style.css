@@ -1,4 +1,6 @@
-@import "tailwindcss";
+@import "tailwindcss" source(none);
+@source "./";
+@source "../index.html";
 
 html, body {
   margin: 0;
@@ -8,6 +10,11 @@ html, body {
   color: #e1d5bf;
   min-height: 100vh;
   overflow: hidden; /* Prevent body scroll, container will handle scrolling */
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #5a4838 #030304;
 }
 
 /* Custom drag region for frameless/windowless window */
@@ -41,6 +48,25 @@ html, body {
 ::-webkit-scrollbar-thumb:hover {
   background: #5a4838;
   border-color: #8c6e54;
+}
+
+html[data-theme="light"] * {
+  scrollbar-color: #b88945 #edf1f4;
+}
+
+html[data-theme="light"] ::-webkit-scrollbar-track {
+  background: #edf1f4;
+  border-left-color: #cbd5df;
+}
+
+html[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: #c8b08e;
+  border-color: #b88945;
+}
+
+html[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: #b88945;
+  border-color: #8b4e08;
 }
 
 /* Custom text selection */

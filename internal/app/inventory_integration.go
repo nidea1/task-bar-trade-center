@@ -1,14 +1,13 @@
 package app
 
 import (
-	"github.com/nidea1/task-bar-trade-center/internal/market"
-
 	"context"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/nidea1/task-bar-trade-center/internal/inventory"
+	"github.com/nidea1/task-bar-trade-center/internal/market"
 	"github.com/nidea1/task-bar-trade-center/internal/playerdata"
 	filestore "github.com/nidea1/task-bar-trade-center/internal/storage"
 	"github.com/nidea1/task-bar-trade-center/internal/tbhmem"
@@ -19,6 +18,12 @@ type cacheQuoteProvider struct {
 }
 
 func refreshInventoryDashboardState(reason string) {
+	if !activeApp.inventoryDashboardBuildMu.TryLock() {
+		fmt.Printf("[INVENTORY] dashboard refresh skipped (%s): refresh already running\n", reason)
+		return
+	}
+	defer activeApp.inventoryDashboardBuildMu.Unlock()
+
 	state, err := readInventoryDashboardState()
 	if err != nil {
 		fmt.Printf("[INVENTORY] dashboard refresh failed (%s): %v\n", reason, err)
@@ -51,6 +56,12 @@ func currentInventoryDashboardState() inventory.DashboardState {
 	activeApp.inventoryMu.Lock()
 	defer activeApp.inventoryMu.Unlock()
 	return activeApp.inventoryDashboardState
+}
+
+func readInventoryDashboardStateLocked() (inventory.DashboardState, error) {
+	activeApp.inventoryDashboardBuildMu.Lock()
+	defer activeApp.inventoryDashboardBuildMu.Unlock()
+	return readInventoryDashboardState()
 }
 
 func readInventoryDashboardState() (inventory.DashboardState, error) {
@@ -211,6 +222,7 @@ func currentInventoryPriceQueue() *inventory.RefreshQueue {
 	defer activeApp.inventoryMu.Unlock()
 	if activeApp.inventoryPriceQueue == nil {
 		activeApp.inventoryPriceQueue = inventory.NewRefreshQueue(fetchInventoryMarketPrice, isSteamRateLimitError)
+		activeApp.inventoryPriceQueue.SetBaseDelay(5 * time.Second)
 	}
 	return activeApp.inventoryPriceQueue
 }
@@ -250,7 +262,7 @@ func isSteamRateLimitError(err error) bool {
 	return strings.Contains(message, "429") || strings.Contains(message, "too many")
 }
 
-func rebuildDashboardState(reason string) {
+func rebuildDashboardState(reason string) (inventory.DashboardState, bool) {
 	activeApp.inventoryMu.Lock()
 	snapshot := activeApp.lastSnapshot
 	activeApp.inventoryMu.Unlock()
@@ -259,23 +271,23 @@ func rebuildDashboardState(reason string) {
 		// If we don't have a cached snapshot in memory, and the game is running, we can read memory.
 		if activeApp.gameProcessHandle != 0 && activeApp.gameProcessID != 0 {
 			go refreshInventoryDashboardState(reason)
-		} else {
-			// If not running, let's update the translations and scope on the cached dashboard state
-			activeApp.inventoryMu.Lock()
-			state := activeApp.inventoryDashboardState
-			scope := market.CurrentScope()
-			state.MarketScope = market.FormatScope(scope)
-			state.CurrencyCode = scope.Currency.Code
-			state.PricePrefix = scope.Currency.PricePrefix
-			state.PriceSuffix = scope.Currency.PriceSuffix
-			state.Translations = currentTranslations()
-			activeApp.inventoryDashboardState = state
-			activeApp.inventoryMu.Unlock()
-
-			writeInventoryDashboardState(state)
-			callDashboardUpdated(state)
+			return currentInventoryDashboardState(), false
 		}
-		return
+		// If not running, update the translations and scope on the cached dashboard state.
+		activeApp.inventoryMu.Lock()
+		state := activeApp.inventoryDashboardState
+		scope := market.CurrentScope()
+		state.MarketScope = market.FormatScope(scope)
+		state.CurrencyCode = scope.Currency.Code
+		state.PricePrefix = scope.Currency.PricePrefix
+		state.PriceSuffix = scope.Currency.PriceSuffix
+		state.Translations = currentTranslations()
+		activeApp.inventoryDashboardState = state
+		activeApp.inventoryMu.Unlock()
+
+		writeInventoryDashboardState(state)
+		callDashboardUpdated(state)
+		return state, state.UpdatedAt != ""
 	}
 
 	scope := market.CurrentScope()
@@ -297,4 +309,5 @@ func rebuildDashboardState(reason string) {
 	callDashboardUpdated(state)
 	fmt.Printf("[INVENTORY] dashboard state rebuilt (%s): items=%d marketable=%d priced=%d\n",
 		reason, state.Totals.TotalItemCount, state.Totals.MarketableItemCount, state.Totals.PricedItemCount)
+	return state, true
 }

@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added localized strings for `location.stash`, `location.inventory`, and `location.equipped` across all 18 JSON translation catalog files.
 - Added `SlotIndex` to `OwnedItem` and `StashPageCount` calculation to `InventorySnapshot` (dividing slot counts by 100 slots per page).
 - Enabled fetching of `IconURL` from Steam listing body (`ParseIconURL`) and storing it in `Analysis.IconURL`.
+- Added stash page item counts to inventory dashboard totals and the React dashboard stash page summary.
+- Added a missing-prices side panel next to the all-marketable-items dashboard view.
+- Added regression coverage for market-scope inventory repricing, stash page counts, refresh queue cleanup, and USD fallback currency formatting.
 
 ### Changed
 - Structured the codebase into internal packages inside `internal/` (such as `internal/app`, `internal/catalog`, `internal/game`, `internal/il2cpp`, `internal/inventory`, `internal/localization`, `internal/market`, `internal/playerdata`, `internal/win32`, `internal/winapp`, `internal/updater`, `internal/tbhmem`, `internal/overlay`).
@@ -29,12 +32,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cleaned up obsolete package types and redundant type alias wrappers from Phase 1 of migration.
 - Updated grid column breakpoints in the items panel to `md:grid-cols-2` to support dual-column layouts at the minimum dashboard width of 960px.
 - Replaced the dashboard header logo and drag-bar icons with the application icon asset.
+- Reworked inventory dashboard polling to reuse fresh cached state, guard concurrent dashboard builds, and queue repricing after market scope changes.
+- Throttled Steam Market HTTP requests and shortened the inventory price refresh queue base delay for responsive repricing with less rate-limit pressure.
+- Reworked the item dashboard layout around the filtered all-items grid, compact controls, stable dropdown labels, and better overflow/tooltips.
+- Configured Vite and Tailwind development scanning to ignore generated, backend, build, and `ext-project-refs` paths.
+- Changed the system display-language preference sentinel from `system` to `sys`.
+
+### Removed
+- Removed the obsolete Windows-only `tools/playerdiag` diagnostic utility.
 
 ### Fixed
 - Fixed select dropdown rendering to prevent the layout panel height from expanding vertically when menus are opened.
 - Resolved Turkish locale lowercase/uppercase mapping issues by dynamically setting the document element lang attribute and using `toLocaleUpperCase(currentLanguage)`.
 - Fixed unused sync import compile error in `inventory_integration.go`.
 - Pre-initialized activeApp to prevent nil-pointer dereferences in tests.
+- Fixed mixed currency prefix/suffix output in parsed and USD-fallback market analysis/order book data.
+- Fixed empty stash pages so pages with zero items report zero value instead of carrying stale page totals.
+- Fixed refresh queue pending storage being retained after queued work drains.
+- Fixed dashboard async loads from updating React state after unmount or while another load is already in flight.
+- Fixed Turkish hatchet labeling from `Nacak` to `Balta`.
 
 ## [0.8.1] - 2026-06-25
 

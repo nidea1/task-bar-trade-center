@@ -329,7 +329,7 @@
 }
 
 .dashboard-control-price {
-  width: 122px;
+  width: 148px;
 }
 
 .dashboard-theme-toggle {
@@ -377,7 +377,7 @@
   }
 
   .dashboard-control-price {
-    width: 118px;
+    width: 142px;
   }
 
   .dashboard-theme-toggle {
@@ -431,6 +431,23 @@
   min-width: 0;
 }
 
+.dashboard-items-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.dashboard-items-layout > .game-panel {
+  min-width: 0;
+}
+
+@media (min-width: 1024px) {
+  .dashboard-items-layout.has-missing-prices {
+    grid-template-columns: minmax(0, 3fr) minmax(220px, 1fr);
+  }
+}
+
 /* ---- Game Dropdown Menu ---- */
 .game-dropdown-menu {
   overflow-x: hidden;
@@ -459,17 +476,27 @@
   padding: 0.75rem;
 }
 
-.inventory-card-grid-compact {
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  max-height: 420px;
-  overflow-y: auto;
-  align-content: start;
-}
-
 .inventory-card-scroll {
   max-height: min(620px, calc(100vh - 300px));
   overflow-y: auto;
   align-content: start;
+}
+
+.missing-prices-panel {
+  height: 100%;
+}
+
+.missing-prices-list {
+  height: 100%;
+}
+
+.missing-price-row {
+  min-width: 0;
+  border-bottom: 1px solid rgba(70, 61, 48, 0.55);
+}
+
+.missing-price-row:last-child {
+  border-bottom: 0;
 }
 
 .inventory-card {
@@ -896,6 +923,17 @@
   background: rgba(184, 137, 69, 0.12);
   color: #7a3e05;
   border-color: rgba(184, 137, 69, 0.3);
+}
+
+.theme-light .inventory-card-rarity {
+  background: color-mix(in srgb, var(--rarity-color) 14%, #ffffff);
+  color: color-mix(in srgb, var(--rarity-color) 76%, #111827);
+  border-color: color-mix(in srgb, var(--rarity-color) 48%, #cbd5df);
+  text-shadow: none;
+}
+
+.theme-light .missing-price-row {
+  border-bottom-color: #d5dde7;
 }
 
 .theme-light .inventory-search {

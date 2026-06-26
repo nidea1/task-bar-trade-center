@@ -33,6 +33,7 @@ type DashboardTotals struct {
 	EquippedValue         float64         `json:"equipped_value"`
 	HeroEquippedValues    map[int]float64 `json:"hero_equipped_values"`
 	StashPageValues       map[int]float64 `json:"stash_page_values"`
+	StashPageCounts       map[int]int     `json:"stash_page_counts"`
 	StashPageCount        int             `json:"stash_page_count"`
 	PricedItemCount       int             `json:"priced_item_count"`
 	UnknownItemCount      int             `json:"unknown_item_count"`

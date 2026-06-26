@@ -38,6 +38,12 @@ func NewRefreshQueue(fetch FetchFunc, rateLimited RateLimitFunc) *RefreshQueue {
 	}
 }
 
+func (queue *RefreshQueue) SetBaseDelay(delay time.Duration) {
+	queue.mu.Lock()
+	defer queue.mu.Unlock()
+	queue.baseDelay = delay
+}
+
 func (queue *RefreshQueue) Enqueue(ids []int) int {
 	queue.mu.Lock()
 	now := time.Now()
@@ -71,7 +77,7 @@ func (queue *RefreshQueue) Enqueue(ids []int) int {
 func (queue *RefreshQueue) Status() RefreshStatus {
 	queue.mu.Lock()
 	defer queue.mu.Unlock()
-	
+
 	status := queue.status
 	if !queue.backoffUntil.IsZero() {
 		status.BackoffUntil = queue.backoffUntil.Format(time.RFC3339)
@@ -119,6 +125,9 @@ func (queue *RefreshQueue) markCompleted(id int) {
 	defer queue.mu.Unlock()
 	if len(queue.pending) > 0 && queue.pending[0] == id {
 		queue.pending = queue.pending[1:]
+		if len(queue.pending) == 0 {
+			queue.pending = nil
+		}
 	}
 	delete(queue.seen, id)
 	queue.status.Completed++

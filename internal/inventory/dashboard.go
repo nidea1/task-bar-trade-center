@@ -43,12 +43,21 @@ func BuildDashboard(snapshot playerdata.InventorySnapshot, catalog map[int]ItemD
 			6: 0.0,
 		},
 		StashPageValues: make(map[int]float64),
+		StashPageCounts: make(map[int]int),
 	}
 	for page := 1; page <= stashPageCount; page++ {
 		totals.StashPageValues[page] = 0
+		totals.StashPageCounts[page] = 0
 	}
 
 	for _, owned := range snapshot.Items {
+		if owned.Location == playerdata.LocationStash {
+			page := stashPageForSlot(owned.SlotIndex)
+			totals.StashPageCounts[page]++
+			if _, exists := totals.StashPageValues[page]; !exists {
+				totals.StashPageValues[page] = 0
+			}
+		}
 		desc := catalog[owned.ItemID]
 		if !owned.Marketable || !desc.Marketable {
 			continue
@@ -90,8 +99,7 @@ func BuildDashboard(snapshot playerdata.InventorySnapshot, catalog map[int]ItemD
 				totals.SuggestedListingValue += quote.Suggested
 				addLocationValue(&totals, owned.Location, quote.Suggested)
 				if owned.Location == playerdata.LocationStash {
-					// Stash pages have 100 slots each
-					page := (owned.SlotIndex / stashSlotsPerPage) + 1
+					page := stashPageForSlot(owned.SlotIndex)
 					totals.StashPageValues[page] += quote.Suggested
 				}
 				if owned.Location == playerdata.LocationEquipped && owned.EquippedHeroKey > 0 {
@@ -147,12 +155,19 @@ func dashboardStashPageCount(snapshot playerdata.InventorySnapshot) int {
 		if owned.Location != playerdata.LocationStash {
 			continue
 		}
-		page := (owned.SlotIndex / stashSlotsPerPage) + 1
+		page := stashPageForSlot(owned.SlotIndex)
 		if page > pageCount {
 			pageCount = page
 		}
 	}
 	return pageCount
+}
+
+func stashPageForSlot(slotIndex int) int {
+	if slotIndex < 0 {
+		return 1
+	}
+	return (slotIndex / stashSlotsPerPage) + 1
 }
 
 func addLocationValue(totals *DashboardTotals, location playerdata.Location, value float64) {

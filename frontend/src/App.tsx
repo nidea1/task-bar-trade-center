@@ -97,7 +97,7 @@ const TURKISH_GEAR_LABELS: Record<string, string> = {
     CROSSBOW: "Arbalet",
     EARING: "Küpe",
     GLOVES: "Eldiven",
-    HATCHET: "Nacak",
+    HATCHET: "Balta",
     HELMET: "Miğfer",
     ORB: "Küre",
     RING: "Yüzük",
@@ -183,6 +183,7 @@ type DashboardState = {
         equipped_value: number;
         hero_equipped_values: Record<number, number>;
         stash_page_values: Record<number, number>;
+        stash_page_counts?: Record<number, number>;
         stash_page_count?: number;
         priced_item_count: number;
         unknown_item_count: number;
@@ -219,6 +220,8 @@ function App() {
     const [equipmentFilter, setEquipmentFilter] = useState("all");
     const [sortMode, setSortMode] = useState<SortMode>("price_desc");
     const [itemSearch, setItemSearch] = useState("");
+    const mountedRef = useRef(false);
+    const loadInFlightRef = useRef(false);
 
     const t = (key: string, fallback?: string) => {
         if (state?.translations && state.translations[key]) {
@@ -228,33 +231,52 @@ function App() {
     };
 
     const load = () => {
-        GetInventoryDashboard()
-            .then((nextState) => {
+        if (loadInFlightRef.current) {
+            return Promise.resolve();
+        }
+        loadInFlightRef.current = true;
+        return GetInventoryDashboard()
+            .then((nextState: unknown) => {
+                if (!mountedRef.current) return;
                 setState(nextState as unknown as DashboardState);
                 setError("");
-                GetCurrentLanguage().then((lang) => setCurrentLanguage(lang));
-                GetCurrentMarketScope().then((scope) => setCurrentMarketScope(scope));
             })
-            .catch((err) => setError(String(err)));
+            .catch((err: unknown) => {
+                if (mountedRef.current) {
+                    setError(String(err));
+                }
+            })
+            .finally(() => {
+                loadInFlightRef.current = false;
+            });
     };
 
     useEffect(() => {
+        mountedRef.current = true;
         load();
         const timer = window.setInterval(load, 5000);
         
-        GetDisplayLanguages().then((list) => setLanguages(list || []));
-        GetMarketRegions().then((list) => setRegions(list || []));
-        GetCurrentLanguage().then((lang) => setCurrentLanguage(lang));
-        GetCurrentMarketScope().then((scope) => setCurrentMarketScope(scope));
+        GetDisplayLanguages().then((list: {code: string; name: string}[] | null | undefined) => {
+            if (mountedRef.current) setLanguages(list || []);
+        });
+        GetMarketRegions().then((list: {country_code: string; name: string; currency_code: string}[] | null | undefined) => {
+            if (mountedRef.current) setRegions(list || []);
+        });
+        GetCurrentLanguage().then((lang: string) => {
+            if (mountedRef.current) setCurrentLanguage(lang);
+        });
+        GetCurrentMarketScope().then((scope: {currency_code: string; country_code: string} | null) => {
+            if (mountedRef.current) setCurrentMarketScope(scope);
+        });
 
-        const unsubscribe = EventsOn("inventory-dashboard-updated", (nextState) => {
+        const unsubscribe = EventsOn("inventory-dashboard-updated", (nextState: unknown) => {
+            if (!mountedRef.current) return;
             setState(nextState as unknown as DashboardState);
             setError("");
-            GetCurrentLanguage().then((lang) => setCurrentLanguage(lang));
-            GetCurrentMarketScope().then((scope) => setCurrentMarketScope(scope));
         });
 
         return () => {
+            mountedRef.current = false;
             window.clearInterval(timer);
             unsubscribe();
         };
@@ -286,17 +308,6 @@ function App() {
         () => filterAndSortItems(allItems, rarityFilter, equipmentFilter, sortMode, priceMode, itemSearch),
         [allItems, rarityFilter, equipmentFilter, sortMode, priceMode, itemSearch]
     );
-    const mostValuableItems = useMemo(
-        () => [...allItems]
-            .filter((item) => itemHasPriceForMode(item, priceMode))
-            .sort((a, b) =>
-                itemUnitValue(b, priceMode) - itemUnitValue(a, priceMode)
-                || itemTotalValue(b, priceMode) - itemTotalValue(a, priceMode)
-                || (a.name || a.market_hash_name).localeCompare(b.name || b.market_hash_name)
-            )
-            .slice(0, 25),
-        [allItems, priceMode]
-    );
     const displayedTotalValue = priceMode === "instant"
         ? totals?.instant_sell_value
         : totals?.suggested_listing_value;
@@ -308,7 +319,10 @@ function App() {
     const controlPriceLabel = t("dashboard.control_price", localizedFallback(currentLanguage, "Fiyat", "Price"));
     const controlThemeLabel = t("dashboard.control_theme", localizedFallback(currentLanguage, "Tema", "Theme"));
     const selectedLanguageName = languages.find((lang) => lang.code === currentLanguage)?.name || currentLanguage;
-    const selectedCurrencyCode = currentMarketScope?.currency_code || state?.currency_code || "";
+    const selectedLanguageCode = languageDisplayCode(currentLanguage);
+    const fullPriceLabel = priceMode === "instant"
+        ? t("dashboard.price_highest_buy", "Highest Buy")
+        : t("dashboard.price_lowest_sell", "Lowest Sell");
     const compactPriceLabel = priceMode === "instant"
         ? t("dashboard.price_buy_short", localizedFallback(currentLanguage, "Alış", "Buy"))
         : t("dashboard.price_sell_short", localizedFallback(currentLanguage, "Satış", "Sell"));
@@ -323,12 +337,21 @@ function App() {
         setRefreshing(true);
         RefreshInventoryPrices()
             .then(load)
-            .catch((err) => setError(String(err)))
-            .finally(() => setRefreshing(false));
+            .catch((err: unknown) => {
+                if (mountedRef.current) {
+                    setError(String(err));
+                }
+            })
+            .finally(() => {
+                if (mountedRef.current) {
+                    setRefreshing(false);
+                }
+            });
     };
 
     const handleLanguageChange = (code: string) => {
         SetDisplayLanguage(code).then(() => {
+            if (!mountedRef.current) return;
             setCurrentLanguage(code);
             load();
         });
@@ -336,6 +359,7 @@ function App() {
 
     const handleRegionChange = (currencyCode: string, countryCode: string) => {
         SetMarketScope(currencyCode, countryCode).then(() => {
+            if (!mountedRef.current) return;
             setCurrentMarketScope({ currency_code: currencyCode, country_code: countryCode });
             load();
         });
@@ -408,8 +432,9 @@ function App() {
                                     onChange={handleLanguageChange}
                                     className="dashboard-control dashboard-control-language"
                                     prefix={controlLanguageLabel}
-                                    selectedLabel={selectedLanguageName}
+                                    selectedLabel={selectedLanguageCode}
                                     icon={<Languages className="w-3.5 h-3.5" />}
+                                    title={`${controlLanguageLabel}: ${selectedLanguageName}`}
                                 />
 
                                 <GameDropdown
@@ -423,9 +448,9 @@ function App() {
                                         handleRegionChange(currency, country);
                                     }}
                                     className="dashboard-control dashboard-control-region"
-                                    prefix={controlCurrencyLabel}
-                                    selectedLabel={selectedCurrencyCode}
+                                    selectedLabel={controlCurrencyLabel}
                                     icon={<GoldIcon className="w-3.5 h-3.5" />}
+                                    title={marketDisplayName}
                                 />
 
                                 <GameDropdown
@@ -439,6 +464,7 @@ function App() {
                                     prefix={controlPriceLabel}
                                     selectedLabel={compactPriceLabel}
                                     icon={<Tag className="w-3.5 h-3.5" />}
+                                    title={`${controlPriceLabel}: ${fullPriceLabel}`}
                                 />
                             </div>
 
@@ -466,19 +492,19 @@ function App() {
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                             <div className="flex items-center gap-2">
                                 <Archive className="w-4 h-4 text-[#ffbe2d]" />
-                                <span className="font-bold text-[#e1d5bf]">{formatPrice((totals?.stash_value ?? 0) + (totals?.inventory_value ?? 0), state)}</span>
+                                <span className="font-bold text-[#e1d5bf]" title={formatPrice((totals?.stash_value ?? 0) + (totals?.inventory_value ?? 0), state)}>{formatPrice((totals?.stash_value ?? 0) + (totals?.inventory_value ?? 0), state)}</span>
                                 <span className="text-[10px] text-[#9a896f] uppercase tracking-wider">{t("dashboard.stash_inventory", "Stash/Inventory")}</span>
                             </div>
                             <span className="text-[#463d30] hidden sm:inline">│</span>
                             <div className="flex items-center gap-2">
                                 <Shield className="w-4 h-4 text-[#c09ee6]" />
-                                <span className="font-bold text-[#e1d5bf]">{formatPrice(totals?.equipped_value, state)}</span>
+                                <span className="font-bold text-[#e1d5bf]" title={formatPrice(totals?.equipped_value, state)}>{formatPrice(totals?.equipped_value, state)}</span>
                                 <span className="text-[10px] text-[#9a896f] uppercase tracking-wider">{t("dashboard.hero_gear", "Hero Gear")}</span>
                             </div>
                             <span className="text-[#463d30] hidden sm:inline">│</span>
                             <div className="flex items-center gap-2">
                                 <TrendingUp className="w-4 h-4 text-[#54dc5e]" />
-                                <span className="font-bold text-[#e1d5bf]">{formatPrice(displayedTotalValue, state)}</span>
+                                <span className="font-bold text-[#e1d5bf]" title={formatPrice(displayedTotalValue, state)}>{formatPrice(displayedTotalValue, state)}</span>
                                 <span className="text-[10px] text-[#9a896f] uppercase tracking-wider">{t("dashboard.total_value", "Total Value")}</span>
                             </div>
                         </div>
@@ -505,7 +531,7 @@ function App() {
                 {state?.refresh?.refreshing && (
                     <div className="game-panel p-3 bg-[#08080a] flex items-center gap-2.5 text-xs text-[#ffbe2d] animate-pulse">
                         <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#ffbe2d]" />
-                        <span>Updating pricing data: {state.refresh.completed} done, {state.refresh.queued} remaining</span>
+                        <span>{formatPricingUpdateText(t("dashboard.updating_pricing_data", "Updating pricing data: %d done, %d remaining"), state.refresh.completed, state.refresh.queued)}</span>
                     </div>
                 )}
 
@@ -547,14 +573,16 @@ function App() {
                                 <div className="h-[1px] bg-[#463d30]" />
                                 <div className="flex justify-between gap-4">
                                     <span className="text-[#9a896f] uppercase">{t("location.inventory", "Inventory")}</span>
-                                    <span className="font-bold font-mono">{formatPrice(totals?.inventory_value, state)}</span>
+                                    <span className="font-bold font-mono" title={formatPrice(totals?.inventory_value, state)}>{formatPrice(totals?.inventory_value, state)}</span>
                                 </div>
-                                {stashPageEntries(totals).map(([page, val]) => (
+                                {stashPageEntries(totals).map(([page, val, count]) => (
                                     <div key={page} className="flex justify-between gap-4">
                                         <span className="text-[#9a896f] uppercase">
                                             {t("dashboard.stash_page", "Stash Page")} {page}
                                         </span>
-                                        <span className="font-bold font-mono">{formatPrice(Number(val), state)}</span>
+                                        <span className="font-bold font-mono" title={`${formatPrice(Number(val), state)} · ${count} ${t("dashboard.items_uppercase", "ITEMS").toLowerCase()}`}>
+                                            {formatPrice(Number(val), state)}
+                                        </span>
                                     </div>
                                 ))}
                             </div>
@@ -583,8 +611,8 @@ function App() {
                             return (
                                 <div key={hero.id} className="game-metric p-2.5 flex items-center justify-between gap-2.5">
                                     <div className="space-y-0.5 min-w-0">
-                                        <span className="text-[9px] text-[#9a896f] font-bold block uppercase tracking-wider">{t(hero.key, hero.name)}</span>
-                                        <strong className="text-xs font-bold text-[#e1d5bf] tracking-wide block truncate">
+                                        <span className="text-[9px] text-[#9a896f] font-bold block uppercase tracking-wider" title={t(hero.key, hero.name)}>{t(hero.key, hero.name)}</span>
+                                        <strong className="text-xs font-bold text-[#e1d5bf] tracking-wide block truncate" title={formatPrice(val, state)}>
                                             {formatPrice(val, state)}
                                         </strong>
                                     </div>
@@ -597,41 +625,30 @@ function App() {
                     </div>
                 </section>
  
-                {/* ═══ Main Item Category Panels ═══ */}
-                <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <ItemCardPanel
-                        title={t("dashboard.most_valuable", "Most Valuable Items")}
-                        items={mostValuableItems}
+                <section className={`dashboard-items-layout ${(state?.missing_prices?.length || 0) > 0 ? "has-missing-prices" : ""}`}>
+                    <AllMarketableItemsCards
+                        items={filteredItems}
+                        totalCount={allItems.length}
                         state={state}
                         currentLanguage={currentLanguage}
                         priceMode={priceMode}
+                        rarityFilter={rarityFilter}
+                        equipmentFilter={equipmentFilter}
+                        sortMode={sortMode}
+                        rarityOptions={rarityOptions}
+                        equipmentOptions={equipmentOptions}
+                        searchTerm={itemSearch}
+                        onRarityChange={setRarityFilter}
+                        onEquipmentChange={setEquipmentFilter}
+                        onSortChange={(value) => setSortMode(value as SortMode)}
+                        onSearchChange={setItemSearch}
+                        searchPlaceholder={searchPlaceholder}
                         t={t}
-                        className={(state?.missing_prices?.length || 0) === 0 ? "md:col-span-2" : ""}
                     />
                     {(state?.missing_prices?.length || 0) > 0 && (
-                        <ItemPanel title={t("dashboard.missing_prices", "Missing Prices")} items={state?.missing_prices || []} state={state} currentLanguage={currentLanguage} priceMode={priceMode} />
+                        <MissingPricesPanel title={t("dashboard.missing_prices", "Missing Prices")} items={state?.missing_prices || []} state={state} currentLanguage={currentLanguage} />
                     )}
                 </section>
-
-                <AllMarketableItemsCards
-                    items={filteredItems}
-                    totalCount={allItems.length}
-                    state={state}
-                    currentLanguage={currentLanguage}
-                    priceMode={priceMode}
-                    rarityFilter={rarityFilter}
-                    equipmentFilter={equipmentFilter}
-                    sortMode={sortMode}
-                    rarityOptions={rarityOptions}
-                    equipmentOptions={equipmentOptions}
-                    searchTerm={itemSearch}
-                    onRarityChange={setRarityFilter}
-                    onEquipmentChange={setEquipmentFilter}
-                    onSortChange={(value) => setSortMode(value as SortMode)}
-                    onSearchChange={setItemSearch}
-                    searchPlaceholder={searchPlaceholder}
-                    t={t}
-                />
             </div>
         </main>
     );
@@ -665,8 +682,8 @@ function MetricCard({
     return (
         <div className="game-metric metric-card p-2.5 flex items-center justify-between gap-2.5 group relative">
             <div className="space-y-0.5 min-w-0">
-                <span className="text-[9px] text-[#9a896f] font-bold block uppercase tracking-wider">{label}</span>
-                <strong className="text-xs font-bold text-[#e1d5bf] tracking-wide block truncate">{value}</strong>
+                <span className="text-[9px] text-[#9a896f] font-bold block uppercase tracking-wider" title={label}>{label}</span>
+                <strong className="text-xs font-bold text-[#e1d5bf] tracking-wide block truncate" title={value}>{value}</strong>
             </div>
             <div className={`p-1.5 rounded bg-[#030304] border border-[#2d261f] shrink-0 ${iconColor}`}>
                 {icon}
@@ -683,27 +700,25 @@ function MetricCard({
     );
 }
 
-function ItemPanel({
+function MissingPricesPanel({
     title,
     items,
     state,
-    currentLanguage,
-    priceMode
+    currentLanguage
 }: {
     title: string;
     items: DashboardItem[];
     state: DashboardState | null;
     currentLanguage: string;
-    priceMode: PriceMode;
 }) {
     return (
-        <section className="game-panel flex flex-col">
+        <section className="game-panel missing-prices-panel flex flex-col min-h-0">
             {/* Panel Header */}
             <div className="game-header flex items-center justify-between">
-                <h2 className="text-xs font-bold text-[#ffbe2d] uppercase tracking-wider flex items-center gap-2">
+                <h2 className="text-xs font-bold text-[#ffbe2d] uppercase tracking-wider flex items-center gap-2" title={title}>
                     {title}
                 </h2>
-                <span className="game-badge text-[10px] font-bold px-2 py-0.5 rounded">
+                <span className="game-badge text-[10px] font-bold px-2 py-0.5 rounded" title={String(items.length)}>
                     {items.length}
                 </span>
             </div>
@@ -712,7 +727,7 @@ function ItemPanel({
             <div className="game-accent-line" />
 
             {/* Item List */}
-            <div className="flex-1 min-h-[120px] max-h-[320px] overflow-y-auto bg-[#030304] flex flex-col">
+            <div className="missing-prices-list flex-1 min-h-0 overflow-y-auto bg-[#030304] flex flex-col">
                 {items.length === 0 ? (
                     <div className="flex-1 flex flex-col items-center justify-center py-12 px-4 text-center text-[#9a896f]">
                         <Package className="w-8 h-8 mb-2 opacity-30" />
@@ -730,8 +745,9 @@ function ItemPanel({
                         <button
                             key={`${title}-${item.item_id}`}
                             onClick={() => OpenMarketListing(item.item_id)}
-                            className="game-item-row w-full flex items-center justify-between gap-3 px-4 py-2 text-left group relative cursor-pointer bg-transparent"
+                            className="missing-price-row game-item-row w-full flex items-center gap-2.5 px-3 py-2 text-left group relative cursor-pointer bg-transparent"
                             style={style}
+                            title={itemName}
                         >
                             {/* Item Left: Icon & Name */}
                             <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -739,93 +755,27 @@ function ItemPanel({
                                     <img
                                         src={item.icon_url}
                                         alt={itemName}
-                                        className="game-icon-slot rarity-icon-slot w-9 h-9 object-contain rounded p-0.5 shrink-0"
+                                        className="game-icon-slot rarity-icon-slot w-8 h-8 object-contain rounded p-0.5 shrink-0"
                                     />
                                 ) : (
-                                    <div className="game-icon-slot rarity-icon-slot w-9 h-9 rounded shrink-0 flex items-center justify-center font-bold text-xs text-[#9a896f]">
+                                    <div className="game-icon-slot rarity-icon-slot w-8 h-8 rounded shrink-0 flex items-center justify-center font-bold text-xs text-[#9a896f]">
                                         {itemName ? itemName.charAt(0).toLocaleUpperCase(currentLanguage) : '?'}
                                     </div>
                                 )}
-                                <div className="min-w-0">
-                                    <h4 className="rarity-item-name text-xs font-bold truncate group-hover:text-white transition-colors flex items-center gap-1.5 uppercase tracking-wide">
+                                <div className="min-w-0 flex-1">
+                                    <h4 className="rarity-item-name text-[11px] font-bold truncate group-hover:text-white transition-colors flex items-center gap-1.5 uppercase tracking-wide" title={itemName}>
                                         {itemName}
-                                        <ExternalLink className="w-3 h-3 text-[#7e5326] opacity-0 group-hover:opacity-100 transition-opacity" />
                                     </h4>
-                                    <div className="flex items-center gap-2 mt-0.5">
-                                        <span className="text-[10px] text-[#9a896f] font-mono">x{item.count}</span>
+                                    <div className="flex items-center gap-2 mt-0.5 min-w-0">
+                                        <span className="text-[10px] text-[#9a896f] font-mono shrink-0" title={`x${item.count}`}>x{item.count}</span>
                                         <span className="text-[8px] text-[#463d30]">•</span>
-                                        <span className="text-[10px] text-[#9a896f] capitalize">{formatLocation(item.location, state)}</span>
+                                        <span className="text-[10px] text-[#9a896f] capitalize truncate" title={formatLocation(item.location, state)}>{formatLocation(item.location, state)}</span>
                                     </div>
                                 </div>
-                            </div>
-
-                            {/* Item Right: Price */}
-                            <div className="text-right shrink-0">
-                                <span className="font-mono text-xs font-bold text-[#e1d5bf] block group-hover:text-[#54dc5e] transition-colors">
-                                    {itemHasPriceForMode(item, priceMode) ? formatPrice(itemTotalValue(item, priceMode), state, item) : (state?.translations?.["dashboard.missing"] || "Missing")}
-                                </span>
-                                {itemHasPriceForMode(item, priceMode) && item.count > 1 && (
-                                    <span className="text-[9px] text-[#9a896f] font-mono mt-0.5 block">
-                                        {formatPrice(itemUnitValue(item, priceMode), state, item)} {state?.translations?.["dashboard.each"] || "each"}
-                                    </span>
-                                )}
                             </div>
                         </button>
                         );
                     })
-                )}
-            </div>
-        </section>
-    );
-}
-
-function ItemCardPanel({
-    title,
-    items,
-    state,
-    currentLanguage,
-    priceMode,
-    t,
-    className = ""
-}: {
-    title: string;
-    items: DashboardItem[];
-    state: DashboardState | null;
-    currentLanguage: string;
-    priceMode: PriceMode;
-    t: (key: string, fallback: string) => string;
-    className?: string;
-}) {
-    return (
-        <section className={`game-panel flex flex-col ${className}`}>
-            <div className="game-header flex items-center justify-between">
-                <h2 className="text-xs font-bold text-[#ffbe2d] uppercase tracking-wider flex items-center gap-2">
-                    {title}
-                </h2>
-                <span className="game-badge text-[10px] font-bold px-2 py-0.5 rounded">
-                    {items.length}
-                </span>
-            </div>
-
-            <div className="game-accent-line" />
-
-            <div className="inventory-card-grid inventory-card-grid-compact bg-[#030304]">
-                {items.length === 0 ? (
-                    <div className="inventory-empty">
-                        <Package className="w-8 h-8 mb-2 opacity-30" />
-                        <span>{t("dashboard.no_items", "No items available")}</span>
-                    </div>
-                ) : (
-                    items.map((item) => (
-                        <InventoryItemCard
-                            key={`panel-card-${item.item_id}`}
-                            item={item}
-                            state={state}
-                            currentLanguage={currentLanguage}
-                            priceMode={priceMode}
-                            t={t}
-                        />
-                    ))
                 )}
             </div>
         </section>
@@ -870,7 +820,7 @@ function AllMarketableItemsCards({
     t: (key: string, fallback: string) => string;
 }) {
     return (
-        <section className="game-panel flex flex-col">
+        <section className="game-panel flex flex-col min-h-0">
             <div className="game-header flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                 <div className="flex items-center justify-between gap-3">
                     <h2 className="text-xs font-bold text-[#ffbe2d] uppercase tracking-wider flex items-center gap-2">
@@ -961,6 +911,9 @@ function InventoryItemCard({
     const gearLabel = item.gear ? translateGear(item.gear, t, currentLanguage) : "";
     const itemName = item.name || item.market_hash_name || `Item ${item.item_id}`;
     const hasPrice = itemHasPriceForMode(item, priceMode);
+    const unitPriceText = hasPrice ? formatPrice(itemUnitValue(item, priceMode), state, item) : t("dashboard.missing", "Missing");
+    const totalPriceText = hasPrice ? formatPrice(itemTotalValue(item, priceMode), state, item) : t("dashboard.missing", "Missing");
+    const locationText = formatLocation(item.location, state);
     const style = { "--rarity-color": meta.color } as React.CSSProperties;
 
     return (
@@ -969,6 +922,7 @@ function InventoryItemCard({
             className="inventory-card group"
             style={style}
             onClick={() => OpenMarketListing(item.item_id)}
+            title={itemName}
         >
             <div className="inventory-card-top">
                 {item.icon_url ? (
@@ -984,30 +938,30 @@ function InventoryItemCard({
                 )}
                 <div className="min-w-0 flex-1">
                     <div className="inventory-card-title">
-                        <span>{itemName}</span>
+                        <span title={itemName}>{itemName}</span>
                         <ExternalLink className="w-3 h-3 text-[#7e5326] opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                     </div>
                     <div className="inventory-card-meta">
-                        <span>x{item.count}</span>
-                        <span>{formatLocation(item.location, state)}</span>
+                        <span title={`x${item.count}`}>x{item.count}</span>
+                        <span title={locationText}>{locationText}</span>
                     </div>
                 </div>
             </div>
 
             <div className="inventory-card-tags">
-                <span className="inventory-card-rarity">{rarityLabel}</span>
-                {typeLabel && <span className="inventory-card-tag">{typeLabel}</span>}
-                {gearLabel && <span className="inventory-card-tag">{gearLabel}</span>}
+                <span className="inventory-card-rarity" title={rarityLabel}>{rarityLabel}</span>
+                {typeLabel && <span className="inventory-card-tag" title={typeLabel}>{typeLabel}</span>}
+                {gearLabel && <span className="inventory-card-tag" title={gearLabel}>{gearLabel}</span>}
             </div>
 
             <div className="inventory-card-prices">
                 <div>
                     <span>{t("dashboard.unit_price", "Unit")}</span>
-                    <strong>{hasPrice ? formatPrice(itemUnitValue(item, priceMode), state, item) : t("dashboard.missing", "Missing")}</strong>
+                    <strong title={unitPriceText}>{unitPriceText}</strong>
                 </div>
                 <div>
                     <span>{t("dashboard.total_price", "Total")}</span>
-                    <strong>{hasPrice ? formatPrice(itemTotalValue(item, priceMode), state, item) : t("dashboard.missing", "Missing")}</strong>
+                    <strong title={totalPriceText}>{totalPriceText}</strong>
                 </div>
             </div>
         </button>
@@ -1016,9 +970,21 @@ function InventoryItemCard({
 
 function formatPrice(value?: number, state?: DashboardState | null, item?: DashboardItem) {
     if (value === undefined || Number.isNaN(value)) return "N/A";
-    const prefix = item?.price_prefix || state?.price_prefix || "$";
-    const suffix = item?.price_suffix || state?.price_suffix || "";
+    let prefix = state?.price_prefix ?? item?.price_prefix ?? "$";
+    let suffix = state?.price_suffix ?? item?.price_suffix ?? "";
+    if (prefix === "" && suffix === "") {
+        prefix = "$";
+    }
     return `${prefix}${value.toFixed(2)}${suffix}`;
+}
+
+function formatPricingUpdateText(template: string, completed: number, queued: number) {
+    return template.replace("%d", String(completed)).replace("%d", String(queued));
+}
+
+function languageDisplayCode(language: string) {
+    const code = language.split(/[-_]/)[0] || language;
+    return code.toUpperCase();
 }
 
 function formatNumber(value?: number) {
@@ -1198,14 +1164,18 @@ function formatTokenLabel(value: string) {
 
 function stashPageEntries(totals?: DashboardState["totals"]) {
     const values = totals?.stash_page_values || {};
+    const counts = totals?.stash_page_counts || {};
+    const hasCounts = Boolean(totals?.stash_page_counts);
     const maxValuePage = Object.keys(values).reduce((max, page) => {
         const pageNumber = Number(page);
         return Number.isFinite(pageNumber) && pageNumber > max ? pageNumber : max;
     }, 0);
     const maxPage = Math.max(MIN_VISIBLE_STASH_PAGES, totals?.stash_page_count ?? 0, maxValuePage);
-    const entries: Array<[number, number]> = [];
+    const entries: Array<[number, number, number]> = [];
     for (let page = 1; page <= maxPage; page++) {
-        entries.push([page, Number(values[page] ?? 0)]);
+        const count = Number(counts[page] ?? 0);
+        const value = hasCounts && count === 0 ? 0 : Number(values[page] ?? 0);
+        entries.push([page, value, count]);
     }
     return entries;
 }
@@ -1241,6 +1211,7 @@ function GameDropdown({
     
     const selectedOption = options.find(opt => opt.value === value);
     const displayLabel = selectedLabel || (selectedOption ? selectedOption.label : value);
+    const displayTitle = title || (prefix ? `${prefix}: ${displayLabel}` : displayLabel);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -1258,15 +1229,15 @@ function GameDropdown({
             <button
                 type="button"
                 onClick={() => setIsOpen(!isOpen)}
-                title={title}
-                aria-label={ariaLabel || title}
+                title={displayTitle}
+                aria-label={ariaLabel || displayTitle}
                 className="game-button px-3 py-1.5 text-xs font-bold cursor-pointer flex items-center justify-between gap-2.5 min-w-[120px] tracking-wide"
             >
                 <span className="dashboard-dropdown-content">
                     {icon && <span className="dashboard-dropdown-icon">{icon}</span>}
                     <span className="dashboard-dropdown-label">
                         {prefix && <span className="dashboard-dropdown-prefix">{prefix}</span>}
-                        <span className="dashboard-dropdown-value">{displayLabel}</span>
+                        <span className="dashboard-dropdown-value" title={displayTitle}>{displayLabel}</span>
                     </span>
                 </span>
                 <span className="text-[8px] text-[#ffbe2d] shrink-0">▼</span>
@@ -1291,6 +1262,7 @@ function GameDropdown({
                                         ? "text-[#ffbe2d] font-bold bg-[#1e150d] border-l-2 border-[#ffbe2d]"
                                         : "text-[#e1d5bf] hover:text-white hover:bg-[#1a1410] border-l-2 border-transparent"
                                 }`}
+                                title={opt.label}
                             >
                                 {opt.label}
                             </button>

@@ -131,16 +131,31 @@ func TestBuildDashboardIncludesEmptyStashPages(t *testing.T) {
 	if len(state.Totals.StashPageValues) != 7 {
 		t.Fatalf("stash page values = %+v, want 7 pages", state.Totals.StashPageValues)
 	}
+	if len(state.Totals.StashPageCounts) != 7 {
+		t.Fatalf("stash page counts = %+v, want 7 pages", state.Totals.StashPageCounts)
+	}
 	for page := 1; page <= 7; page++ {
 		if _, exists := state.Totals.StashPageValues[page]; !exists {
 			t.Fatalf("stash page %d missing from %+v", page, state.Totals.StashPageValues)
+		}
+		if _, exists := state.Totals.StashPageCounts[page]; !exists {
+			t.Fatalf("stash page %d missing from counts %+v", page, state.Totals.StashPageCounts)
 		}
 	}
 	if state.Totals.StashPageValues[1] != 2 {
 		t.Errorf("stash page 1 value = %f, want 2", state.Totals.StashPageValues[1])
 	}
+	if state.Totals.StashPageCounts[1] != 1 {
+		t.Errorf("stash page 1 count = %d, want 1", state.Totals.StashPageCounts[1])
+	}
+	if state.Totals.StashPageCounts[2] != 0 {
+		t.Errorf("stash page 2 count = %d, want 0", state.Totals.StashPageCounts[2])
+	}
 	if state.Totals.StashPageValues[4] != 5 {
 		t.Errorf("stash page 4 value = %f, want 5", state.Totals.StashPageValues[4])
+	}
+	if state.Totals.StashPageCounts[4] != 1 {
+		t.Errorf("stash page 4 count = %d, want 1", state.Totals.StashPageCounts[4])
 	}
 	if state.Totals.StashPageValues[7] != 0 {
 		t.Errorf("stash page 7 value = %f, want 0", state.Totals.StashPageValues[7])

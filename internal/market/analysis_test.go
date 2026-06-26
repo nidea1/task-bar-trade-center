@@ -10,10 +10,11 @@ import (
 
 func TestMergeMarketDataWithUSDFallback(t *testing.T) {
 	now := time.Now().UTC()
+	eurDE, _ := marketScopeFor("EUR", "DE")
 	local := MarketData{
 		CachedAt: now,
 		Analysis: MarketAnalysis{
-			PriceSuffix:        "â‚¬",
+			PriceSuffix:        eurDE.Currency.PriceSuffix,
 			SuggestedPrice:     0.05,
 			LowestSellPrice:    0.06,
 			WeeklyAveragePrice: 0.07,
@@ -65,7 +66,6 @@ func TestMergeMarketDataWithUSDFallback(t *testing.T) {
 		},
 	}
 
-	eurDE, _ := marketScopeFor("EUR", "DE")
 	merged := mergeMarketDataWithUSDFallback(local, usd, eurDE)
 	analysis := merged.Analysis
 	assertFloatEqual(t, analysis.LowestSellPrice, 0.06)
@@ -77,14 +77,14 @@ func TestMergeMarketDataWithUSDFallback(t *testing.T) {
 		t.Fatalf("USD fallback fields were not marked: %b", analysis.USDFallbackMetrics)
 	}
 
-	if got := formatAnalysisPrice(analysis.LowestSellPrice, analysis.HasLowestSell, analysis); got != "0.06â‚¬" {
-		t.Fatalf("lowest sell = %q, want 0.06â‚¬", got)
+	if got, want := formatAnalysisPrice(analysis.LowestSellPrice, analysis.HasLowestSell, analysis), fmt.Sprintf("0.06%s", eurDE.Currency.PriceSuffix); got != want {
+		t.Fatalf("lowest sell = %q, want %s", got, want)
 	}
-	if got := formatAnalysisPrice(analysis.WeeklyAveragePrice, analysis.HasWeeklyAverage, analysis); got != "0.07â‚¬" {
-		t.Fatalf("weekly avg = %q, want 0.07â‚¬", got)
+	if got, want := formatAnalysisPrice(analysis.WeeklyAveragePrice, analysis.HasWeeklyAverage, analysis), fmt.Sprintf("0.07%s", eurDE.Currency.PriceSuffix); got != want {
+		t.Fatalf("weekly avg = %q, want %s", got, want)
 	}
-	if got := formatAnalysisPrice(analysis.HighestBuyPrice, analysis.HasHighestBuy, analysis); got != "0.02â‚¬" {
-		t.Fatalf("highest buy = %q, want 0.02â‚¬", got)
+	if got, want := formatAnalysisPrice(analysis.HighestBuyPrice, analysis.HasHighestBuy, analysis), fmt.Sprintf("0.02%s", eurDE.Currency.PriceSuffix); got != want {
+		t.Fatalf("highest buy = %q, want %s", got, want)
 	}
 
 	if !requiresUSDFallbackRefresh(eurDE, local.Analysis) || requiresUSDFallbackRefresh(eurDE, analysis) {

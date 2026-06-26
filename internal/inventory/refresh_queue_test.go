@@ -40,6 +40,29 @@ func TestRefreshQueueBacksOffOnRateLimit(t *testing.T) {
 	}
 }
 
+func TestRefreshQueueReleasesPendingStorageWhenEmpty(t *testing.T) {
+	queue := NewRefreshQueue(func(_ context.Context, _ int) error {
+		return nil
+	}, nil)
+	queue.baseDelay = 0
+
+	ids := make([]int, 1000)
+	for i := range ids {
+		ids[i] = i + 1
+	}
+	queue.Enqueue(ids)
+	waitForQueue(t, queue)
+
+	queue.mu.Lock()
+	defer queue.mu.Unlock()
+	if queue.pending != nil {
+		t.Fatalf("pending = len %d cap %d, want nil after queue drains", len(queue.pending), cap(queue.pending))
+	}
+	if len(queue.seen) != 0 {
+		t.Fatalf("seen = %d entries, want empty", len(queue.seen))
+	}
+}
+
 func waitForQueue(t *testing.T, queue *RefreshQueue) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)

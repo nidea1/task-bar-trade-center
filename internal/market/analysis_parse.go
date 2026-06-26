@@ -225,6 +225,7 @@ func marketDataFromPriceOverview(marketHashName string, body []byte, now time.Ti
 		analysis.SuggestedPrice = suggested
 		analysis.HasSuggested = true
 	}
+	normalizeAnalysisCurrencyFormat(&analysis, currency)
 
 	return MarketData{
 		CachedAt: now,

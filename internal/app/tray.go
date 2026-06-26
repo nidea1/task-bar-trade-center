@@ -232,7 +232,12 @@ func handleTrayCommand(commandID uint32) {
 			fmt.Printf("Market currency changed to %s.\n", market.FormatScope(scope))
 			saveSettingsToDisk()
 			refreshActiveMarketPrice()
-			rebuildDashboardState("currency-changed")
+			if state, ok := rebuildDashboardState("currency-changed"); ok {
+				queued := queueInventoryPriceRefresh(state)
+				if queued > 0 {
+					refreshInventoryDashboardState("currency-price-refresh-queued")
+				}
+			}
 		}
 		return
 	}
@@ -242,7 +247,12 @@ func handleTrayCommand(commandID uint32) {
 			fmt.Printf("Market region changed to %s.\n", market.FormatScope(scope))
 			saveSettingsToDisk()
 			refreshActiveMarketPrice()
-			rebuildDashboardState("region-changed")
+			if state, ok := rebuildDashboardState("region-changed"); ok {
+				queued := queueInventoryPriceRefresh(state)
+				if queued > 0 {
+					refreshInventoryDashboardState("region-price-refresh-queued")
+				}
+			}
 		}
 		return
 	}

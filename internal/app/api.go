@@ -2,10 +2,13 @@ package app
 
 import (
 	"fmt"
-	"github.com/nidea1/task-bar-trade-center/internal/market"
+	"time"
 
 	"github.com/nidea1/task-bar-trade-center/internal/inventory"
+	"github.com/nidea1/task-bar-trade-center/internal/market"
 )
+
+const inventoryDashboardPollCacheMaxAge = 10 * time.Second
 
 func RunRestartAfterUpdateHelper() bool {
 	return runRestartAfterUpdateHelper()
@@ -16,25 +19,26 @@ func RunRestartAfterElevationHelper() bool {
 }
 
 func GetInventoryDashboard() (inventory.DashboardState, error) {
-	state, err := readInventoryDashboardState()
+	if cached, ok := freshInventoryDashboardCache(inventoryDashboardPollCacheMaxAge); ok {
+		return cached, nil
+	}
+
+	state, err := readInventoryDashboardStateLocked()
 	if err != nil {
 		cached := currentInventoryDashboardState()
 		if cached.UpdatedAt != "" {
 			cached.Refresh = currentInventoryRefreshStatus()
+			cached.Translations = currentTranslations()
 			return cached, nil
 		}
 		return inventory.DashboardState{}, err
 	}
 	storeInventoryDashboardState(state)
-	if err := writeInventoryDashboardState(state); err != nil {
-		return state, err
-	}
-	callDashboardUpdated(state)
 	return state, nil
 }
 
 func RefreshInventoryPrices() (inventory.RefreshStatus, error) {
-	state, err := readInventoryDashboardState()
+	state, err := readInventoryDashboardStateLocked()
 	if err != nil {
 		return currentInventoryRefreshStatus(), err
 	}
@@ -46,6 +50,20 @@ func RefreshInventoryPrices() (inventory.RefreshStatus, error) {
 	}
 	refreshInventoryDashboardState("price-refresh-queued")
 	return currentInventoryRefreshStatus(), nil
+}
+
+func freshInventoryDashboardCache(maxAge time.Duration) (inventory.DashboardState, bool) {
+	cached := currentInventoryDashboardState()
+	if cached.UpdatedAt == "" {
+		return inventory.DashboardState{}, false
+	}
+	updatedAt, err := time.Parse(time.RFC3339, cached.UpdatedAt)
+	if err != nil || time.Since(updatedAt) > maxAge {
+		return inventory.DashboardState{}, false
+	}
+	cached.Refresh = currentInventoryRefreshStatus()
+	cached.Translations = currentTranslations()
+	return cached, true
 }
 
 func OpenMarketListing(itemID int) error {
@@ -137,7 +155,12 @@ func SetMarketScope(currencyCode string, countryCode string) bool {
 		fmt.Printf("Market region changed via dashboard to %s.\n", market.FormatScope(scope))
 		saveSettingsToDisk()
 		refreshActiveMarketPrice()
-		rebuildDashboardState("region-changed")
+		if state, ok := rebuildDashboardState("region-changed"); ok {
+			queued := queueInventoryPriceRefresh(state)
+			if queued > 0 {
+				refreshInventoryDashboardState("region-price-refresh-queued")
+			}
+		}
 		return true
 	}
 	return false

@@ -100,6 +100,7 @@ func buildMarketAnalysis(marketHashName string, orderBook MarketOrderBook, hasOr
 	analysis.HasDealTag = analysis.DealTag != ""
 	analysis.Confidence = calculateConfidence(analysis)
 	analysis.HasConfidence = analysis.Confidence != ""
+	normalizeAnalysisCurrencyFormat(&analysis, currency)
 
 	return analysis
 }

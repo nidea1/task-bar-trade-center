@@ -28,20 +28,20 @@ type App struct {
 	appLogFile              *os.File
 
 	// Windows HWNDs and hooks
-	appHWND           uintptr
-	appIconLarge      uintptr
-	appIconSmall      uintptr
-	trayIconAdded     bool
-	mouseHook         uintptr
-	mouseHookCallback uintptr
-	overlayHWND       uintptr
-	overlayOriginX    int32
-	overlayOriginY    int32
-	overlayWidth      atomic.Int32
-	overlayHeight     atomic.Int32
-	showOverlay       atomic.Bool
-	overlayMode       atomic.Int32
-	lastOverlayRect   win32.RECT
+	appHWND            uintptr
+	appIconLarge       uintptr
+	appIconSmall       uintptr
+	trayIconAdded      bool
+	mouseHook          uintptr
+	mouseHookCallback  uintptr
+	overlayHWND        uintptr
+	overlayOriginX     int32
+	overlayOriginY     int32
+	overlayWidth       atomic.Int32
+	overlayHeight      atomic.Int32
+	showOverlay        atomic.Bool
+	overlayMode        atomic.Int32
+	lastOverlayRect    win32.RECT
 	hasLastOverlayRect bool
 
 	appStatus           atomic.Int32
@@ -72,7 +72,7 @@ type App struct {
 	tooltipHeightAOBResolver game.TooltipAOBResolver
 
 	// Overlay window and draw state
-	overlayUpdatePending atomic.Bool
+	overlayUpdatePending  atomic.Bool
 	overlayPaintLogged    bool
 	lastTooltipDebugLog   time.Time
 	currentPriceText      string
@@ -83,12 +83,13 @@ type App struct {
 	currentPriceTextMutex sync.RWMutex
 
 	// Inventory integration
-	inventoryMu             sync.Mutex
-	inventoryResolver       *playerdata.Resolver
-	lastSnapshot            *playerdata.InventorySnapshot
-	inventoryDashboardState inventory.DashboardState
-	inventoryPriceQueue     *inventory.RefreshQueue
-	priceCacheRefreshing    atomic.Bool
+	inventoryMu               sync.Mutex
+	inventoryDashboardBuildMu sync.Mutex
+	inventoryResolver         *playerdata.Resolver
+	lastSnapshot              *playerdata.InventorySnapshot
+	inventoryDashboardState   inventory.DashboardState
+	inventoryPriceQueue       *inventory.RefreshQueue
+	priceCacheRefreshing      atomic.Bool
 }
 
 var activeApp = &App{

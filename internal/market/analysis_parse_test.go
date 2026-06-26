@@ -144,6 +144,56 @@ func TestSSRMarketDataUsesSelectedCurrencyFormat(t *testing.T) {
 	}
 }
 
+func TestUSDFallbackNormalizesTargetCurrencyFormat(t *testing.T) {
+	now := time.Unix(1700000000, 0)
+	eur, ok := marketScopeFor("EUR", "DE")
+	if !ok {
+		t.Fatal("expected EUR/DE scope to exist")
+	}
+	local := MarketData{
+		Analysis: MarketAnalysis{
+			MarketHashName: "Example",
+			PricePrefix:    "$",
+			PriceSuffix:    eur.Currency.PriceSuffix,
+			UpdatedAt:      now,
+		},
+	}
+	usd := MarketData{
+		Analysis: MarketAnalysis{
+			MarketHashName:     "Example",
+			PricePrefix:        "$",
+			UpdatedAt:          now,
+			HighestBuyPrice:    2,
+			LowestSellPrice:    3,
+			SuggestedPrice:     2.99,
+			HasHighestBuy:      true,
+			HasLowestSell:      true,
+			HasSuggested:       true,
+			HasOrderBook:       true,
+			HighestBuyQuantity: 4,
+			LowestSellQuantity: 5,
+		},
+		OrderBook: MarketOrderBook{
+			HighestBuyPrice: 2,
+			LowestSellPrice: 3,
+			PricePrefix:     "$",
+		},
+		OrderCachedAt: now,
+	}
+
+	merged := mergeMarketDataWithUSDFallback(local, usd, eur)
+
+	if merged.Analysis.PricePrefix != eur.Currency.PricePrefix || merged.Analysis.PriceSuffix != eur.Currency.PriceSuffix {
+		t.Fatalf("analysis format = %q/%q, want %q/%q", merged.Analysis.PricePrefix, merged.Analysis.PriceSuffix, eur.Currency.PricePrefix, eur.Currency.PriceSuffix)
+	}
+	if merged.OrderBook.PricePrefix != eur.Currency.PricePrefix || merged.OrderBook.PriceSuffix != eur.Currency.PriceSuffix {
+		t.Fatalf("order book format = %q/%q, want %q/%q", merged.OrderBook.PricePrefix, merged.OrderBook.PriceSuffix, eur.Currency.PricePrefix, eur.Currency.PriceSuffix)
+	}
+	if merged.Analysis.PricePrefix == "$" && merged.Analysis.PriceSuffix != "" {
+		t.Fatalf("merged format kept mixed currency symbols: %q/%q", merged.Analysis.PricePrefix, merged.Analysis.PriceSuffix)
+	}
+}
+
 func TestSaleHistoryAnalysis(t *testing.T) {
 	now := time.Unix(1700000000, 0)
 	body := []byte(fmt.Sprintf(`{
@@ -279,4 +329,3 @@ func TestParseIconURL(t *testing.T) {
 		})
 	}
 }
-
