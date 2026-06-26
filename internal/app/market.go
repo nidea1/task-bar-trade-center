@@ -50,10 +50,10 @@ func fetchPriceAndUpdateWithScope(config catalog.ItemConfig, useCache bool, scop
 		return
 	}
 
-	PriceCacheMu.Lock()
-	PriceCache[cacheKey] = data
+	activeApp.priceCacheMu.Lock()
+	activeApp.priceCache[cacheKey] = data
 	writePriceCacheFileLocked()
-	PriceCacheMu.Unlock()
+	activeApp.priceCacheMu.Unlock()
 
 	source := "steam"
 	if !useCache {
@@ -68,9 +68,9 @@ func fetchMarketData(config catalog.ItemConfig, marketHashName string, now time.
 }
 
 func marketCacheEntry(scope market.MarketScope, marketHashName string) (market.MarketData, bool) {
-	PriceCacheMu.RLock()
-	defer PriceCacheMu.RUnlock()
-	data, exists := PriceCache[market.CacheKey(scope, marketHashName)]
+	activeApp.priceCacheMu.RLock()
+	defer activeApp.priceCacheMu.RUnlock()
+	data, exists := activeApp.priceCache[market.CacheKey(scope, marketHashName)]
 	return data, exists
 }
 
@@ -103,7 +103,7 @@ func logMarketPrice(config catalog.ItemConfig, scope market.MarketScope, marketH
 }
 
 func updatePriceOverlay(itemID int, scope market.MarketScope, analysis market.MarketAnalysis) {
-	if ActiveItemID.Load() != int32(itemID) || market.CurrentScope() != scope {
+	if activeApp.activeItemID.Load() != int32(itemID) || market.CurrentScope() != scope {
 		return
 	}
 	setCurrentMarketAnalysis(analysis)
@@ -111,12 +111,12 @@ func updatePriceOverlay(itemID int, scope market.MarketScope, analysis market.Ma
 }
 
 func refreshActiveMarketPrice() {
-	if !ShowOverlay.Load() {
+	if !activeApp.showOverlay.Load() {
 		return
 	}
 
-	itemID := int(ActiveItemID.Load())
-	config, exists := ItemMap[itemID]
+	itemID := int(activeApp.activeItemID.Load())
+	config, exists := activeApp.itemMap[itemID]
 	if !exists {
 		return
 	}
@@ -127,25 +127,25 @@ func refreshActiveMarketPrice() {
 }
 
 func clearPriceCache() int {
-	PriceCacheMu.Lock()
-	defer PriceCacheMu.Unlock()
+	activeApp.priceCacheMu.Lock()
+	defer activeApp.priceCacheMu.Unlock()
 
-	count := len(PriceCache)
-	for key := range PriceCache {
-		delete(PriceCache, key)
+	count := len(activeApp.priceCache)
+	for key := range activeApp.priceCache {
+		delete(activeApp.priceCache, key)
 	}
 	writePriceCacheFileLocked()
 	return count
 }
 
 func priceCacheSize() int {
-	PriceCacheMu.RLock()
-	defer PriceCacheMu.RUnlock()
-	return len(PriceCache)
+	activeApp.priceCacheMu.RLock()
+	defer activeApp.priceCacheMu.RUnlock()
+	return len(activeApp.priceCache)
 }
 
 func refreshCachedPricesInBackground() int {
-	if !PriceCacheRefreshing.CompareAndSwap(false, true) {
+	if !activeApp.priceCacheRefreshing.CompareAndSwap(false, true) {
 		return -1
 	}
 	requestTrayTooltipUpdate()
@@ -153,14 +153,14 @@ func refreshCachedPricesInBackground() int {
 	scope := market.CurrentScope()
 	configs := cachedPriceConfigs(scope)
 	if len(configs) == 0 {
-		PriceCacheRefreshing.Store(false)
+		activeApp.priceCacheRefreshing.Store(false)
 		requestTrayTooltipUpdate()
 		return 0
 	}
 
 	go func() {
 		defer func() {
-			PriceCacheRefreshing.Store(false)
+			activeApp.priceCacheRefreshing.Store(false)
 			requestTrayTooltipUpdate()
 		}()
 
@@ -176,18 +176,18 @@ func refreshCachedPricesInBackground() int {
 }
 
 func cachedPriceConfigs(scope market.MarketScope) []catalog.ItemConfig {
-	PriceCacheMu.RLock()
-	cachedNames := make(map[string]struct{}, len(PriceCache))
-	for cacheKey := range PriceCache {
+	activeApp.priceCacheMu.RLock()
+	cachedNames := make(map[string]struct{}, len(activeApp.priceCache))
+	for cacheKey := range activeApp.priceCache {
 		cachedScope, marketHashName, ok := market.ParseCacheKey(cacheKey)
 		if ok && cachedScope == scope {
 			cachedNames[marketHashName] = struct{}{}
 		}
 	}
-	PriceCacheMu.RUnlock()
+	activeApp.priceCacheMu.RUnlock()
 
 	configs := make([]catalog.ItemConfig, 0, len(cachedNames))
-	for _, config := range ItemMap {
+	for _, config := range activeApp.itemMap {
 		if _, exists := cachedNames[buildMarketHashName(config)]; exists {
 			configs = append(configs, config)
 		}

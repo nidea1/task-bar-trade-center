@@ -1,6 +1,8 @@
 package app
 
 import (
+	"github.com/nidea1/task-bar-trade-center/internal/win32"
+
 	"syscall"
 	"unsafe"
 
@@ -47,7 +49,7 @@ func selectDisplayLanguage(preference string) bool {
 	}
 	saveSettingsToDisk()
 	requestStatusRefresh()
-	if ShowOverlay.Load() {
+	if activeApp.showOverlay.Load() {
 		redrawOverlay()
 	}
 	return true
@@ -71,7 +73,7 @@ func mapSystemLocale(locale string) string {
 
 func readWindowsLocaleName() string {
 	var locale [85]uint16
-	if result, _, _ := procGetUserDefaultLocaleName.Call(uintptr(unsafePointer(&locale[0])), uintptr(len(locale))); result == 0 {
+	if result, _, _ := win32.ProcGetUserDefaultLocaleName.Call(uintptr(unsafePointer(&locale[0])), uintptr(len(locale))); result == 0 {
 		return "en-US"
 	}
 	return syscall.UTF16ToString(locale[:])

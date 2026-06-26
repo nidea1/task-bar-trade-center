@@ -14,25 +14,25 @@ import (
 func createAppWindow() {
 	className, _ := syscall.UTF16PtrFromString(appWindowClassName())
 	windowTitle, _ := syscall.UTF16PtrFromString(AppName)
-	hInstance, _, _ := procGetModuleHandleW.Call(0)
+	hInstance, _, _ := win32.ProcGetModuleHandleW.Call(0)
 	cxIcon := getSystemMetric(SM_CXICON)
 	cxSmIcon := getSystemMetric(SM_CXSMICON)
-	AppIconLarge = loadAppIcon(hInstance, cxIcon)
-	AppIconSmall = loadAppIcon(hInstance, cxSmIcon)
+	activeApp.appIconLarge = loadAppIcon(hInstance, cxIcon)
+	activeApp.appIconSmall = loadAppIcon(hInstance, cxSmIcon)
 
 	wcex := win32.WNDCLASSEX{
 		Style:         CS_HREDRAW | CS_VREDRAW,
 		LpfnWndProc:   syscall.NewCallback(appWndProc),
 		HInstance:     hInstance,
 		LpszClassName: className,
-		HIcon:         AppIconLarge,
-		HIconSm:       AppIconSmall,
+		HIcon:         activeApp.appIconLarge,
+		HIconSm:       activeApp.appIconSmall,
 	}
 	wcex.CbSize = uint32(unsafe.Sizeof(wcex))
 
-	procRegisterClassExW.Call(uintptr(unsafe.Pointer(&wcex)))
+	win32.ProcRegisterClassExW.Call(uintptr(unsafe.Pointer(&wcex)))
 
-	AppHWND, _, _ = procCreateWindowExW.Call(
+	activeApp.appHWND, _, _ = win32.ProcCreateWindowExW.Call(
 		0,
 		uintptr(unsafe.Pointer(className)),
 		uintptr(unsafe.Pointer(windowTitle)),
@@ -40,7 +40,7 @@ func createAppWindow() {
 		0, 0, 0, 0,
 		0, 0, hInstance, 0,
 	)
-	if AppHWND == 0 {
+	if activeApp.appHWND == 0 {
 		fmt.Println("Tray message window could not be created.")
 		return
 	}
@@ -51,14 +51,14 @@ func appWindowClassName() string {
 }
 
 func addTrayIcon() {
-	if AppHWND == 0 || TrayIconAdded {
+	if activeApp.appHWND == 0 || activeApp.trayIconAdded {
 		return
 	}
 
-	if AppIconSmall == 0 {
-		hInstance, _, _ := procGetModuleHandleW.Call(0)
+	if activeApp.appIconSmall == 0 {
+		hInstance, _, _ := win32.ProcGetModuleHandleW.Call(0)
 		cxSmIcon := getSystemMetric(SM_CXSMICON)
-		AppIconSmall = loadAppIcon(hInstance, cxSmIcon)
+		activeApp.appIconSmall = loadAppIcon(hInstance, cxSmIcon)
 	}
 	nid := newNotifyIconData()
 	nid.UFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP
@@ -70,7 +70,7 @@ func addTrayIcon() {
 	}
 
 	winapp.SetNotifyIconVersion(&nid)
-	TrayIconAdded = true
+	activeApp.trayIconAdded = true
 	updateTrayIconTooltip()
 }
 
@@ -85,21 +85,21 @@ func loadAppIcon(hInstance uintptr, size int32) uintptr {
 }
 
 func removeTrayIcon() {
-	if AppHWND == 0 || !TrayIconAdded {
+	if activeApp.appHWND == 0 || !activeApp.trayIconAdded {
 		return
 	}
 
 	nid := newNotifyIconData()
 	winapp.DeleteNotifyIcon(&nid)
-	TrayIconAdded = false
+	activeApp.trayIconAdded = false
 }
 
 func newNotifyIconData() win32.NOTIFYICONDATAW {
 	nid := win32.NOTIFYICONDATAW{
-		HWnd:             AppHWND,
+		HWnd:             activeApp.appHWND,
 		UID:              TrayIconID,
 		UCallbackMessage: WM_TRAY_ICON,
-		HIcon:            AppIconSmall,
+		HIcon:            activeApp.appIconSmall,
 	}
 	nid.CbSize = uint32(unsafe.Sizeof(nid))
 	copyUTF16(nid.SzTip[:], trayTooltipText())
@@ -107,28 +107,28 @@ func newNotifyIconData() win32.NOTIFYICONDATAW {
 }
 
 func setAppStatus(status int32) {
-	previous := AppStatus.Swap(status)
+	previous := activeApp.appStatus.Swap(status)
 	requestTrayTooltipUpdate()
 	requestStatusRefresh()
 	notifyRuntimeStateChange(previous, status)
 }
 
 func requestTrayTooltipUpdate() {
-	if AppHWND == 0 {
+	if activeApp.appHWND == 0 {
 		return
 	}
-	procPostMessageW.Call(AppHWND, WM_TRAY_TIP_UPDATE, 0, 0)
+	win32.ProcPostMessageW.Call(activeApp.appHWND, WM_TRAY_TIP_UPDATE, 0, 0)
 }
 
 func requestStatusRefresh() {
-	if AppHWND == 0 {
+	if activeApp.appHWND == 0 {
 		return
 	}
-	procPostMessageW.Call(AppHWND, WM_APP_STATUS_REFRESH, 0, 0)
+	win32.ProcPostMessageW.Call(activeApp.appHWND, WM_APP_STATUS_REFRESH, 0, 0)
 }
 
 func updateTrayIconTooltip() {
-	if AppHWND == 0 || !TrayIconAdded {
+	if activeApp.appHWND == 0 || !activeApp.trayIconAdded {
 		return
 	}
 	nid := newNotifyIconData()
@@ -137,7 +137,7 @@ func updateTrayIconTooltip() {
 }
 
 func showTrayNotification(title, message string) {
-	if AppHWND == 0 || !TrayIconAdded {
+	if activeApp.appHWND == 0 || !activeApp.trayIconAdded {
 		return
 	}
 	nid := newNotifyIconData()
@@ -149,7 +149,7 @@ func showTrayNotification(title, message string) {
 }
 
 func trayTooltipText() string {
-	if AppStatus.Load() == AppStatusReady {
+	if activeApp.appStatus.Load() == AppStatusReady {
 		return AppName
 	}
 	return AppName + " - " + appStatusText()
@@ -195,19 +195,19 @@ func appWndProc(hWnd uintptr, msg uint32, wParam uintptr, lParam uintptr) uintpt
 		handleTrayCommand(uint32(wParam & 0xffff))
 		return 0
 	case WM_CLOSE:
-		ShowOverlay.Store(false)
-		if OverlayHWND != 0 {
-			procShowWindow.Call(OverlayHWND, SW_HIDE)
+		activeApp.showOverlay.Store(false)
+		if activeApp.overlayHWND != 0 {
+			win32.ProcShowWindow.Call(activeApp.overlayHWND, SW_HIDE)
 		}
-		if GameProcessHandle != 0 {
-			procCloseHandle.Call(GameProcessHandle)
-			GameProcessHandle = 0
+		if activeApp.gameProcessHandle != 0 {
+			win32.ProcCloseHandle.Call(activeApp.gameProcessHandle)
+			activeApp.gameProcessHandle = 0
 		}
-		procDestroyWindow.Call(hWnd)
+		win32.ProcDestroyWindow.Call(hWnd)
 		return 0
 	case WM_DESTROY:
 		removeTrayIcon()
-		procPostQuitMessage.Call(0)
+		win32.ProcPostQuitMessage.Call(0)
 		return 0
 	}
 	return winDefWindowProc(hWnd, msg, wParam, lParam)
@@ -247,7 +247,7 @@ func handleTrayCommand(commandID uint32) {
 
 	switch commandID {
 	case MenuRefreshPriceCache:
-		if !GameReady.Load() {
+		if !activeApp.gameReady.Load() {
 			fmt.Printf("Cannot refresh cached prices while waiting for %s.\n", GameProcessName)
 			return
 		}
@@ -261,11 +261,11 @@ func handleTrayCommand(commandID uint32) {
 			fmt.Printf("Queued cached price refresh: %d item(s).\n", count)
 		}
 	case MenuClearPriceCache:
-		if !GameReady.Load() {
+		if !activeApp.gameReady.Load() {
 			fmt.Printf("Cannot clear cache while waiting for %s.\n", GameProcessName)
 			return
 		}
-		if PriceCacheRefreshing.Load() {
+		if activeApp.priceCacheRefreshing.Load() {
 			fmt.Println("Cannot clear cache while cached price refresh is running.")
 			return
 		}
@@ -276,15 +276,15 @@ func handleTrayCommand(commandID uint32) {
 	case MenuRefreshInventory:
 		refreshInventoryPricesFromDashboard()
 	case MenuToggleOverlayMode:
-		if OverlayMode.Load() == OverlayModeDetail {
-			OverlayMode.Store(OverlayModeCompact)
+		if activeApp.overlayMode.Load() == OverlayModeDetail {
+			activeApp.overlayMode.Store(OverlayModeCompact)
 			fmt.Println("Overlay mode switched to Compact.")
 		} else {
-			OverlayMode.Store(OverlayModeDetail)
+			activeApp.overlayMode.Store(OverlayModeDetail)
 			fmt.Println("Overlay mode switched to Detail.")
 		}
 		saveSettingsToDisk()
-		if ShowOverlay.Load() {
+		if activeApp.showOverlay.Load() {
 			redrawOverlay()
 		}
 	case MenuCheckForUpdates:
@@ -319,8 +319,8 @@ func appLanguageForMenuCommand(commandID uint32) (string, bool) {
 // requestAppShutdown posts WM_CLOSE to the app window and asks the Wails host
 // to quit. It is safe to call from any goroutine.
 func requestAppShutdown() {
-	if AppHWND != 0 {
-		procPostMessageW.Call(AppHWND, WM_CLOSE, 0, 0)
+	if activeApp.appHWND != 0 {
+		win32.ProcPostMessageW.Call(activeApp.appHWND, WM_CLOSE, 0, 0)
 	}
 	callQuit()
 }

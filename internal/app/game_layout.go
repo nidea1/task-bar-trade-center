@@ -30,7 +30,7 @@ func loadGameLayout() error {
 		return nil
 	}
 
-	layout, source, err := game.ResolveGameLayout(gameLayoutURL, GameLayoutCacheFilePath, gameLayoutHTTPClient, embeddedGameLayoutJSON, gameLayoutUserAgent)
+	layout, source, err := game.ResolveGameLayout(gameLayoutURL, activeApp.gameLayoutCacheFilePath, gameLayoutHTTPClient, embeddedGameLayoutJSON, gameLayoutUserAgent)
 	if err != nil {
 		return err
 	}
@@ -54,8 +54,8 @@ func loadLocalGameLayout() error {
 		return nil
 	}
 
-	if GameLayoutCacheFilePath != "" {
-		if raw, err := os.ReadFile(GameLayoutCacheFilePath); err == nil {
+	if activeApp.gameLayoutCacheFilePath != "" {
+		if raw, err := os.ReadFile(activeApp.gameLayoutCacheFilePath); err == nil {
 			if layout, parseErr := game.ParseGameLayout(raw); parseErr == nil {
 				layout, parseErr = game.ApplyEmbeddedAOBFallback(layout, embeddedGameLayoutJSON)
 				if parseErr == nil {
@@ -85,12 +85,12 @@ func refreshGameLayoutInBackground() {
 	}
 	startedAt := time.Now()
 	setConfigurationStatus(ConfigStatusRefreshing, "")
-	GameLayoutReadHealth.Reset()
+	activeApp.gameLayoutReadHealth.Reset()
 	defer func() { fmt.Printf("startup remote_config_finished=%s\n", time.Since(startedAt)) }()
 	raw, err := game.DownloadGameLayout(gameLayoutURL, gameLayoutHTTPClient, gameLayoutUserAgent)
 	if err != nil {
 		fmt.Printf("Game layout refresh failed: %v\n", err)
-		GameLayoutReadHealth.Reset()
+		activeApp.gameLayoutReadHealth.Reset()
 		setConfigurationStatus(ConfigStatusRefreshFailed, "")
 		return
 	}
@@ -100,17 +100,17 @@ func refreshGameLayoutInBackground() {
 	}
 	if err != nil {
 		fmt.Printf("Downloaded game layout is invalid: %v\n", err)
-		GameLayoutReadHealth.Reset()
+		activeApp.gameLayoutReadHealth.Reset()
 		setConfigurationStatus(ConfigStatusRefreshFailed, "")
 		return
 	}
-	if GameLayoutCacheFilePath != "" {
-		if err := game.WriteGameLayoutCache(GameLayoutCacheFilePath, raw); err != nil {
+	if activeApp.gameLayoutCacheFilePath != "" {
+		if err := game.WriteGameLayoutCache(activeApp.gameLayoutCacheFilePath, raw); err != nil {
 			fmt.Printf("Game layout cache could not be written: %v\n", err)
 		}
 	}
 	setActiveGameLayout(layout, game.LayoutSourceRemote)
-	GameLayoutReadHealth.Reset()
+	activeApp.gameLayoutReadHealth.Reset()
 	setConfigurationStatus(ConfigStatusCurrent, "")
 	fmt.Println("Game layout refreshed from remote.")
 }
@@ -120,7 +120,7 @@ func recordPointerReadResult(kind game.PointerReadKind, success bool) {
 }
 
 func recordPointerReadResultAt(now time.Time, kind game.PointerReadKind, success bool) {
-	becameIncompatible, shouldNotify, recovered := GameLayoutReadHealth.Record(now, kind, success)
+	becameIncompatible, shouldNotify, recovered := activeApp.gameLayoutReadHealth.Record(now, kind, success)
 	if recovered {
 		setAppStatus(AppStatusReady)
 		return
@@ -128,12 +128,12 @@ func recordPointerReadResultAt(now time.Time, kind game.PointerReadKind, success
 	if !becameIncompatible {
 		return
 	}
-	if ConfigurationStatus.Load() == ConfigStatusRefreshing {
-		GameLayoutReadHealth.Reset()
+	if activeApp.configurationStatus.Load() == ConfigStatusRefreshing {
+		activeApp.gameLayoutReadHealth.Reset()
 		return
 	}
 
-	ShowOverlay.Store(false)
+	activeApp.showOverlay.Store(false)
 	redrawOverlay()
 	setAppStatus(AppStatusGameLayoutIncompatible)
 	fmt.Println("Game memory layout could not be read continuously; overlay disabled.")
@@ -142,7 +142,7 @@ func recordPointerReadResultAt(now time.Time, kind game.PointerReadKind, success
 	}
 	showErrorMessageBox(
 		tr("dialog.layout_incompatible.title"),
-		tr("dialog.layout_incompatible.body", LogFilePath),
+		tr("dialog.layout_incompatible.body", activeApp.logFilePath),
 	)
 }
 
@@ -174,8 +174,8 @@ func updateGameLayoutConfigs() {
 		return
 	}
 
-	if !loadedFromLocal && GameLayoutCacheFilePath != "" {
-		if err := game.WriteGameLayoutCache(GameLayoutCacheFilePath, raw); err != nil {
+	if !loadedFromLocal && activeApp.gameLayoutCacheFilePath != "" {
+		if err := game.WriteGameLayoutCache(activeApp.gameLayoutCacheFilePath, raw); err != nil {
 			fmt.Printf("Game layout cache could not be written: %v\n", err)
 		}
 	}
@@ -185,21 +185,21 @@ func updateGameLayoutConfigs() {
 	} else {
 		setActiveGameLayout(layout, game.LayoutSourceRemote)
 	}
-	GameLayoutReadHealth.Reset()
-	if GameReady.Load() {
+	activeApp.gameLayoutReadHealth.Reset()
+	if activeApp.gameReady.Load() {
 		setAppStatus(AppStatusReady)
 	} else {
 		setAppStatus(AppStatusWaitingForGame)
 	}
-	if ShowOverlay.Load() {
+	if activeApp.showOverlay.Load() {
 		redrawOverlay()
 	}
 	setConfigurationStatus(ConfigStatusCurrent, "")
 }
 
 func setActiveGameLayout(layout game.GameLayout, source string) {
-	GameLayoutMu.Lock()
-	ActiveGameLayout = layout
-	GameLayoutSource = source
-	GameLayoutMu.Unlock()
+	activeApp.gameLayoutMu.Lock()
+	activeApp.activeGameLayout = layout
+	activeApp.gameLayoutSource = source
+	activeApp.gameLayoutMu.Unlock()
 }

@@ -14,8 +14,8 @@ func showTrayMenu() {
 	defer winapp.DestroyMenu(menu)
 
 	cacheSize := priceCacheSize()
-	refreshing := PriceCacheRefreshing.Load()
-	ready := GameReady.Load()
+	refreshing := activeApp.priceCacheRefreshing.Load()
+	ready := activeApp.gameReady.Load()
 	scope := market.CurrentScope()
 
 	appendTrayMenuItem(menu, MF_STRING|MF_GRAYED, 0, tr("menu.status", appStatusText()))
@@ -41,19 +41,19 @@ func showTrayMenu() {
 	appendTrayMenuItem(menu, inventoryFlags, MenuOpenInventory, tr("menu.open_inventory"))
 	appendTrayMenuItem(menu, inventoryFlags, MenuRefreshInventory, tr("menu.refresh_inventory"))
 	overlayModeText := tr("menu.compact")
-	if OverlayMode.Load() == OverlayModeCompact {
+	if activeApp.overlayMode.Load() == OverlayModeCompact {
 		overlayModeText = tr("menu.detail")
 	}
 	appendTrayMenuItem(menu, MF_STRING, MenuToggleOverlayMode, overlayModeText)
 	appendTrayMenuItem(menu, MF_STRING, MenuUpdateConfigs, tr("menu.update_configs"))
 	appendTrayMenuItem(menu, MF_STRING, MenuCheckForUpdates, tr("menu.check_updates"))
-	if AppStatus.Load() == AppStatusAttachFailed {
+	if activeApp.appStatus.Load() == AppStatusAttachFailed {
 		appendTrayMenuItem(menu, MF_STRING, MenuRestartAdministrator, tr("menu.restart_admin"))
 	}
-	if UpdateStatus.Load() == UpdateStatusAvailable {
+	if activeApp.updateStatus.Load() == UpdateStatusAvailable {
 		appendTrayMenuItem(menu, MF_STRING, MenuInstallUpdate, tr("menu.install_update"))
 	}
-	if UpdateStatus.Load() == UpdateStatusFailed {
+	if activeApp.updateStatus.Load() == UpdateStatusFailed {
 		_, releaseURL := updateActionURLs()
 		if releaseURL != "" {
 			appendTrayMenuItem(menu, MF_STRING, MenuOpenRelease, tr("menu.open_release"))
@@ -63,7 +63,7 @@ func showTrayMenu() {
 	appendTrayMenuItem(menu, MF_STRING|MF_GRAYED, 0, tr("menu.created_by", AppVersion, AppCreatorName))
 	appendTrayMenuItem(menu, MF_STRING, MenuExit, tr("menu.exit"))
 
-	winapp.TrackPopupAtCursor(menu, AppHWND, TPM_RIGHTBUTTON)
+	winapp.TrackPopupAtCursor(menu, activeApp.appHWND, TPM_RIGHTBUTTON)
 }
 
 func appendTrayMenuItem(menu uintptr, flags uint32, id uint32, text string) {

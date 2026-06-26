@@ -1,166 +1,131 @@
 package app
 
 import (
-	"github.com/nidea1/task-bar-trade-center/internal/catalog"
-	"github.com/nidea1/task-bar-trade-center/internal/market"
-
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/nidea1/task-bar-trade-center/internal/catalog"
 	"github.com/nidea1/task-bar-trade-center/internal/game"
+	"github.com/nidea1/task-bar-trade-center/internal/inventory"
+	"github.com/nidea1/task-bar-trade-center/internal/market"
+	"github.com/nidea1/task-bar-trade-center/internal/playerdata"
 	"github.com/nidea1/task-bar-trade-center/internal/win32"
 )
 
-var (
-	procOpenProcess                = win32.ProcOpenProcess
-	procReadProcessMemory          = win32.ProcReadProcessMemory
-	procEnumProcessModules         = win32.ProcEnumProcessModules
-	procGetModuleBaseNameW         = win32.ProcGetModuleBaseNameW
-	procGetModuleHandleW           = win32.ProcGetModuleHandleW
-	procCreateToolhelp32Snapshot   = win32.ProcCreateToolhelp32Snapshot
-	procProcess32FirstW            = win32.ProcProcess32FirstW
-	procProcess32NextW             = win32.ProcProcess32NextW
-	procCloseHandle                = win32.ProcCloseHandle
-	procWaitForSingleObject        = win32.ProcWaitForSingleObject
-	procGetConsoleWindow           = win32.ProcGetConsoleWindow
-	procGetConsoleProcessList      = win32.ProcGetConsoleProcessList
-	procCreateMutexW               = win32.ProcCreateMutexW
-	procGetUserDefaultLocaleName   = win32.ProcGetUserDefaultLocaleName
-	procRegisterClassExW           = win32.ProcRegisterClassExW
-	procMessageBoxW                = win32.ProcMessageBoxW
-	procCreateWindowExW            = win32.ProcCreateWindowExW
-	procShowWindow                 = win32.ProcShowWindow
-	procSetWindowPos               = win32.ProcSetWindowPos
-	procUpdateWindow               = win32.ProcUpdateWindow
-	procSetLayeredWindowAttributes = win32.ProcSetLayeredWindowAttributes
-	procGetMessageW                = win32.ProcGetMessageW
-	procTranslateMessage           = win32.ProcTranslateMessage
-	procDispatchMessageW           = win32.ProcDispatchMessageW
-	procBeginPaint                 = win32.ProcBeginPaint
-	procEndPaint                   = win32.ProcEndPaint
-	procPostMessageW               = win32.ProcPostMessageW
-	procSendMessageW               = win32.ProcSendMessageW
-	procPostQuitMessage            = win32.ProcPostQuitMessage
-	procDestroyWindow              = win32.ProcDestroyWindow
-	procDefWindowProcW             = win32.ProcDefWindowProcW
-	procGetCursorPos               = win32.ProcGetCursorPos
-	procGetDC                      = win32.ProcGetDC
-	procEnumWindows                = win32.ProcEnumWindows
-	procGetWindowThreadProcessId   = win32.ProcGetWindowThreadProcessId
-	procIsWindowVisible            = win32.ProcIsWindowVisible
-	procGetClientRect              = win32.ProcGetClientRect
-	procClientToScreen             = win32.ProcClientToScreen
-	procInvalidateRect             = win32.ProcInvalidateRect
-	procReleaseDC                  = win32.ProcReleaseDC
-	procFillRect                   = win32.ProcFillRect
-	procDrawTextW                  = win32.ProcDrawTextW
-	procGetSystemMetrics           = win32.ProcGetSystemMetrics
-	procLoadIconW                  = win32.ProcLoadIconW
-	procLoadImageW                 = win32.ProcLoadImageW
-	procCreatePopupMenu            = win32.ProcCreatePopupMenu
-	procAppendMenuW                = win32.ProcAppendMenuW
-	procTrackPopupMenu             = win32.ProcTrackPopupMenu
-	procDestroyMenu                = win32.ProcDestroyMenu
-	procSetForegroundWindow        = win32.ProcSetForegroundWindow
-	procFindWindowW                = win32.ProcFindWindowW
-	procSetWindowsHookExW          = win32.ProcSetWindowsHookExW
-	procCallNextHookEx             = win32.ProcCallNextHookEx
-	procUnhookWindowsHookEx        = win32.ProcUnhookWindowsHookEx
-	procRegisterHotKey             = win32.ProcRegisterHotKey
-	procUnregisterHotKey           = win32.ProcUnregisterHotKey
-	procShellNotifyIcon            = win32.ProcShellNotifyIcon
-	procShellExecuteW              = win32.ProcShellExecuteW
-	procCreateSolidBrush           = win32.ProcCreateSolidBrush
-	procCreatePen                  = win32.ProcCreatePen
-	procCreateFontW                = win32.ProcCreateFontW
-	procSelectObject               = win32.ProcSelectObject
-	procDeleteObject               = win32.ProcDeleteObject
-	procSetBkMode                  = win32.ProcSetBkMode
-	procSetTextColor               = win32.ProcSetTextColor
-	procMoveToEx                   = win32.ProcMoveToEx
-	procLineTo                     = win32.ProcLineTo
-	procGetPixel                   = win32.ProcGetPixel
+type App struct {
+	// Callbacks
+	callbacks Callbacks
 
-	AllItemMap   = make(map[int]catalog.ItemConfig)
-	ItemMap      = make(map[int]catalog.ItemConfig)
-	PriceCache   = make(map[string]market.MarketData)
-	PriceCacheMu sync.RWMutex
+	// Storage paths
+	appDataDir              string
+	logFilePath             string
+	priceCacheFilePath      string
+	inventoryStateFilePath  string
+	settingsFilePath        string
+	gameLayoutCacheFilePath string
+	appLogFile              *os.File
 
-	GameLayoutMu             sync.RWMutex
-	ActiveGameLayout         game.GameLayout
-	GameLayoutSource         string
-	GameLayoutReadHealth     game.PointerReadHealth
-	TooltipXAOBResolver      game.TooltipAOBResolver
-	TooltipYAOBResolver      game.TooltipAOBResolver
-	TooltipHeightAOBResolver game.TooltipAOBResolver
+	// Windows HWNDs and hooks
+	appHWND           uintptr
+	appIconLarge      uintptr
+	appIconSmall      uintptr
+	trayIconAdded     bool
+	mouseHook         uintptr
+	mouseHookCallback uintptr
+	overlayHWND       uintptr
+	overlayOriginX    int32
+	overlayOriginY    int32
+	overlayWidth      atomic.Int32
+	overlayHeight     atomic.Int32
+	showOverlay       atomic.Bool
+	overlayMode       atomic.Int32
+	lastOverlayRect   win32.RECT
+	hasLastOverlayRect bool
 
-	CurrentPriceText      = "Loading market..."
-	CurrentMarketAnalysis market.MarketAnalysis
-	CurrentOverlayHasData bool
-	CurrentItemName       = ""
-	ActiveItemID          atomic.Int32
-	OverlayHWND           uintptr
-	OverlayOriginX        int32
-	OverlayOriginY        int32
-	OverlayWidth          atomic.Int32
-	OverlayHeight         atomic.Int32
-	OverlayUpdatePending  atomic.Bool
-	OverlayPaintLogged    bool
-	ShowOverlay           atomic.Bool
-	PriceCacheRefreshing  atomic.Bool
-	GameReady             atomic.Bool
-	AppStatus             atomic.Int32
-	LastOverlayRect       win32.RECT
-	HasLastOverlayRect    bool
-	LastTooltipDebugLog   time.Time
-	GameProcessID         uint32
-	GameWindowHWND        uintptr
-	GameProcessHandle     uintptr
-	GameAssemblyBase      uintptr
-	AppHWND               uintptr
-	AppIconLarge          uintptr
-	AppIconSmall          uintptr
-	TrayIconAdded         bool
-	MouseHook             uintptr
-	MouseHookCallback     uintptr
-	OverlayMode           atomic.Int32
-	ConfigurationStatus   atomic.Int32
-	UpdateStatus          atomic.Int32
-	AppInitialized        atomic.Bool
-	CurrentPriceTextMutex sync.RWMutex
-)
+	appStatus           atomic.Int32
+	configurationStatus atomic.Int32
+	updateStatus        atomic.Int32
+	appInitialized      atomic.Bool
+
+	// Game process info
+	gameProcessID     uint32
+	gameWindowHWND    uintptr
+	gameProcessHandle uintptr
+	gameAssemblyBase  uintptr
+	gameReady         atomic.Bool
+
+	// Caches and databases
+	allItemMap   map[int]catalog.ItemConfig
+	itemMap      map[int]catalog.ItemConfig
+	priceCache   map[string]market.MarketData
+	priceCacheMu sync.RWMutex
+
+	// Game layout resolution
+	gameLayoutMu             sync.RWMutex
+	activeGameLayout         game.GameLayout
+	gameLayoutSource         string
+	gameLayoutReadHealth     game.PointerReadHealth
+	tooltipXAOBResolver      game.TooltipAOBResolver
+	tooltipYAOBResolver      game.TooltipAOBResolver
+	tooltipHeightAOBResolver game.TooltipAOBResolver
+
+	// Overlay window and draw state
+	overlayUpdatePending atomic.Bool
+	overlayPaintLogged    bool
+	lastTooltipDebugLog   time.Time
+	currentPriceText      string
+	currentMarketAnalysis market.MarketAnalysis
+	currentOverlayHasData bool
+	currentItemName       string
+	activeItemID          atomic.Int32
+	currentPriceTextMutex sync.RWMutex
+
+	// Inventory integration
+	inventoryMu             sync.Mutex
+	inventoryResolver       *playerdata.Resolver
+	inventoryDashboardState inventory.DashboardState
+	inventoryPriceQueue     *inventory.RefreshQueue
+	priceCacheRefreshing    atomic.Bool
+}
+
+var activeApp = &App{
+	allItemMap: make(map[int]catalog.ItemConfig),
+	itemMap:    make(map[int]catalog.ItemConfig),
+	priceCache: make(map[string]market.MarketData),
+}
 
 func getCurrentPriceText() string {
-	CurrentPriceTextMutex.RLock()
-	defer CurrentPriceTextMutex.RUnlock()
-	return CurrentPriceText
+	activeApp.currentPriceTextMutex.RLock()
+	defer activeApp.currentPriceTextMutex.RUnlock()
+	return activeApp.currentPriceText
 }
 
 func setCurrentPriceText(val string) {
-	CurrentPriceTextMutex.Lock()
-	defer CurrentPriceTextMutex.Unlock()
-	CurrentPriceText = val
-	CurrentOverlayHasData = false
+	activeApp.currentPriceTextMutex.Lock()
+	defer activeApp.currentPriceTextMutex.Unlock()
+	activeApp.currentPriceText = val
+	activeApp.currentOverlayHasData = false
 }
 
 func setCurrentMarketAnalysis(analysis market.MarketAnalysis) {
-	CurrentPriceTextMutex.Lock()
-	defer CurrentPriceTextMutex.Unlock()
-	CurrentMarketAnalysis = analysis
-	CurrentOverlayHasData = true
+	activeApp.currentPriceTextMutex.Lock()
+	defer activeApp.currentPriceTextMutex.Unlock()
+	activeApp.currentMarketAnalysis = analysis
+	activeApp.currentOverlayHasData = true
 }
 
 func getCurrentMarketAnalysis() (market.MarketAnalysis, bool) {
-	CurrentPriceTextMutex.RLock()
-	defer CurrentPriceTextMutex.RUnlock()
-	return CurrentMarketAnalysis, CurrentOverlayHasData
+	activeApp.currentPriceTextMutex.RLock()
+	defer activeApp.currentPriceTextMutex.RUnlock()
+	return activeApp.currentMarketAnalysis, activeApp.currentOverlayHasData
 }
 
 func getCurrentItemName() string {
-	itemID := ActiveItemID.Load()
+	itemID := activeApp.activeItemID.Load()
 	if itemID > 0 {
-		if config, exists := AllItemMap[int(itemID)]; exists {
+		if config, exists := activeApp.allItemMap[int(itemID)]; exists {
 			lang := currentDisplayLanguage()
 			if name, ok := config.Name[lang]; ok && name != "" {
 				return name
@@ -170,13 +135,13 @@ func getCurrentItemName() string {
 			}
 		}
 	}
-	CurrentPriceTextMutex.RLock()
-	defer CurrentPriceTextMutex.RUnlock()
-	return CurrentItemName
+	activeApp.currentPriceTextMutex.RLock()
+	defer activeApp.currentPriceTextMutex.RUnlock()
+	return activeApp.currentItemName
 }
 
 func setCurrentItemName(val string) {
-	CurrentPriceTextMutex.Lock()
-	defer CurrentPriceTextMutex.Unlock()
-	CurrentItemName = val
+	activeApp.currentPriceTextMutex.Lock()
+	defer activeApp.currentPriceTextMutex.Unlock()
+	activeApp.currentItemName = val
 }

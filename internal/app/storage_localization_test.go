@@ -9,16 +9,16 @@ import (
 )
 
 func TestSettingsPersistLanguage(t *testing.T) {
-	originalPath := SettingsFilePath
+	originalPath := activeApp.settingsFilePath
 	originalPreference := currentDisplayLanguagePreference()
 	originalScope := market.CurrentScope()
 	t.Cleanup(func() {
-		SettingsFilePath = originalPath
+		activeApp.settingsFilePath = originalPath
 		applyDisplayLanguagePreference(originalPreference)
 		market.SetScope(originalScope.Currency.Code, originalScope.Region.CountryCode)
 	})
 
-	SettingsFilePath = filepath.Join(t.TempDir(), "settings.json")
+	activeApp.settingsFilePath = filepath.Join(t.TempDir(), "settings.json")
 	applyDisplayLanguagePreference("tr-TR")
 	if _, ok := market.SetScope("EUR", "DE"); !ok {
 		t.Fatal("could not select EUR/DE")
@@ -26,7 +26,7 @@ func TestSettingsPersistLanguage(t *testing.T) {
 	saveSettingsToDisk()
 
 	var disk AppSettings
-	raw, err := os.ReadFile(SettingsFilePath)
+	raw, err := os.ReadFile(activeApp.settingsFilePath)
 	if err != nil {
 		t.Fatalf("read settings: %v", err)
 	}

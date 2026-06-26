@@ -7,25 +7,25 @@ import (
 import "testing"
 
 func TestMarketOverlayRectFallsBackToCursorWhenTooltipMemoryIsUnavailable(t *testing.T) {
-	originalProcessHandle := GameProcessHandle
-	originalGameAssemblyBase := GameAssemblyBase
-	originalShowOverlay := ShowOverlay.Load()
-	originalLastOverlayRect := LastOverlayRect
-	originalHasLastOverlayRect := HasLastOverlayRect
+	originalProcessHandle := activeApp.gameProcessHandle
+	originalGameAssemblyBase := activeApp.gameAssemblyBase
+	originalShowOverlay := activeApp.showOverlay.Load()
+	originalLastOverlayRect := activeApp.lastOverlayRect
+	originalHasLastOverlayRect := activeApp.hasLastOverlayRect
 	originalCursorScreenPosition := cursorScreenPosition
 	t.Cleanup(func() {
-		GameProcessHandle = originalProcessHandle
-		GameAssemblyBase = originalGameAssemblyBase
-		ShowOverlay.Store(originalShowOverlay)
-		LastOverlayRect = originalLastOverlayRect
-		HasLastOverlayRect = originalHasLastOverlayRect
+		activeApp.gameProcessHandle = originalProcessHandle
+		activeApp.gameAssemblyBase = originalGameAssemblyBase
+		activeApp.showOverlay.Store(originalShowOverlay)
+		activeApp.lastOverlayRect = originalLastOverlayRect
+		activeApp.hasLastOverlayRect = originalHasLastOverlayRect
 		cursorScreenPosition = originalCursorScreenPosition
 	})
 
-	GameProcessHandle = 0
-	GameAssemblyBase = 0
-	ShowOverlay.Store(true)
-	HasLastOverlayRect = false
+	activeApp.gameProcessHandle = 0
+	activeApp.gameAssemblyBase = 0
+	activeApp.showOverlay.Store(true)
+	activeApp.hasLastOverlayRect = false
 	cursorScreenPosition = func() (win32.POINT, bool) {
 		return win32.POINT{X: 100, Y: 100}, true
 	}

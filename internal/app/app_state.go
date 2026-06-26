@@ -1,6 +1,8 @@
 package app
 
 import (
+	"github.com/nidea1/task-bar-trade-center/internal/win32"
+
 	"fmt"
 	"sync"
 )
@@ -26,18 +28,18 @@ type trayNotification struct {
 var publishTrayNotification = showTrayNotification
 
 func setConfigurationStatus(status int32, detail string) {
-	previous := ConfigurationStatus.Swap(status)
+	previous := activeApp.configurationStatus.Swap(status)
 	if detail != "" {
 		fmt.Printf("[CONFIG:%d] %s\n", status, detail)
 	}
 	requestStatusRefresh()
-	if previous != status && TrayIconAdded && configurationNeedsAction(status) {
+	if previous != status && activeApp.trayIconAdded && configurationNeedsAction(status) {
 		queueTrayNotification(tr("notification.configuration", configurationStatusText()), true)
 	}
 }
 
 func configurationStatusText() string {
-	switch ConfigurationStatus.Load() {
+	switch activeApp.configurationStatus.Load() {
 	case ConfigStatusLocalCache:
 		return tr("config.local_cache")
 	case ConfigStatusEmbedded:
@@ -56,7 +58,7 @@ func configurationStatusText() string {
 }
 
 func setUpdateState(status int32, detail, downloadURL, releaseURL string) {
-	previous := UpdateStatus.Swap(status)
+	previous := activeApp.updateStatus.Swap(status)
 	if detail != "" {
 		fmt.Printf("[UPDATE:%d] %s\n", status, detail)
 	}
@@ -70,7 +72,7 @@ func setUpdateState(status int32, detail, downloadURL, releaseURL string) {
 	}
 	appStateDetails.Unlock()
 	requestStatusRefresh()
-	if previous != status && TrayIconAdded && updateNeedsAction(status) {
+	if previous != status && activeApp.trayIconAdded && updateNeedsAction(status) {
 		queueTrayNotification(tr("notification.update", updateStatusText()), true)
 	}
 }
@@ -79,10 +81,10 @@ func updateStatusText() string {
 	appStateDetails.RLock()
 	detail := appStateDetails.update
 	appStateDetails.RUnlock()
-	if UpdateStatus.Load() == UpdateStatusAvailable && detail != "" {
+	if activeApp.updateStatus.Load() == UpdateStatusAvailable && detail != "" {
 		return detail
 	}
-	switch UpdateStatus.Load() {
+	switch activeApp.updateStatus.Load() {
 	case UpdateStatusChecking:
 		return tr("update.checking")
 	case UpdateStatusUpToDate:
@@ -105,13 +107,13 @@ func updateActionURLs() (downloadURL string, releaseURL string) {
 }
 
 func setElevationError(errText string) {
-	if errText != "" && TrayIconAdded {
+	if errText != "" && activeApp.trayIconAdded {
 		queueTrayNotification(tr("notification.admin_restart_failed"), true)
 	}
 }
 
 func appStatusText() string {
-	switch AppStatus.Load() {
+	switch activeApp.appStatus.Load() {
 	case AppStatusStarting:
 		return tr("status.starting")
 	case AppStatusWaitingForGame:
@@ -132,7 +134,7 @@ func appStatusText() string {
 }
 
 func notifyApplicationStarted() {
-	if !TrayIconAdded {
+	if !activeApp.trayIconAdded {
 		return
 	}
 	trayNotifications.Lock()
@@ -146,7 +148,7 @@ func notifyApplicationStarted() {
 }
 
 func notifyRuntimeStateChange(previous int32, status int32) {
-	if previous == status || !TrayIconAdded {
+	if previous == status || !activeApp.trayIconAdded {
 		return
 	}
 	if runtimeNeedsAction(status) {
@@ -170,13 +172,13 @@ func queueTrayNotification(message string, actionRequired bool) {
 }
 
 func queueRawTrayNotification(message string) {
-	if AppHWND == 0 || !TrayIconAdded {
+	if activeApp.appHWND == 0 || !activeApp.trayIconAdded {
 		return
 	}
 	trayNotifications.Lock()
 	trayNotifications.pending = append(trayNotifications.pending, trayNotification{title: AppName, message: message})
 	trayNotifications.Unlock()
-	procPostMessageW.Call(AppHWND, WM_APP_TRAY_NOTIFICATION, 0, 0)
+	win32.ProcPostMessageW.Call(activeApp.appHWND, WM_APP_TRAY_NOTIFICATION, 0, 0)
 }
 
 func flushTrayNotifications() {

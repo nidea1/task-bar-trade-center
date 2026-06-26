@@ -1,6 +1,8 @@
 package app
 
 import (
+	"github.com/nidea1/task-bar-trade-center/internal/win32"
+
 	"fmt"
 	"github.com/nidea1/task-bar-trade-center/internal/market"
 	"syscall"
@@ -9,7 +11,7 @@ import (
 )
 
 func registerDashboardHotkey() {
-	if !winapp.RegisterHotkey(AppHWND, DashboardHotkeyID, MOD_CONTROL|MOD_ALT, VK_I) {
+	if !winapp.RegisterHotkey(activeApp.appHWND, DashboardHotkeyID, MOD_CONTROL|MOD_ALT, VK_I) {
 		fmt.Println("Inventory dashboard hotkey could not be registered.")
 		return
 	}
@@ -17,51 +19,51 @@ func registerDashboardHotkey() {
 }
 
 func unregisterDashboardHotkey() {
-	winapp.UnregisterHotkey(AppHWND, DashboardHotkeyID)
+	winapp.UnregisterHotkey(activeApp.appHWND, DashboardHotkeyID)
 }
 
 func installMarketClickHook() {
-	if MouseHook != 0 {
+	if activeApp.mouseHook != 0 {
 		return
 	}
 
-	MouseHookCallback = syscall.NewCallback(mouseHookProc)
-	hook, _, _ := procSetWindowsHookExW.Call(WH_MOUSE_LL, MouseHookCallback, 0, 0)
+	activeApp.mouseHookCallback = syscall.NewCallback(mouseHookProc)
+	hook, _, _ := win32.ProcSetWindowsHookExW.Call(WH_MOUSE_LL, activeApp.mouseHookCallback, 0, 0)
 	if hook == 0 {
 		fmt.Println("Middle-click market hook could not be installed.")
 		return
 	}
-	MouseHook = hook
+	activeApp.mouseHook = hook
 	fmt.Println("Middle-click market hook installed.")
 }
 
 func uninstallMarketClickHook() {
-	if MouseHook == 0 {
+	if activeApp.mouseHook == 0 {
 		return
 	}
-	procUnhookWindowsHookEx.Call(MouseHook)
-	MouseHook = 0
+	win32.ProcUnhookWindowsHookEx.Call(activeApp.mouseHook)
+	activeApp.mouseHook = 0
 }
 
 func mouseHookProc(code uintptr, wParam uintptr, lParam uintptr) uintptr {
 	if int32(code) >= 0 && uint32(wParam) == WM_MBUTTONDOWN {
 		openActiveItemMarketLink()
 	}
-	ret, _, _ := procCallNextHookEx.Call(MouseHook, code, wParam, lParam)
+	ret, _, _ := win32.ProcCallNextHookEx.Call(activeApp.mouseHook, code, wParam, lParam)
 	return ret
 }
 
 func openActiveItemMarketLink() {
-	if !ShowOverlay.Load() {
+	if !activeApp.showOverlay.Load() {
 		return
 	}
 
-	itemID := int(ActiveItemID.Load())
+	itemID := int(activeApp.activeItemID.Load())
 	if itemID == 0 {
 		return
 	}
 
-	config, exists := ItemMap[itemID]
+	config, exists := activeApp.itemMap[itemID]
 	if !exists {
 		return
 	}

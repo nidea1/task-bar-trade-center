@@ -49,7 +49,7 @@ func RefreshInventoryPrices() (inventory.RefreshStatus, error) {
 }
 
 func OpenMarketListing(itemID int) error {
-	config, exists := ItemMap[itemID]
+	config, exists := activeApp.itemMap[itemID]
 	if !exists {
 		return fmt.Errorf("market listing is not available")
 	}

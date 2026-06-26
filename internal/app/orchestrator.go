@@ -1,12 +1,19 @@
 package app
 
-import "github.com/nidea1/task-bar-trade-center/internal/inventory"
-
-type App struct{}
+import (
+	"github.com/nidea1/task-bar-trade-center/internal/catalog"
+	"github.com/nidea1/task-bar-trade-center/internal/inventory"
+	"github.com/nidea1/task-bar-trade-center/internal/market"
+)
 
 func New(callbacks Callbacks) *App {
-	SetCallbacks(callbacks)
-	return &App{}
+	activeApp = &App{
+		callbacks:  callbacks,
+		allItemMap: make(map[int]catalog.ItemConfig),
+		itemMap:    make(map[int]catalog.ItemConfig),
+		priceCache: make(map[string]market.MarketData),
+	}
+	return activeApp
 }
 
 func (app *App) Run() {

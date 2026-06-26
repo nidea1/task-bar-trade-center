@@ -25,18 +25,18 @@ func Run() {
 	runOverlayMessageLoop()
 	shutdownApplication()
 	closeAppStorage()
-	if AppHWND != 0 {
+	if activeApp.appHWND != 0 {
 		removeTrayIcon()
 	}
-	if GameProcessHandle != 0 {
-		procCloseHandle.Call(GameProcessHandle)
-		GameProcessHandle = 0
+	if activeApp.gameProcessHandle != 0 {
+		win32.ProcCloseHandle.Call(activeApp.gameProcessHandle)
+		activeApp.gameProcessHandle = 0
 	}
 }
 
 func Stop() {
-	if AppHWND != 0 {
-		procPostMessageW.Call(AppHWND, WM_CLOSE, 0, 0)
+	if activeApp.appHWND != 0 {
+		win32.ProcPostMessageW.Call(activeApp.appHWND, WM_CLOSE, 0, 0)
 	}
 }
 
@@ -45,7 +45,7 @@ func initializeApplication(startedAt time.Time) {
 	fmt.Printf("%s is starting...\n", AppName)
 	fmt.Printf("startup tray_ready=%s\n", time.Since(startedAt))
 	cleanOldVersion()
-	GameReady.Store(false)
+	activeApp.gameReady.Store(false)
 
 	if err := loadItemsJSON(); err != nil {
 		failApplicationInitialization(fmt.Errorf("items database: %w", err))
@@ -60,7 +60,7 @@ func initializeApplication(startedAt time.Time) {
 	}
 
 	fmt.Printf("startup local_ready=%s\n", time.Since(startedAt))
-	procPostMessageW.Call(AppHWND, WM_APP_LOCAL_READY, 0, 0)
+	win32.ProcPostMessageW.Call(activeApp.appHWND, WM_APP_LOCAL_READY, 0, 0)
 }
 
 func failApplicationInitialization(err error) {
@@ -71,7 +71,7 @@ func failApplicationInitialization(err error) {
 }
 
 func startMonitoringAfterLocalInitialization() {
-	if !AppInitialized.CompareAndSwap(false, true) {
+	if !activeApp.appInitialized.CompareAndSwap(false, true) {
 		return
 	}
 	if EnablePriceHUD {
@@ -104,7 +104,7 @@ func attachGameAndWatchHoveredItems() {
 		setAppStatus(AppStatusWaitingForGameAssembly)
 		gameAssemblyBase, gameStillRunning := waitForGameAssembly(pHandle)
 		if !gameStillRunning {
-			procCloseHandle.Call(pHandle)
+			win32.ProcCloseHandle.Call(pHandle)
 			if handleGameClosed() {
 				return
 			}
@@ -112,7 +112,7 @@ func attachGameAndWatchHoveredItems() {
 		}
 
 		configureGameProcess(pid, pHandle, gameAssemblyBase)
-		GameReady.Store(true)
+		activeApp.gameReady.Store(true)
 		setAppStatus(AppStatusReady)
 		go refreshInventoryDashboardState("game-attached")
 		watchHoveredItems(pHandle, gameAssemblyBase)
@@ -136,7 +136,7 @@ func waitForGameProcess() uint32 {
 }
 
 func openGameProcess(pid uint32) (uintptr, bool) {
-	pHandle, _, _ := procOpenProcess.Call(PROCESS_VM_READ|PROCESS_QUERY_INFORMATION|SYNCHRONIZE, 0, uintptr(pid))
+	pHandle, _, _ := win32.ProcOpenProcess.Call(PROCESS_VM_READ|PROCESS_QUERY_INFORMATION|SYNCHRONIZE, 0, uintptr(pid))
 	if pHandle == 0 {
 		fmt.Println("Could not attach to game memory. Please run the command prompt as administrator.")
 		return 0, false
@@ -162,13 +162,13 @@ func waitForGameAssembly(processHandle uintptr) (uintptr, bool) {
 }
 
 func configureGameProcess(pid uint32, processHandle uintptr, gameAssemblyBase uintptr) {
-	GameProcessHandle = processHandle
-	GameProcessID = pid
-	GameAssemblyBase = gameAssemblyBase
-	GameLayoutReadHealth.Reset()
-	TooltipXAOBResolver.Reset()
-	TooltipYAOBResolver.Reset()
-	TooltipHeightAOBResolver.Reset()
+	activeApp.gameProcessHandle = processHandle
+	activeApp.gameProcessID = pid
+	activeApp.gameAssemblyBase = gameAssemblyBase
+	activeApp.gameLayoutReadHealth.Reset()
+	activeApp.tooltipXAOBResolver.Reset()
+	activeApp.tooltipYAOBResolver.Reset()
+	activeApp.tooltipHeightAOBResolver.Reset()
 }
 
 func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
@@ -182,9 +182,9 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 			return
 		}
 
-		GameLayoutMu.RLock()
-		layout := ActiveGameLayout
-		GameLayoutMu.RUnlock()
+		activeApp.gameLayoutMu.RLock()
+		layout := activeApp.activeGameLayout
+		activeApp.gameLayoutMu.RUnlock()
 
 		currentItemID, readMode, rawValue, ok := aobResolver.Read(pHandle, gameAssemblyBase, layout, marketableItemExists)
 		if !ok {
@@ -193,9 +193,9 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 				fmt.Printf("Memory read failed. The AOB pattern or pointer/offset chain may be outdated.\n")
 				lastReadFailed = true
 			}
-			ActiveItemID.Store(0)
-			if EnablePriceHUD && ShowOverlay.Load() {
-				ShowOverlay.Store(false)
+			activeApp.activeItemID.Store(0)
+			if EnablePriceHUD && activeApp.showOverlay.Load() {
+				activeApp.showOverlay.Store(false)
 				redrawOverlay()
 			}
 			time.Sleep(200 * time.Millisecond)
@@ -210,9 +210,9 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 
 		if currentItemID != lastID {
 			lastID = currentItemID
-			ActiveItemID.Store(currentItemID)
+			activeApp.activeItemID.Store(currentItemID)
 			if currentItemID > 0 {
-				if config, exists := ItemMap[int(currentItemID)]; exists {
+				if config, exists := activeApp.itemMap[int(currentItemID)]; exists {
 					lang := currentDisplayLanguage()
 					name := config.Name[lang]
 					if name == "" {
@@ -222,28 +222,28 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 					fmt.Printf("Mouse is over item: %s (ID: %d)\n", getCurrentItemName(), currentItemID)
 					fmt.Printf("Item ID read mode: %s\n", readMode)
 					if EnablePriceHUD {
-						ShowOverlay.Store(true)
+						activeApp.showOverlay.Store(true)
 						setCurrentPriceText(tr("hud.loading"))
 						redrawOverlay()
 					}
 					go fetchPriceAndUpdate(config)
 				} else {
-					ActiveItemID.Store(0)
+					activeApp.activeItemID.Store(0)
 					if EnablePriceHUD {
-						ShowOverlay.Store(false)
+						activeApp.showOverlay.Store(false)
 						redrawOverlay()
 					}
 					fmt.Printf("Read item ID is not in the marketable list: %d\n", currentItemID)
 				}
 			} else {
-				ActiveItemID.Store(0)
+				activeApp.activeItemID.Store(0)
 				if EnablePriceHUD {
-					ShowOverlay.Store(false)
+					activeApp.showOverlay.Store(false)
 					redrawOverlay()
 				}
 			}
 		}
-		if EnablePriceHUD && ShowOverlay.Load() {
+		if EnablePriceHUD && activeApp.showOverlay.Load() {
 			redrawOverlay()
 		}
 		time.Sleep(200 * time.Millisecond)
@@ -261,76 +261,76 @@ func handleGameClosed() bool {
 }
 
 func askGameClosedOnUIThread() bool {
-	if AppHWND == 0 {
+	if activeApp.appHWND == 0 {
 		return showYesNoMessageBox(tr("dialog.game_closed.title"), tr("dialog.game_closed.body"))
 	}
-	result, _, _ := procSendMessageW.Call(AppHWND, WM_APP_GAME_CLOSED_PROMPT, 0, 0)
+	result, _, _ := win32.ProcSendMessageW.Call(activeApp.appHWND, WM_APP_GAME_CLOSED_PROMPT, 0, 0)
 	return result != 0
 }
 
 func resetGameProcess() {
-	GameReady.Store(false)
-	ActiveItemID.Store(0)
+	activeApp.gameReady.Store(false)
+	activeApp.activeItemID.Store(0)
 	setCurrentItemName("")
-	ShowOverlay.Store(false)
-	HasLastOverlayRect = false
+	activeApp.showOverlay.Store(false)
+	activeApp.hasLastOverlayRect = false
 	redrawOverlay()
-	if GameProcessHandle != 0 {
-		procCloseHandle.Call(GameProcessHandle)
-		GameProcessHandle = 0
+	if activeApp.gameProcessHandle != 0 {
+		win32.ProcCloseHandle.Call(activeApp.gameProcessHandle)
+		activeApp.gameProcessHandle = 0
 	}
-	GameProcessID = 0
-	GameAssemblyBase = 0
-	GameWindowHWND = 0
-	GameLayoutReadHealth.Reset()
-	TooltipXAOBResolver.Reset()
-	TooltipYAOBResolver.Reset()
-	TooltipHeightAOBResolver.Reset()
+	activeApp.gameProcessID = 0
+	activeApp.gameAssemblyBase = 0
+	activeApp.gameWindowHWND = 0
+	activeApp.gameLayoutReadHealth.Reset()
+	activeApp.tooltipXAOBResolver.Reset()
+	activeApp.tooltipYAOBResolver.Reset()
+	activeApp.tooltipHeightAOBResolver.Reset()
 	setAppStatus(AppStatusWaitingForGame)
 }
 
 func marketableItemExists(itemID int32) bool {
-	item, exists := AllItemMap[int(itemID)]
+	item, exists := activeApp.allItemMap[int(itemID)]
 	return exists && item.Marketable
 }
 
 func runOverlayMessageLoop() {
 	var msg win32.MSG
 	for {
-		ret, _, _ := procGetMessageW.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
+		ret, _, _ := win32.ProcGetMessageW.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
 		if ret == 0 || ret == ^uintptr(0) {
 			break
 		}
-		procTranslateMessage.Call(uintptr(unsafe.Pointer(&msg)))
-		procDispatchMessageW.Call(uintptr(unsafe.Pointer(&msg)))
+		win32.ProcTranslateMessage.Call(uintptr(unsafe.Pointer(&msg)))
+		win32.ProcDispatchMessageW.Call(uintptr(unsafe.Pointer(&msg)))
 	}
 }
 
 func hideConsoleWindowIfNeeded() {
-	hwnd, _, _ := procGetConsoleWindow.Call()
+	hwnd, _, _ := win32.ProcGetConsoleWindow.Call()
 	if hwnd == 0 {
 		return
 	}
 
 	var processList [2]uint32
-	count, _, _ := procGetConsoleProcessList.Call(uintptr(unsafe.Pointer(&processList[0])), uintptr(len(processList)))
+	count, _, _ := win32.ProcGetConsoleProcessList.Call(uintptr(unsafe.Pointer(&processList[0])), uintptr(len(processList)))
 	if count == 1 {
 		// Only this process is attached to the console (e.g. launched from Explorer).
 		// Hide the console window.
 		// SW_HIDE = 0
-		procShowWindow.Call(hwnd, 0)
+		win32.ProcShowWindow.Call(hwnd, 0)
 	}
 }
 
 func checkSingleInstance() (uintptr, bool) {
 	name, _ := syscall.UTF16PtrFromString("Local\\TaskBarTradeCenterUniqueMutex")
 	// CreateMutexW(nil, FALSE, name)
-	mutex, _, err := procCreateMutexW.Call(0, 0, uintptr(unsafe.Pointer(name)))
+	mutex, _, err := win32.ProcCreateMutexW.Call(0, 0, uintptr(unsafe.Pointer(name)))
 	if mutex == 0 {
 		return 0, false
 	}
 	if err != nil && err.(syscall.Errno) == syscall.ERROR_ALREADY_EXISTS {
-		procCloseHandle.Call(mutex)
+		win32.ProcCloseHandle.Call(mutex)
 		return 0, false
 	}
 	return mutex, true
@@ -339,9 +339,9 @@ func checkSingleInstance() (uintptr, bool) {
 func activateExistingInstance() bool {
 	className, _ := syscall.UTF16PtrFromString(appWindowClassName())
 	for i := 0; i < 10; i++ {
-		hwnd, _, _ := procFindWindowW.Call(uintptr(unsafe.Pointer(className)), 0)
+		hwnd, _, _ := win32.ProcFindWindowW.Call(uintptr(unsafe.Pointer(className)), 0)
 		if hwnd != 0 {
-			procPostMessageW.Call(hwnd, WM_APP_OPEN_TRAY_MENU, 0, 0)
+			win32.ProcPostMessageW.Call(hwnd, WM_APP_OPEN_TRAY_MENU, 0, 0)
 			return true
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -353,5 +353,5 @@ func showAlreadyRunningMessage() {
 	text, _ := syscall.UTF16PtrFromString(tr("dialog.already_running"))
 	caption, _ := syscall.UTF16PtrFromString("Task Bar Trade Center")
 	// MB_OK = 0x00000000 | MB_ICONWARNING = 0x00000030
-	procMessageBoxW.Call(0, uintptr(unsafe.Pointer(text)), uintptr(unsafe.Pointer(caption)), 0x00000000|0x00000030)
+	win32.ProcMessageBoxW.Call(0, uintptr(unsafe.Pointer(text)), uintptr(unsafe.Pointer(caption)), 0x00000000|0x00000030)
 }

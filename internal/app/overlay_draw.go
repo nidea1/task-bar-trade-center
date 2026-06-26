@@ -14,7 +14,7 @@ import (
 )
 
 func drawGameMarketOverlay(hdc uintptr, rect win32.RECT) {
-	if OverlayMode.Load() == OverlayModeCompact {
+	if activeApp.overlayMode.Load() == OverlayModeCompact {
 		drawCompactOverlay(hdc, rect)
 		return
 	}
@@ -26,7 +26,7 @@ func calculateRequiredHeight(data overlay.PriceView, mode int32) int32 {
 }
 
 func drawDetailOverlay(hdc uintptr, rect win32.RECT) {
-	procSetBkMode.Call(hdc, TRANSPARENT)
+	win32.ProcSetBkMode.Call(hdc, TRANSPARENT)
 
 	fillSolidRect(hdc, rect, colorRGB(3, 3, 4))
 	strokeRect(hdc, rect, colorRGB(0, 0, 0), 2)
@@ -167,7 +167,7 @@ func drawDetailOverlay(hdc uintptr, rect win32.RECT) {
 }
 
 func drawCompactOverlay(hdc uintptr, rect win32.RECT) {
-	procSetBkMode.Call(hdc, TRANSPARENT)
+	win32.ProcSetBkMode.Call(hdc, TRANSPARENT)
 
 	fillSolidRect(hdc, rect, colorRGB(3, 3, 4))
 	strokeRect(hdc, rect, colorRGB(0, 0, 0), 2)
@@ -337,8 +337,8 @@ func drawOverlayText(hdc uintptr, text string, rect win32.RECT, color uintptr, f
 		return
 	}
 	textUTF16, _ := syscall.UTF16FromString(text)
-	procSetTextColor.Call(hdc, color)
-	procDrawTextW.Call(hdc, uintptr(unsafe.Pointer(&textUTF16[0])), ^uintptr(0), uintptr(unsafe.Pointer(&rect)), format)
+	win32.ProcSetTextColor.Call(hdc, color)
+	win32.ProcDrawTextW.Call(hdc, uintptr(unsafe.Pointer(&textUTF16[0])), ^uintptr(0), uintptr(unsafe.Pointer(&rect)), format)
 }
 
 func withOverlayFont(hdc uintptr, height int32, weight uintptr, draw func()) {
@@ -348,17 +348,17 @@ func withOverlayFont(hdc uintptr, height int32, weight uintptr, draw func()) {
 		return
 	}
 
-	oldFont, _, _ := procSelectObject.Call(hdc, font)
+	oldFont, _, _ := win32.ProcSelectObject.Call(hdc, font)
 	draw()
 	if oldFont != 0 {
-		procSelectObject.Call(hdc, oldFont)
+		win32.ProcSelectObject.Call(hdc, oldFont)
 	}
-	procDeleteObject.Call(font)
+	win32.ProcDeleteObject.Call(font)
 }
 
 func createOverlayFont(height int32, weight uintptr) uintptr {
 	faceName, _ := syscall.UTF16PtrFromString("Tahoma")
-	font, _, _ := procCreateFontW.Call(
+	font, _, _ := win32.ProcCreateFontW.Call(
 		uintptr(uint32(height)),
 		0,
 		0,
@@ -381,38 +381,38 @@ func fillSolidRect(hdc uintptr, rect win32.RECT, color uintptr) {
 	if rect.Right <= rect.Left || rect.Bottom <= rect.Top {
 		return
 	}
-	brush, _, _ := procCreateSolidBrush.Call(color)
+	brush, _, _ := win32.ProcCreateSolidBrush.Call(color)
 	if brush == 0 {
 		return
 	}
-	procFillRect.Call(hdc, uintptr(unsafe.Pointer(&rect)), brush)
-	procDeleteObject.Call(brush)
+	win32.ProcFillRect.Call(hdc, uintptr(unsafe.Pointer(&rect)), brush)
+	win32.ProcDeleteObject.Call(brush)
 }
 
 func strokeRect(hdc uintptr, rect win32.RECT, color uintptr, width int32) {
 	if rect.Right <= rect.Left || rect.Bottom <= rect.Top || width <= 0 {
 		return
 	}
-	pen, _, _ := procCreatePen.Call(PS_SOLID, uintptr(uint32(width)), color)
+	pen, _, _ := win32.ProcCreatePen.Call(PS_SOLID, uintptr(uint32(width)), color)
 	if pen == 0 {
 		return
 	}
-	oldPen, _, _ := procSelectObject.Call(hdc, pen)
+	oldPen, _, _ := win32.ProcSelectObject.Call(hdc, pen)
 
 	left := uintptr(int(rect.Left))
 	top := uintptr(int(rect.Top))
 	right := uintptr(int(rect.Right - 1))
 	bottom := uintptr(int(rect.Bottom - 1))
-	procMoveToEx.Call(hdc, left, top, 0)
-	procLineTo.Call(hdc, right, top)
-	procLineTo.Call(hdc, right, bottom)
-	procLineTo.Call(hdc, left, bottom)
-	procLineTo.Call(hdc, left, top)
+	win32.ProcMoveToEx.Call(hdc, left, top, 0)
+	win32.ProcLineTo.Call(hdc, right, top)
+	win32.ProcLineTo.Call(hdc, right, bottom)
+	win32.ProcLineTo.Call(hdc, left, bottom)
+	win32.ProcLineTo.Call(hdc, left, top)
 
 	if oldPen != 0 {
-		procSelectObject.Call(hdc, oldPen)
+		win32.ProcSelectObject.Call(hdc, oldPen)
 	}
-	procDeleteObject.Call(pen)
+	win32.ProcDeleteObject.Call(pen)
 }
 
 func insetRect(rect win32.RECT, dx int32, dy int32) win32.RECT {

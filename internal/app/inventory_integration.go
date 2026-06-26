@@ -6,20 +6,12 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/nidea1/task-bar-trade-center/internal/inventory"
 	"github.com/nidea1/task-bar-trade-center/internal/playerdata"
 	filestore "github.com/nidea1/task-bar-trade-center/internal/storage"
 	"github.com/nidea1/task-bar-trade-center/internal/tbhmem"
-)
-
-var (
-	inventoryMu             sync.Mutex
-	inventoryResolver       *playerdata.Resolver
-	inventoryDashboardState inventory.DashboardState
-	inventoryPriceQueue     *inventory.RefreshQueue
 )
 
 type cacheQuoteProvider struct {
@@ -32,9 +24,9 @@ func refreshInventoryDashboardState(reason string) {
 		fmt.Printf("[INVENTORY] dashboard refresh failed (%s): %v\n", reason, err)
 		return
 	}
-	inventoryMu.Lock()
-	inventoryDashboardState = state
-	inventoryMu.Unlock()
+	activeApp.inventoryMu.Lock()
+	activeApp.inventoryDashboardState = state
+	activeApp.inventoryMu.Unlock()
 	if err := writeInventoryDashboardState(state); err != nil {
 		fmt.Printf("[INVENTORY] dashboard state write failed: %v\n", err)
 		return
@@ -50,22 +42,22 @@ func refreshInventoryDashboardState(reason string) {
 }
 
 func storeInventoryDashboardState(state inventory.DashboardState) {
-	inventoryMu.Lock()
-	inventoryDashboardState = state
-	inventoryMu.Unlock()
+	activeApp.inventoryMu.Lock()
+	activeApp.inventoryDashboardState = state
+	activeApp.inventoryMu.Unlock()
 }
 
 func currentInventoryDashboardState() inventory.DashboardState {
-	inventoryMu.Lock()
-	defer inventoryMu.Unlock()
-	return inventoryDashboardState
+	activeApp.inventoryMu.Lock()
+	defer activeApp.inventoryMu.Unlock()
+	return activeApp.inventoryDashboardState
 }
 
 func readInventoryDashboardState() (inventory.DashboardState, error) {
-	if GameProcessHandle == 0 || GameProcessID == 0 {
+	if activeApp.gameProcessHandle == 0 || activeApp.gameProcessID == 0 {
 		return inventory.DashboardState{}, fmt.Errorf("game process is not attached")
 	}
-	memory := tbhmem.FromHandle(GameProcessID, GameProcessHandle)
+	memory := tbhmem.FromHandle(activeApp.gameProcessID, activeApp.gameProcessHandle)
 	if memory == nil {
 		return inventory.DashboardState{}, fmt.Errorf("game process handle is unavailable")
 	}
@@ -88,31 +80,31 @@ func readInventoryDashboardState() (inventory.DashboardState, error) {
 }
 
 func currentInventoryResolver() *playerdata.Resolver {
-	inventoryMu.Lock()
-	defer inventoryMu.Unlock()
-	if inventoryResolver == nil {
-		inventoryResolver = playerdata.NewResolver(playerItemMetadata())
+	activeApp.inventoryMu.Lock()
+	defer activeApp.inventoryMu.Unlock()
+	if activeApp.inventoryResolver == nil {
+		activeApp.inventoryResolver = playerdata.NewResolver(playerItemMetadata())
 	}
-	return inventoryResolver
+	return activeApp.inventoryResolver
 }
 
 func playerItemMetadata() map[int]playerdata.ItemMetadata {
-	metadata := make(map[int]playerdata.ItemMetadata, len(AllItemMap))
-	for id := range AllItemMap {
-		_, marketable := ItemMap[id]
+	metadata := make(map[int]playerdata.ItemMetadata, len(activeApp.allItemMap))
+	for id := range activeApp.allItemMap {
+		_, marketable := activeApp.itemMap[id]
 		metadata[id] = playerdata.ItemMetadata{Marketable: marketable}
 	}
 	return metadata
 }
 
 func inventoryItemCatalog(scope market.MarketScope) map[int]inventory.ItemDescriptor {
-	catalog := make(map[int]inventory.ItemDescriptor, len(AllItemMap))
-	for id, config := range AllItemMap {
+	catalog := make(map[int]inventory.ItemDescriptor, len(activeApp.allItemMap))
+	for id, config := range activeApp.allItemMap {
 		name := config.Name[currentDisplayLanguage()]
 		if name == "" {
 			name = config.Name["en-US"]
 		}
-		marketableConfig, marketable := ItemMap[id]
+		marketableConfig, marketable := activeApp.itemMap[id]
 		descriptor := inventory.ItemDescriptor{Name: name, Marketable: marketable}
 		if marketable {
 			descriptor.MarketHashName = buildMarketHashName(marketableConfig)
@@ -124,7 +116,7 @@ func inventoryItemCatalog(scope market.MarketScope) map[int]inventory.ItemDescri
 }
 
 func (provider cacheQuoteProvider) Quote(itemID int) (inventory.PriceQuote, bool) {
-	config, exists := ItemMap[itemID]
+	config, exists := activeApp.itemMap[itemID]
 	if !exists {
 		return inventory.PriceQuote{}, false
 	}
@@ -146,10 +138,10 @@ func (provider cacheQuoteProvider) Quote(itemID int) (inventory.PriceQuote, bool
 }
 
 func writeInventoryDashboardState(state inventory.DashboardState) error {
-	if InventoryStateFilePath == "" {
+	if activeApp.inventoryStateFilePath == "" {
 		return nil
 	}
-	return filestore.WriteJSONAtomic(InventoryStateFilePath, state)
+	return filestore.WriteJSONAtomic(activeApp.inventoryStateFilePath, state)
 }
 
 func openInventoryDashboard() {
@@ -191,12 +183,12 @@ func missingOrStaleDashboardItemIDs(state inventory.DashboardState, maxAge time.
 }
 
 func currentInventoryPriceQueue() *inventory.RefreshQueue {
-	inventoryMu.Lock()
-	defer inventoryMu.Unlock()
-	if inventoryPriceQueue == nil {
-		inventoryPriceQueue = inventory.NewRefreshQueue(fetchInventoryMarketPrice, isSteamRateLimitError)
+	activeApp.inventoryMu.Lock()
+	defer activeApp.inventoryMu.Unlock()
+	if activeApp.inventoryPriceQueue == nil {
+		activeApp.inventoryPriceQueue = inventory.NewRefreshQueue(fetchInventoryMarketPrice, isSteamRateLimitError)
 	}
-	return inventoryPriceQueue
+	return activeApp.inventoryPriceQueue
 }
 
 func currentInventoryRefreshStatus() inventory.RefreshStatus {
@@ -208,7 +200,7 @@ func currentInventoryRefreshStatus() inventory.RefreshStatus {
 }
 
 func fetchInventoryMarketPrice(_ context.Context, itemID int) error {
-	config, exists := ItemMap[itemID]
+	config, exists := activeApp.itemMap[itemID]
 	if !exists {
 		return nil
 	}
@@ -218,10 +210,10 @@ func fetchInventoryMarketPrice(_ context.Context, itemID int) error {
 	if err != nil {
 		return err
 	}
-	PriceCacheMu.Lock()
-	PriceCache[market.CacheKey(scope, marketHashName)] = data
+	activeApp.priceCacheMu.Lock()
+	activeApp.priceCache[market.CacheKey(scope, marketHashName)] = data
 	writePriceCacheFileLocked()
-	PriceCacheMu.Unlock()
+	activeApp.priceCacheMu.Unlock()
 	refreshInventoryDashboardState("price-refreshed")
 	return nil
 }

@@ -1,6 +1,8 @@
 package app
 
 import (
+	"github.com/nidea1/task-bar-trade-center/internal/win32"
+
 	"fmt"
 	"github.com/nidea1/task-bar-trade-center/internal/game"
 	"net/http"
@@ -112,7 +114,7 @@ func installAvailableUpdate() {
 	if downloadURL == "" {
 		return
 	}
-	if UpdateStatus.Load() != UpdateStatusAvailable {
+	if activeApp.updateStatus.Load() != UpdateStatusAvailable {
 		return
 	}
 	setUpdateState(UpdateStatusDownloading, "", downloadURL, releaseURL)
@@ -188,8 +190,8 @@ func launchElevatedRestartProcess(executablePath string, parentPID uint32) error
 	operation, _ := syscall.UTF16PtrFromString("runas")
 	executable, _ := syscall.UTF16PtrFromString(executablePath)
 	arguments, _ := syscall.UTF16PtrFromString(restartAfterElevationArgument + " " + strconv.FormatUint(uint64(parentPID), 10))
-	result, _, _ := procShellExecuteW.Call(
-		AppHWND,
+	result, _, _ := win32.ProcShellExecuteW.Call(
+		activeApp.appHWND,
 		uintptr(unsafe.Pointer(operation)),
 		uintptr(unsafe.Pointer(executable)),
 		uintptr(unsafe.Pointer(arguments)),
@@ -250,7 +252,7 @@ func showYesNoMessageBox(title, message string) bool {
 	tPtr, _ := syscall.UTF16PtrFromString(title)
 	mPtr, _ := syscall.UTF16PtrFromString(message)
 	// MB_YESNO (0x4) | MB_ICONINFORMATION (0x40)
-	ret, _, _ := procMessageBoxW.Call(messageBoxOwner(), uintptr(unsafe.Pointer(mPtr)), uintptr(unsafe.Pointer(tPtr)), 0x00000004|0x00000040)
+	ret, _, _ := win32.ProcMessageBoxW.Call(messageBoxOwner(), uintptr(unsafe.Pointer(mPtr)), uintptr(unsafe.Pointer(tPtr)), 0x00000004|0x00000040)
 	return ret == 6 // IDYES is 6
 }
 
@@ -262,7 +264,7 @@ func showInfoMessageBox(title, message string) {
 	tPtr, _ := syscall.UTF16PtrFromString(title)
 	mPtr, _ := syscall.UTF16PtrFromString(message)
 	// MB_OK (0x0) | MB_ICONINFORMATION (0x40)
-	procMessageBoxW.Call(messageBoxOwner(), uintptr(unsafe.Pointer(mPtr)), uintptr(unsafe.Pointer(tPtr)), 0x00000000|0x00000040)
+	win32.ProcMessageBoxW.Call(messageBoxOwner(), uintptr(unsafe.Pointer(mPtr)), uintptr(unsafe.Pointer(tPtr)), 0x00000000|0x00000040)
 }
 
 func showErrorMessageBox(title, message string) {
@@ -273,9 +275,9 @@ func showErrorMessageBox(title, message string) {
 	tPtr, _ := syscall.UTF16PtrFromString(title)
 	mPtr, _ := syscall.UTF16PtrFromString(message)
 	// MB_OK (0x0) | MB_ICONERROR (0x10)
-	procMessageBoxW.Call(messageBoxOwner(), uintptr(unsafe.Pointer(mPtr)), uintptr(unsafe.Pointer(tPtr)), 0x00000000|0x00000010)
+	win32.ProcMessageBoxW.Call(messageBoxOwner(), uintptr(unsafe.Pointer(mPtr)), uintptr(unsafe.Pointer(tPtr)), 0x00000000|0x00000010)
 }
 
 func messageBoxOwner() uintptr {
-	return AppHWND
+	return activeApp.appHWND
 }

@@ -13,11 +13,11 @@ func loadItemsJSON() error {
 		return err
 	}
 	for _, item := range db {
-		AllItemMap[item.ID] = item
+		activeApp.allItemMap[item.ID] = item
 		if item.Marketable {
-			ItemMap[item.ID] = item
+			activeApp.itemMap[item.ID] = item
 		}
 	}
-	fmt.Printf("Database loaded: %d marketable items active.\n", len(ItemMap))
+	fmt.Printf("Database loaded: %d marketable items active.\n", len(activeApp.itemMap))
 	return nil
 }

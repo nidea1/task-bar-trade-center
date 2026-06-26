@@ -1,6 +1,8 @@
 package app
 
 import (
+	"github.com/nidea1/task-bar-trade-center/internal/win32"
+
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -57,8 +59,8 @@ func TestCheckForUpdates_UpToDate(t *testing.T) {
 
 	checkForUpdates(false)
 
-	if UpdateStatus.Load() != UpdateStatusUpToDate {
-		t.Fatalf("update status = %d, want up to date", UpdateStatus.Load())
+	if activeApp.updateStatus.Load() != UpdateStatusUpToDate {
+		t.Fatalf("update status = %d, want up to date", activeApp.updateStatus.Load())
 	}
 }
 
@@ -97,8 +99,8 @@ func TestCheckForUpdates_RecordsAvailableUpdateWithoutPrompt(t *testing.T) {
 
 	checkForUpdates(false)
 
-	if UpdateStatus.Load() != UpdateStatusAvailable {
-		t.Fatalf("update status = %d, want available", UpdateStatus.Load())
+	if activeApp.updateStatus.Load() != UpdateStatusAvailable {
+		t.Fatalf("update status = %d, want available", activeApp.updateStatus.Load())
 	}
 	downloadURL, releaseURL := updateActionURLs()
 	if downloadURL != "https://example.com/tbtc.exe" || releaseURL != mockRelease.HTMLURL {
@@ -165,18 +167,18 @@ func TestRestartUpdatedApplicationWaitsForParentExit(t *testing.T) {
 
 func TestRequestElevatedRestartReportsLaunchFailureWithoutClosing(t *testing.T) {
 	originalLaunch := launchElevatedRestart
-	originalAppHWND := AppHWND
-	originalTrayIconAdded := TrayIconAdded
+	originalAppHWND := activeApp.appHWND
+	originalTrayIconAdded := activeApp.trayIconAdded
 	originalPublisher := publishTrayNotification
 	t.Cleanup(func() {
 		launchElevatedRestart = originalLaunch
-		AppHWND = originalAppHWND
-		TrayIconAdded = originalTrayIconAdded
+		activeApp.appHWND = originalAppHWND
+		activeApp.trayIconAdded = originalTrayIconAdded
 		publishTrayNotification = originalPublisher
 		flushTrayNotifications()
 	})
-	AppHWND = 1
-	TrayIconAdded = true
+	activeApp.appHWND = 1
+	activeApp.trayIconAdded = true
 	var notification string
 	publishTrayNotification = func(title, message string) { notification = message }
 	launchElevatedRestart = func(path string, pid uint32) error {
@@ -195,10 +197,10 @@ func TestRequestElevatedRestartReportsLaunchFailureWithoutClosing(t *testing.T) 
 
 func TestHandleGameClosedPromptsForAppExit(t *testing.T) {
 	originalShowYesNoMessageBoxMock := showYesNoMessageBoxMock
-	originalStatus := AppStatus.Load()
+	originalStatus := activeApp.appStatus.Load()
 	t.Cleanup(func() {
 		showYesNoMessageBoxMock = originalShowYesNoMessageBoxMock
-		AppStatus.Store(originalStatus)
+		activeApp.appStatus.Store(originalStatus)
 	})
 
 	showYesNoMessageBoxMock = func(title, message string) bool {
@@ -214,43 +216,43 @@ func TestHandleGameClosedPromptsForAppExit(t *testing.T) {
 	if handleGameClosed() {
 		t.Fatal("handleGameClosed requested shutdown after the user chose to keep the app open")
 	}
-	if AppStatus.Load() != AppStatusWaitingForGame {
-		t.Fatalf("status = %d, want waiting for game", AppStatus.Load())
+	if activeApp.appStatus.Load() != AppStatusWaitingForGame {
+		t.Fatalf("status = %d, want waiting for game", activeApp.appStatus.Load())
 	}
 }
 
 func TestRequestAppShutdown_PostsWMCloseToAppHWND(t *testing.T) {
 	// Save and restore the original PostMessageW proc so we can intercept calls.
-	originalPostMessageW := procPostMessageW
+	originalPostMessageW := win32.ProcPostMessageW
 
 	var postedHWND uintptr
 	var postedMsg uint32
 	var callCount int
 
-	// Create a fake LazyProc-compatible callback by replacing procPostMessageW
+	// Create a fake LazyProc-compatible callback by replacing win32.ProcPostMessageW
 	// with a wrapper that records the call. We use a syscall.NewCallback-based
-	// approach but since procPostMessageW is a *LazyProc we instead instrument
-	// AppHWND and call the function, then verify the result.
+	// approach but since win32.ProcPostMessageW is a *LazyProc we instead instrument
+	// activeApp.appHWND and call the function, then verify the result.
 
-	// Set a sentinel AppHWND so we can verify it is used.
-	originalAppHWND := AppHWND
-	AppHWND = 0xDEAD_BEEF
+	// Set a sentinel activeApp.appHWND so we can verify it is used.
+	originalAppHWND := activeApp.appHWND
+	activeApp.appHWND = 0xDEAD_BEEF
 	t.Cleanup(func() {
-		AppHWND = originalAppHWND
-		procPostMessageW = originalPostMessageW
+		activeApp.appHWND = originalAppHWND
+		win32.ProcPostMessageW = originalPostMessageW
 	})
 
 	// We cannot easily mock a *LazyProc, so instead we verify the behavior by
-	// checking that requestAppShutdown does NOT call procPostQuitMessage and
+	// checking that requestAppShutdown does NOT call win32.ProcPostQuitMessage and
 	// that it targets the correct HWND. We do this by verifying the function
 	// source code contract: requestAppShutdown uses PostMessageW with WM_CLOSE.
-	// For a runtime test, we check that with AppHWND == 0 nothing panics.
-	AppHWND = 0
-	requestAppShutdown() // should be a no-op when AppHWND is 0, no panic
+	// For a runtime test, we check that with activeApp.appHWND == 0 nothing panics.
+	activeApp.appHWND = 0
+	requestAppShutdown() // should be a no-op when activeApp.appHWND is 0, no panic
 
 	// Restore sentinel and verify non-zero path doesn't panic either.
 	// The actual PostMessageW call will fail (invalid HWND) but won't panic.
-	AppHWND = 0xDEAD
+	activeApp.appHWND = 0xDEAD
 	requestAppShutdown() // calls PostMessageW with invalid HWND, no panic expected
 
 	_ = postedHWND
@@ -262,16 +264,16 @@ func TestHandleGameClosedUsesRequestAppShutdown(t *testing.T) {
 	// Verify that handleGameClosed calls requestAppShutdown (posts WM_CLOSE)
 	// instead of directly calling PostQuitMessage from a background goroutine.
 	originalShowYesNoMessageBoxMock := showYesNoMessageBoxMock
-	originalAppHWND := AppHWND
-	originalStatus := AppStatus.Load()
+	originalAppHWND := activeApp.appHWND
+	originalStatus := activeApp.appStatus.Load()
 	t.Cleanup(func() {
 		showYesNoMessageBoxMock = originalShowYesNoMessageBoxMock
-		AppHWND = originalAppHWND
-		AppStatus.Store(originalStatus)
+		activeApp.appHWND = originalAppHWND
+		activeApp.appStatus.Store(originalStatus)
 	})
 
-	// Set AppHWND to 0 so requestAppShutdown is a safe no-op
-	AppHWND = 0
+	// Set activeApp.appHWND to 0 so requestAppShutdown is a safe no-op
+	activeApp.appHWND = 0
 
 	showYesNoMessageBoxMock = func(title, message string) bool {
 		return true // User clicks "Yes" to close

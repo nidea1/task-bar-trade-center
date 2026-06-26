@@ -39,11 +39,11 @@ func TestStatusWindowCatalogEntriesAreRemoved(t *testing.T) {
 func TestSystemLocaleMappingAndExplicitLanguageSelection(t *testing.T) {
 	originalResolver := windowsLocaleName
 	originalPreference := currentDisplayLanguagePreference()
-	originalSettingsPath := SettingsFilePath
-	SettingsFilePath = ""
+	originalSettingsPath := activeApp.settingsFilePath
+	activeApp.settingsFilePath = ""
 	t.Cleanup(func() {
 		windowsLocaleName = originalResolver
-		SettingsFilePath = originalSettingsPath
+		activeApp.settingsFilePath = originalSettingsPath
 		applyDisplayLanguagePreference(originalPreference)
 	})
 
@@ -97,16 +97,16 @@ func TestSemanticOverlayIsRenderedInCurrentLanguage(t *testing.T) {
 }
 
 func TestGetCurrentItemNameLocalization(t *testing.T) {
-	originalItemMap := AllItemMap
-	AllItemMap = make(map[int]catalog.ItemConfig)
+	originalItemMap := activeApp.allItemMap
+	activeApp.allItemMap = make(map[int]catalog.ItemConfig)
 	originalPreference := currentDisplayLanguagePreference()
 	t.Cleanup(func() {
-		AllItemMap = originalItemMap
-		ActiveItemID.Store(0)
+		activeApp.allItemMap = originalItemMap
+		activeApp.activeItemID.Store(0)
 		applyDisplayLanguagePreference(originalPreference)
 	})
 
-	AllItemMap[123] = catalog.ItemConfig{
+	activeApp.allItemMap[123] = catalog.ItemConfig{
 		ID: 123,
 		Name: map[string]string{
 			"en-US": "English Name",
@@ -114,7 +114,7 @@ func TestGetCurrentItemNameLocalization(t *testing.T) {
 		},
 	}
 
-	ActiveItemID.Store(123)
+	activeApp.activeItemID.Store(123)
 
 	// Test default language (en-US)
 	applyDisplayLanguagePreference("en-US")

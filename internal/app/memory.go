@@ -10,21 +10,21 @@ import (
 )
 
 func readTooltipRectFromMemory() (win32.RECT, bool) {
-	if GameProcessHandle == 0 || GameAssemblyBase == 0 {
-		logTooltipDebug("handle/base missing: handle=0x%X gameAssembly=0x%X", GameProcessHandle, GameAssemblyBase)
+	if activeApp.gameProcessHandle == 0 || activeApp.gameAssemblyBase == 0 {
+		logTooltipDebug("handle/base missing: handle=0x%X gameAssembly=0x%X", activeApp.gameProcessHandle, activeApp.gameAssemblyBase)
 		return win32.RECT{}, false
 	}
 
-	GameLayoutMu.RLock()
-	layout := ActiveGameLayout
-	GameLayoutMu.RUnlock()
-	xBase := GameAssemblyBase + layout.TooltipXPointerBaseOffset
-	yBase := GameAssemblyBase + layout.TooltipYPointerBaseOffset
-	heightBase := GameAssemblyBase + layout.TooltipHeightPointerBaseOffset
+	activeApp.gameLayoutMu.RLock()
+	layout := activeApp.activeGameLayout
+	activeApp.gameLayoutMu.RUnlock()
+	xBase := activeApp.gameAssemblyBase + layout.TooltipXPointerBaseOffset
+	yBase := activeApp.gameAssemblyBase + layout.TooltipYPointerBaseOffset
+	heightBase := activeApp.gameAssemblyBase + layout.TooltipHeightPointerBaseOffset
 
-	xAddress, xChainOK, xTrace := TooltipXAOBResolver.Resolve("x", GameProcessHandle, GameAssemblyBase, layout.TooltipXPointerBaseAOB, layout.TooltipXPointerOffsets)
-	yAddress, yChainOK, yTrace := TooltipYAOBResolver.Resolve("y", GameProcessHandle, GameAssemblyBase, layout.TooltipYPointerBaseAOB, layout.TooltipYPointerOffsets)
-	heightAddress, heightChainOK, heightTrace := TooltipHeightAOBResolver.Resolve("height", GameProcessHandle, GameAssemblyBase, layout.TooltipHeightPointerBaseAOB, layout.TooltipHeightPointerOffsets)
+	xAddress, xChainOK, xTrace := activeApp.tooltipXAOBResolver.Resolve("x", activeApp.gameProcessHandle, activeApp.gameAssemblyBase, layout.TooltipXPointerBaseAOB, layout.TooltipXPointerOffsets)
+	yAddress, yChainOK, yTrace := activeApp.tooltipYAOBResolver.Resolve("y", activeApp.gameProcessHandle, activeApp.gameAssemblyBase, layout.TooltipYPointerBaseAOB, layout.TooltipYPointerOffsets)
+	heightAddress, heightChainOK, heightTrace := activeApp.tooltipHeightAOBResolver.Resolve("height", activeApp.gameProcessHandle, activeApp.gameAssemblyBase, layout.TooltipHeightPointerBaseAOB, layout.TooltipHeightPointerOffsets)
 	if !xChainOK || !yChainOK {
 		logTooltipDebugLines(
 			"pointer chain status:",
@@ -35,12 +35,12 @@ func readTooltipRectFromMemory() (win32.RECT, bool) {
 		return win32.RECT{}, false
 	}
 
-	x, ok := game.ReadFloat32(GameProcessHandle, xAddress)
+	x, ok := game.ReadFloat32(activeApp.gameProcessHandle, xAddress)
 	if !ok {
 		logTooltipDebug("x read failed: xAddr=0x%X", xAddress)
 		return win32.RECT{}, false
 	}
-	y, ok := game.ReadFloat32(GameProcessHandle, yAddress)
+	y, ok := game.ReadFloat32(activeApp.gameProcessHandle, yAddress)
 	if !ok {
 		logTooltipDebug("y read failed: yAddr=0x%X", yAddress)
 		return win32.RECT{}, false
@@ -49,7 +49,7 @@ func readTooltipRectFromMemory() (win32.RECT, bool) {
 	height := float32(TooltipOverlayReferenceHeight)
 	heightSource := "fallback"
 	if heightChainOK {
-		if value, ok := game.ReadFloat32(GameProcessHandle, heightAddress); ok && value >= 60 && value <= 700 {
+		if value, ok := game.ReadFloat32(activeApp.gameProcessHandle, heightAddress); ok && value >= 60 && value <= 700 {
 			height = value
 			heightSource = "memory"
 		} else {
@@ -62,7 +62,7 @@ func readTooltipRectFromMemory() (win32.RECT, bool) {
 	rawY := y
 	x = -x
 	y = -y
-	logTooltipDebug("base=0x%X xBase=0x%X yBase=0x%X heightBase=0x%X | xAddr=0x%X yAddr=0x%X heightAddr=0x%X heightSource=%s | raw x=%.2f y=%.2f normalized x=%.2f y=%.2f w=%.2f h=%.2f", GameAssemblyBase, xBase, yBase, heightBase, xAddress, yAddress, heightAddress, heightSource, rawX, rawY, x, y, width, height)
+	logTooltipDebug("base=0x%X xBase=0x%X yBase=0x%X heightBase=0x%X | xAddr=0x%X yAddr=0x%X heightAddr=0x%X heightSource=%s | raw x=%.2f y=%.2f normalized x=%.2f y=%.2f w=%.2f h=%.2f", activeApp.gameAssemblyBase, xBase, yBase, heightBase, xAddress, yAddress, heightAddress, heightSource, rawX, rawY, x, y, width, height)
 	if width < 150 || width > 650 || height < 60 || height > 700 {
 		logTooltipDebug("values rejected by size range: x=%.2f y=%.2f w=%.2f h=%.2f", x, y, width, height)
 		return win32.RECT{}, false
@@ -70,7 +70,7 @@ func readTooltipRectFromMemory() (win32.RECT, bool) {
 
 	clientOrigin, ok := gameClientScreenOrigin()
 	if !ok {
-		logTooltipDebug("game client origin not found: pid=%d hwnd=0x%X", GameProcessID, GameWindowHWND)
+		logTooltipDebug("game client origin not found: pid=%d hwnd=0x%X", activeApp.gameProcessID, activeApp.gameWindowHWND)
 		return win32.RECT{}, false
 	}
 
@@ -102,19 +102,19 @@ func readTooltipRectFromMemory() (win32.RECT, bool) {
 
 func logTooltipDebug(format string, args ...interface{}) {
 	now := time.Now()
-	if now.Sub(LastTooltipDebugLog) < time.Second {
+	if now.Sub(activeApp.lastTooltipDebugLog) < time.Second {
 		return
 	}
-	LastTooltipDebugLog = now
+	activeApp.lastTooltipDebugLog = now
 	fmt.Printf("[TOOLTIP] "+format+"\n", args...)
 }
 
 func logTooltipDebugLines(lines ...string) {
 	now := time.Now()
-	if now.Sub(LastTooltipDebugLog) < time.Second {
+	if now.Sub(activeApp.lastTooltipDebugLog) < time.Second {
 		return
 	}
-	LastTooltipDebugLog = now
+	activeApp.lastTooltipDebugLog = now
 	for _, line := range lines {
 		fmt.Printf("[TOOLTIP] %s\n", line)
 	}

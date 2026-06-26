@@ -6,33 +6,33 @@ import (
 )
 
 func TestTrayNotificationsEmitOnlyForDistinctStateTransitions(t *testing.T) {
-	originalAppHWND := AppHWND
-	originalTrayIconAdded := TrayIconAdded
+	originalAppHWND := activeApp.appHWND
+	originalTrayIconAdded := activeApp.trayIconAdded
 	originalPublisher := publishTrayNotification
 	originalPreference := currentDisplayLanguagePreference()
-	originalStatus := AppStatus.Load()
-	originalConfigStatus := ConfigurationStatus.Load()
-	originalUpdateStatus := UpdateStatus.Load()
+	originalStatus := activeApp.appStatus.Load()
+	originalConfigStatus := activeApp.configurationStatus.Load()
+	originalUpdateStatus := activeApp.updateStatus.Load()
 
 	var received []string
-	AppHWND = 1
-	TrayIconAdded = true
+	activeApp.appHWND = 1
+	activeApp.trayIconAdded = true
 	publishTrayNotification = func(_ string, message string) {
 		received = append(received, message)
 	}
 	applyDisplayLanguagePreference("tr-TR")
-	AppStatus.Store(AppStatusStarting)
-	ConfigurationStatus.Store(ConfigStatusUnknown)
-	UpdateStatus.Store(UpdateStatusUnknown)
+	activeApp.appStatus.Store(AppStatusStarting)
+	activeApp.configurationStatus.Store(ConfigStatusUnknown)
+	activeApp.updateStatus.Store(UpdateStatusUnknown)
 	clearPendingTrayNotifications()
 
 	t.Cleanup(func() {
-		AppHWND = originalAppHWND
-		TrayIconAdded = originalTrayIconAdded
+		activeApp.appHWND = originalAppHWND
+		activeApp.trayIconAdded = originalTrayIconAdded
 		publishTrayNotification = originalPublisher
-		AppStatus.Store(originalStatus)
-		ConfigurationStatus.Store(originalConfigStatus)
-		UpdateStatus.Store(originalUpdateStatus)
+		activeApp.appStatus.Store(originalStatus)
+		activeApp.configurationStatus.Store(originalConfigStatus)
+		activeApp.updateStatus.Store(originalUpdateStatus)
 		applyDisplayLanguagePreference(originalPreference)
 		clearPendingTrayNotifications()
 	})
@@ -64,22 +64,22 @@ func TestTrayNotificationsEmitOnlyForDistinctStateTransitions(t *testing.T) {
 }
 
 func TestStartupNotificationAndLanguageMenuMapping(t *testing.T) {
-	originalAppHWND := AppHWND
-	originalTrayIconAdded := TrayIconAdded
+	originalAppHWND := activeApp.appHWND
+	originalTrayIconAdded := activeApp.trayIconAdded
 	originalPublisher := publishTrayNotification
 	originalPreference := currentDisplayLanguagePreference()
 
 	var received []string
-	AppHWND = 1
-	TrayIconAdded = true
+	activeApp.appHWND = 1
+	activeApp.trayIconAdded = true
 	publishTrayNotification = func(_ string, message string) {
 		received = append(received, message)
 	}
 	applyDisplayLanguagePreference("en-US")
 	clearPendingTrayNotifications()
 	t.Cleanup(func() {
-		AppHWND = originalAppHWND
-		TrayIconAdded = originalTrayIconAdded
+		activeApp.appHWND = originalAppHWND
+		activeApp.trayIconAdded = originalTrayIconAdded
 		publishTrayNotification = originalPublisher
 		applyDisplayLanguagePreference(originalPreference)
 		clearPendingTrayNotifications()

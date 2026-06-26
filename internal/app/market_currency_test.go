@@ -217,23 +217,23 @@ func TestPriceOverviewFormattingAndCacheMigration(t *testing.T) {
 }
 
 func TestMarketSettingsPersistScope(t *testing.T) {
-	originalPath := SettingsFilePath
+	originalPath := activeApp.settingsFilePath
 	originalScope := market.CurrentScope()
-	originalOverlayMode := OverlayMode.Load()
+	originalOverlayMode := activeApp.overlayMode.Load()
 	defer func() {
-		SettingsFilePath = originalPath
+		activeApp.settingsFilePath = originalPath
 		market.SetScope(originalScope.Currency.Code, originalScope.Region.CountryCode)
-		OverlayMode.Store(originalOverlayMode)
+		activeApp.overlayMode.Store(originalOverlayMode)
 	}()
 
-	SettingsFilePath = filepath.Join(t.TempDir(), "settings.json")
-	OverlayMode.Store(OverlayModeCompact)
+	activeApp.settingsFilePath = filepath.Join(t.TempDir(), "settings.json")
+	activeApp.overlayMode.Store(OverlayModeCompact)
 	if _, ok := market.SetScope("PHP", "PH"); !ok {
 		t.Fatal("could not set PHP/PH")
 	}
 	saveSettingsToDisk()
 
-	bytes, err := os.ReadFile(SettingsFilePath)
+	bytes, err := os.ReadFile(activeApp.settingsFilePath)
 	if err != nil {
 		t.Fatalf("read settings: %v", err)
 	}
@@ -253,18 +253,18 @@ func TestMarketSettingsPersistScope(t *testing.T) {
 
 func TestPriceOverlayIgnoresStaleMarketScope(t *testing.T) {
 	originalScope := market.CurrentScope()
-	originalItemID := ActiveItemID.Load()
+	originalItemID := activeApp.activeItemID.Load()
 	originalPriceText := getCurrentPriceText()
 	defer func() {
 		market.SetScope(originalScope.Currency.Code, originalScope.Region.CountryCode)
-		ActiveItemID.Store(originalItemID)
+		activeApp.activeItemID.Store(originalItemID)
 		setCurrentPriceText(originalPriceText)
 	}()
 
 	usdUS := market.DefaultScope()
 	eurDE, _ := market.ScopeFor("EUR", "DE")
 	market.SetScope(eurDE.Currency.Code, eurDE.Region.CountryCode)
-	ActiveItemID.Store(42)
+	activeApp.activeItemID.Store(42)
 	setCurrentPriceText("current")
 
 	updatePriceOverlay(42, usdUS, market.MarketAnalysis{UpdatedAt: time.Now(), HasSuggested: true, SuggestedPrice: 1})
