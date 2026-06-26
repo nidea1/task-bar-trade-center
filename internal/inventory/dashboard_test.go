@@ -104,6 +104,58 @@ func TestBuildDashboardHeroEquippedValues(t *testing.T) {
 	}
 }
 
+func TestBuildDashboardBestItemsToSellNowUsesMarketSignals(t *testing.T) {
+	now := time.Unix(1700000000, 0)
+	snapshot := playerdata.InventorySnapshot{
+		ReadAt: now,
+		Items: []playerdata.OwnedItem{
+			{ItemID: 100, UniqueID: 1, Location: playerdata.LocationInventory, Marketable: true},
+			{ItemID: 200, UniqueID: 2, Location: playerdata.LocationInventory, Marketable: true},
+		},
+	}
+	catalog := map[int]ItemDescriptor{
+		100: {Name: "Liquid Ruby", Marketable: true},
+		200: {Name: "Expensive Relic", Marketable: true},
+	}
+	quotes := quoteMap{
+		100: {
+			Suggested:          12,
+			WeeklyAveragePrice: 10,
+			SpreadPercent:      6,
+			DailySalesVolume:   120,
+			BuyOrderCount:      80,
+			HasSuggested:       true,
+			HasWeeklyAverage:   true,
+			HasSpread:          true,
+			HasDailySales:      true,
+			HasOrderBook:       true,
+			Confidence:         "verified",
+			HasConfidence:      true,
+		},
+		200: {
+			Suggested:        200,
+			HasSuggested:     true,
+			Confidence:       "speculative",
+			HasConfidence:    true,
+			DailySalesVolume: 1,
+			HasDailySales:    true,
+		},
+	}
+
+	state := BuildDashboard(snapshot, catalog, quotes, DashboardOptions{Now: now})
+
+	if len(state.BestToSellNow) != 1 {
+		t.Fatalf("best sell items = %+v, want 1", state.BestToSellNow)
+	}
+	best := state.BestToSellNow[0]
+	if best.ItemID != 100 {
+		t.Fatalf("best item = %d, want 100", best.ItemID)
+	}
+	if best.SellScore <= 0 || len(best.SellReasons) == 0 {
+		t.Fatalf("best item missing sell score/reasons: %+v", best)
+	}
+}
+
 func TestBuildDashboardIncludesEmptyStashPages(t *testing.T) {
 	now := time.Unix(1700000000, 0)
 	snapshot := playerdata.InventorySnapshot{

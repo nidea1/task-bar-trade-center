@@ -91,6 +91,17 @@ func BuildDashboard(snapshot playerdata.InventorySnapshot, catalog map[int]ItemD
 			acc.item.HasPrice = true
 			acc.item.Suggested = quote.Suggested
 			acc.item.Instant = quote.Instant
+			acc.item.WeeklyAveragePrice = quote.WeeklyAveragePrice
+			acc.item.SpreadPercent = quote.SpreadPercent
+			acc.item.DailySalesVolume = quote.DailySalesVolume
+			acc.item.BuyOrderCount = quote.BuyOrderCount
+			acc.item.SellOrderCount = quote.SellOrderCount
+			acc.item.HasWeeklyAverage = quote.HasWeeklyAverage
+			acc.item.HasSpread = quote.HasSpread
+			acc.item.HasDailySales = quote.HasDailySales
+			acc.item.HasOrderBook = quote.HasOrderBook
+			acc.item.Confidence = quote.Confidence
+			acc.item.HasConfidence = quote.HasConfidence
 			acc.item.PricePrefix = quote.PricePrefix
 			acc.item.PriceSuffix = quote.PriceSuffix
 			acc.item.UpdatedAt = quote.UpdatedAt
@@ -121,6 +132,7 @@ func BuildDashboard(snapshot playerdata.InventorySnapshot, catalog map[int]ItemD
 	items := make([]DashboardItem, 0, len(groups))
 	for _, acc := range groups {
 		acc.item.Location = joinLocations(acc.seen)
+		acc.item.SellScore, acc.item.SellReasons = sellNowScore(acc.item)
 		items = append(items, acc.item)
 	}
 	sort.Slice(items, func(i, j int) bool {
@@ -141,6 +153,7 @@ func BuildDashboard(snapshot playerdata.InventorySnapshot, catalog map[int]ItemD
 		Totals:         totals,
 		Items:          items,
 		MostValuable:   limitItems(items, 25),
+		BestToSellNow:  bestItemsToSellNow(items, 12),
 		Duplicates:     duplicateItems(items, 25),
 		Equipped:       equippedItems(items, 25),
 		MissingPrices:  missingPriceItems(items, 25),
@@ -237,6 +250,92 @@ func missingPriceItems(items []DashboardItem, limit int) []DashboardItem {
 		return filtered[i].Count > filtered[j].Count
 	})
 	return limitItems(filtered, limit)
+}
+
+func bestItemsToSellNow(items []DashboardItem, limit int) []DashboardItem {
+	filtered := make([]DashboardItem, 0)
+	for _, item := range items {
+		if item.SellScore >= 45 {
+			filtered = append(filtered, item)
+		}
+	}
+	sort.Slice(filtered, func(i, j int) bool {
+		if filtered[i].SellScore == filtered[j].SellScore {
+			return filtered[i].TotalSuggested > filtered[j].TotalSuggested
+		}
+		return filtered[i].SellScore > filtered[j].SellScore
+	})
+	return limitItems(filtered, limit)
+}
+
+func sellNowScore(item DashboardItem) (float64, []string) {
+	if !item.HasPrice {
+		return 0, nil
+	}
+	score := 0.0
+	reasons := make([]string, 0, 5)
+
+	if item.HasDailySales && item.DailySalesVolume > 0 {
+		switch {
+		case item.DailySalesVolume >= 100:
+			score += 25
+		case item.DailySalesVolume >= 30:
+			score += 18
+		case item.DailySalesVolume >= 10:
+			score += 10
+		}
+		if item.DailySalesVolume >= 10 {
+			reasons = append(reasons, "high_daily_sales")
+		}
+	}
+
+	if item.HasSpread && item.SpreadPercent >= 0 {
+		switch {
+		case item.SpreadPercent <= 8:
+			score += 25
+		case item.SpreadPercent <= 15:
+			score += 18
+		case item.SpreadPercent <= 25:
+			score += 10
+		}
+		if item.SpreadPercent <= 25 {
+			reasons = append(reasons, "narrow_spread")
+		}
+	}
+
+	if item.HasOrderBook && item.BuyOrderCount > 0 {
+		switch {
+		case item.BuyOrderCount >= 100:
+			score += 20
+		case item.BuyOrderCount >= 30:
+			score += 14
+		case item.BuyOrderCount >= 10:
+			score += 8
+		}
+		if item.BuyOrderCount >= 10 {
+			reasons = append(reasons, "high_buy_orders")
+		}
+	}
+
+	if item.HasConfidence {
+		switch item.Confidence {
+		case "verified":
+			score += 20
+			reasons = append(reasons, "high_confidence")
+		case "estimated":
+			score += 10
+		}
+	}
+
+	if item.HasWeeklyAverage && item.WeeklyAveragePrice > 0 && item.Suggested > item.WeeklyAveragePrice {
+		score += 15
+		reasons = append(reasons, "above_weekly_average")
+	}
+
+	if len(reasons) == 0 {
+		return 0, nil
+	}
+	return score, reasons
 }
 
 func mapHeroKeyToClassID(heroKey int) int {

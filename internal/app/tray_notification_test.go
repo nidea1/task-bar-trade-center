@@ -18,7 +18,7 @@ func TestTrayNotificationsEmitOnlyForDistinctStateTransitions(t *testing.T) {
 	var receivedTitles []string
 	activeApp.appHWND = 1
 	activeApp.trayIconAdded = true
-	publishTrayNotification = func(title string, message string) {
+	publishTrayNotification = func(title string, message string, _ uintptr) {
 		receivedTitles = append(receivedTitles, title)
 		received = append(received, message)
 	}
@@ -76,7 +76,7 @@ func TestStartupNotificationAndLanguageMenuMapping(t *testing.T) {
 	var receivedTitles []string
 	activeApp.appHWND = 1
 	activeApp.trayIconAdded = true
-	publishTrayNotification = func(title string, message string) {
+	publishTrayNotification = func(title string, message string, _ uintptr) {
 		receivedTitles = append(receivedTitles, title)
 		received = append(received, message)
 	}

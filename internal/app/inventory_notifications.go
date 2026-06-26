@@ -1,11 +1,23 @@
 package app
 
 import (
+	"bytes"
+	"crypto/sha1"
+	"encoding/binary"
+	"encoding/hex"
 	"fmt"
+	"image"
+	_ "image/png"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/nidea1/task-bar-trade-center/internal/market"
 	"github.com/nidea1/task-bar-trade-center/internal/playerdata"
+	"github.com/nidea1/task-bar-trade-center/internal/winapp"
 )
 
 type marketableInventoryItem struct {
@@ -66,11 +78,14 @@ func notifyMarketableInventoryItems(items []marketableInventoryItem) {
 	}
 	if len(items) == 1 {
 		item := items[0]
-		queueRawTrayNotification(fmt.Sprintf(
-			"%s\n%s",
-			tr("notification.marketable_item_acquired"),
-			tr("notification.marketable_item_acquired_body", item.name, item.rarity, item.price),
-		))
+		title := tr("notification.item_acquired_title", item.name)
+		if title == "" || title == "notification.item_acquired_title" {
+			title = fmt.Sprintf("%s Acquired", item.name)
+		}
+		queueRawTrayNotificationWithIcon(
+			fmt.Sprintf("%s\n%s", title, tr("notification.marketable_item_acquired_body", item.name, item.rarity, item.price)),
+			inventoryNotificationItemIcon(item.itemID),
+		)
 		return
 	}
 	queueRawTrayNotification(fmt.Sprintf(
@@ -128,6 +143,129 @@ func inventoryNotificationItemPrice(itemID int) (string, bool) {
 		return market.FormatAnalysisPrice(analysis.HighestBuyPrice, true, analysis), true
 	}
 	return tr("notification.price_updating"), false
+}
+
+func inventoryNotificationItemIcon(itemID int) uintptr {
+	config, ok := activeApp.itemMap[itemID]
+	if !ok {
+		return 0
+	}
+	scope := market.CurrentScope()
+	data, exists := marketCacheEntry(scope, buildMarketHashName(config))
+	if !exists || data.Analysis.IconURL == "" {
+		return 0
+	}
+	return cachedNotificationIcon(data.Analysis.IconURL)
+}
+
+func cachedNotificationIcon(iconPath string) uintptr {
+	activeApp.inventoryMu.Lock()
+	if activeApp.notificationIconCache == nil {
+		activeApp.notificationIconCache = make(map[string]uintptr)
+	}
+	if icon := activeApp.notificationIconCache[iconPath]; icon != 0 {
+		activeApp.inventoryMu.Unlock()
+		return icon
+	}
+	activeApp.inventoryMu.Unlock()
+
+	iconFile, ok := notificationIconFile(iconPath)
+	if !ok {
+		return 0
+	}
+	icon := winapp.LoadIconFile(iconFile, getSystemMetric(SM_CXICON))
+	if icon == 0 {
+		return 0
+	}
+
+	activeApp.inventoryMu.Lock()
+	if activeApp.notificationIconCache == nil {
+		activeApp.notificationIconCache = make(map[string]uintptr)
+	}
+	activeApp.notificationIconCache[iconPath] = icon
+	activeApp.inventoryMu.Unlock()
+	return icon
+}
+
+func notificationIconFile(iconPath string) (string, bool) {
+	cacheDir := activeApp.appDataDir
+	if cacheDir == "" {
+		cacheDir = os.TempDir()
+	}
+	iconDir := filepath.Join(cacheDir, "cache", "notification-icons")
+	sum := sha1.Sum([]byte(iconPath))
+	iconFile := filepath.Join(iconDir, hex.EncodeToString(sum[:])+".ico")
+	if _, err := os.Stat(iconFile); err == nil {
+		return iconFile, true
+	}
+	if err := os.MkdirAll(iconDir, 0700); err != nil {
+		return "", false
+	}
+
+	body, ok := downloadNotificationIconPNG(iconPath)
+	if !ok {
+		return "", false
+	}
+	ico, ok := pngToICO(body)
+	if !ok {
+		return "", false
+	}
+	if err := os.WriteFile(iconFile, ico, 0600); err != nil {
+		return "", false
+	}
+	return iconFile, true
+}
+
+func downloadNotificationIconPNG(iconPath string) ([]byte, bool) {
+	client := &http.Client{Timeout: 4 * time.Second}
+	req, err := http.NewRequest(http.MethodGet, "https://community.cloudflare.steamstatic.com/economy/image/"+iconPath, nil)
+	if err != nil {
+		return nil, false
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) TaskBarTradeCenter/0.1")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, false
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil || len(body) == 0 {
+		return nil, false
+	}
+	return body, true
+}
+
+func pngToICO(pngBytes []byte) ([]byte, bool) {
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(pngBytes))
+	if err != nil || cfg.Width <= 0 || cfg.Height <= 0 {
+		return nil, false
+	}
+	width := byte(cfg.Width)
+	height := byte(cfg.Height)
+	if cfg.Width >= 256 {
+		width = 0
+	}
+	if cfg.Height >= 256 {
+		height = 0
+	}
+
+	buf := bytes.NewBuffer(make([]byte, 0, len(pngBytes)+22))
+	_ = binary.Write(buf, binary.LittleEndian, uint16(0))
+	_ = binary.Write(buf, binary.LittleEndian, uint16(1))
+	_ = binary.Write(buf, binary.LittleEndian, uint16(1))
+	buf.WriteByte(width)
+	buf.WriteByte(height)
+	buf.WriteByte(0)
+	buf.WriteByte(0)
+	_ = binary.Write(buf, binary.LittleEndian, uint16(1))
+	_ = binary.Write(buf, binary.LittleEndian, uint16(32))
+	_ = binary.Write(buf, binary.LittleEndian, uint32(len(pngBytes)))
+	_ = binary.Write(buf, binary.LittleEndian, uint32(22))
+	buf.Write(pngBytes)
+	return buf.Bytes(), true
 }
 
 func queueMarketableInventoryPriceRefresh(items []marketableInventoryItem) {

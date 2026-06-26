@@ -25,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added tray notifications for newly acquired marketable inventory items, including localized item details and price-refresh fallback text.
 - Added a Wails dashboard window icon helper that applies the app icon to the custom dashboard window class.
 - Added regression coverage for dashboard shell responses, marketable item notifications, sparse stash slot indexes, stale equipped references, and PlayerSaveData candidate selection.
+- Added a "Best to Sell Now" dashboard panel displaying recommendations based on confidence, sales volume, buy orders, spread size, and weekly averages.
+- Added a scoring algorithm for marketable items (`sellNowScore`) that rates selling conditions out of 100 with localized reasons (e.g. narrow spread, high sales volume, above average).
+- Added Steam community market icon caching and `.ico` conversion (`pngToICO`), enabling Windows balloon notifications to display item-specific icons instead of generic icons.
 
 ### Changed
 - Structured the codebase into internal packages inside `internal/` (such as `internal/app`, `internal/catalog`, `internal/game`, `internal/il2cpp`, `internal/inventory`, `internal/localization`, `internal/market`, `internal/playerdata`, `internal/win32`, `internal/winapp`, `internal/updater`, `internal/tbhmem`, `internal/overlay`).
@@ -45,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added periodic inventory dashboard monitoring while TaskBarHero is attached.
 - Improved PlayerSaveData resolution by preferring higher-gold candidates, briefly reusing fresh resolved objects, and reading sparse save-slot indexes when available.
 - Updated dashboard polling cadence and icon sizing/branding styles.
+- Modularized React frontend by refactoring `App.tsx` and extracting separate components, constants, types, and utility files into `frontend/src/components/`, `types/`, `utils/`, and `constants/`.
 
 ### Removed
 - Removed the obsolete Windows-only `tools/playerdiag` diagnostic utility.

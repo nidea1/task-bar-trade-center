@@ -100,6 +100,7 @@
   "dashboard.waiting_state": "等待库存状态...",
   "dashboard.updated_relative": "更新于 %s",
   "dashboard.updating_pricing_data": "正在更新价格数据：已完成 %d，剩余 %d",
+  "dashboard.estimated_remaining": "预计剩余时间：%s",
   "dashboard.connection_error": "连接错误",
   "dashboard.api_notice": "API 通知",
   "hero.knight": "骑士",

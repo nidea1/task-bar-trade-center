@@ -63,6 +63,9 @@ func mergeMarketDataWithUSDFallback(local MarketData, usd MarketData, targetScop
 	analysis := &local.Analysis
 	usdAnalysis := usd.Analysis
 	analysis.USDDataFallbackAttempted = true
+	if analysis.IconURL == "" && usdAnalysis.IconURL != "" {
+		analysis.IconURL = usdAnalysis.IconURL
+	}
 
 	currencyCode := targetScope.Currency.Code
 	rate := 1.0

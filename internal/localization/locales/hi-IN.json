@@ -100,6 +100,7 @@
   "dashboard.waiting_state": "इन्वेंटरी स्थिति की प्रतीक्षा की जा रही है...",
   "dashboard.updated_relative": "अद्यतित: %s",
   "dashboard.updating_pricing_data": "मूल्य निर्धारण डेटा अद्यतन: %d पूर्ण, %d शेष",
+  "dashboard.estimated_remaining": "अनुमानित शेष समय: %s",
   "dashboard.connection_error": "कनेक्शन त्रुटi",
   "dashboard.api_notice": "API नोटिस",
   "hero.knight": "नाइट",

@@ -25,7 +25,7 @@ func LoadIconResource(hInstance uintptr, resourceID uintptr, size int32, fallbac
 		fileIcon, _, _ := win32.ProcLoadImageW.Call(
 			0,
 			uintptr(unsafe.Pointer(pathPtr)),
-			1,      // IMAGE_ICON
+			1, // IMAGE_ICON
 			uintptr(size),
 			uintptr(size),
 			0x0010, // LR_LOADFROMFILE
@@ -37,6 +37,22 @@ func LoadIconResource(hInstance uintptr, resourceID uintptr, size int32, fallbac
 
 	fallbackIcon, _, _ := win32.ProcLoadIconW.Call(0, fallbackID)
 	return fallbackIcon, false
+}
+
+func LoadIconFile(path string, size int32) uintptr {
+	pathPtr, err := syscall.UTF16PtrFromString(path)
+	if err != nil {
+		return 0
+	}
+	icon, _, _ := win32.ProcLoadImageW.Call(
+		0,
+		uintptr(unsafe.Pointer(pathPtr)),
+		1, // IMAGE_ICON
+		uintptr(size),
+		uintptr(size),
+		0x0010, // LR_LOADFROMFILE
+	)
+	return icon
 }
 
 func AddNotifyIcon(nid *win32.NOTIFYICONDATAW) bool {

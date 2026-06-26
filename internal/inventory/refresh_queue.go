@@ -67,6 +67,8 @@ func (queue *RefreshQueue) Enqueue(ids []int) int {
 	if !queue.running && len(queue.pending) > 0 {
 		queue.running = true
 		queue.status.Refreshing = true
+		queue.status.Completed = 0
+		queue.status.LastError = ""
 		queue.lastStartedAt = now
 		go queue.run()
 	}
@@ -87,6 +89,12 @@ func (queue *RefreshQueue) Status() RefreshStatus {
 	}
 	if !queue.lastFinishedAt.IsZero() {
 		status.LastFinishedAt = queue.lastFinishedAt.Format(time.RFC3339)
+	}
+	if status.Refreshing && status.Completed > 0 && status.Queued > 0 && !queue.lastStartedAt.IsZero() {
+		remaining := estimatedRemainingDuration(time.Since(queue.lastStartedAt), status.Completed, status.Queued)
+		if remaining > 0 {
+			status.EstimatedRemainingSeconds = int((remaining + time.Second - 1) / time.Second)
+		}
 	}
 	return status
 }
@@ -170,4 +178,11 @@ func (queue *RefreshQueue) delay() time.Duration {
 	max := 1 + queue.jitter
 	factor := min + rand.Float64()*(max-min)
 	return time.Duration(float64(queue.baseDelay) * factor)
+}
+
+func estimatedRemainingDuration(elapsed time.Duration, completed int, queued int) time.Duration {
+	if elapsed <= 0 || completed <= 0 || queued <= 0 {
+		return 0
+	}
+	return time.Duration(float64(elapsed) / float64(completed) * float64(queued))
 }

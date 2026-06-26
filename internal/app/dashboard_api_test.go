@@ -65,3 +65,39 @@ func TestGetInventoryDashboardReturnsStaleCachedStateWithoutBlocking(t *testing.
 		t.Fatal("cached state translations are nil")
 	}
 }
+
+func TestMissingOrStaleDashboardItemIDsIncludesMissingIcons(t *testing.T) {
+	now := time.Now()
+	state := inventory.DashboardState{
+		Items: []inventory.DashboardItem{
+			{ItemID: 100, HasPrice: true, UpdatedAt: now.Format(time.RFC3339), IconURL: "https://example.invalid/icon.png"},
+			{ItemID: 200, HasPrice: true, UpdatedAt: now.Format(time.RFC3339)},
+			{ItemID: 300, IconURL: "https://example.invalid/icon.png"},
+		},
+	}
+
+	ids := missingOrStaleDashboardItemIDs(state, time.Hour)
+	if len(ids) != 2 || ids[0] != 200 || ids[1] != 300 {
+		t.Fatalf("refresh ids = %+v, want [200 300]", ids)
+	}
+}
+
+func TestRetainCachedIconURL(t *testing.T) {
+	data := retainCachedIconURL(
+		market.MarketData{Analysis: market.MarketAnalysis{}},
+		market.MarketData{Analysis: market.MarketAnalysis{IconURL: "cached-icon"}},
+		true,
+	)
+	if data.Analysis.IconURL != "cached-icon" {
+		t.Fatalf("icon = %q, want cached-icon", data.Analysis.IconURL)
+	}
+
+	data = retainCachedIconURL(
+		market.MarketData{Analysis: market.MarketAnalysis{IconURL: "fresh-icon"}},
+		market.MarketData{Analysis: market.MarketAnalysis{IconURL: "cached-icon"}},
+		true,
+	)
+	if data.Analysis.IconURL != "fresh-icon" {
+		t.Fatalf("icon = %q, want fresh-icon", data.Analysis.IconURL)
+	}
+}

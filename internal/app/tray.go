@@ -1,13 +1,12 @@
 package app
 
 import (
-	"github.com/nidea1/task-bar-trade-center/internal/market"
-	"github.com/nidea1/task-bar-trade-center/internal/win32"
-
 	"fmt"
 	"syscall"
 	"unsafe"
 
+	"github.com/nidea1/task-bar-trade-center/internal/market"
+	"github.com/nidea1/task-bar-trade-center/internal/win32"
 	"github.com/nidea1/task-bar-trade-center/internal/winapp"
 )
 
@@ -136,7 +135,7 @@ func updateTrayIconTooltip() {
 	winapp.ModifyNotifyIcon(&nid)
 }
 
-func showTrayNotification(title, message string) {
+func showTrayNotification(title, message string, icon uintptr) {
 	if activeApp.appHWND == 0 || !activeApp.trayIconAdded {
 		return
 	}
@@ -145,6 +144,10 @@ func showTrayNotification(title, message string) {
 	copyUTF16(nid.SzInfoTitle[:], title)
 	copyUTF16(nid.SzInfo[:], message)
 	nid.DwInfoFlags = NIIF_NONE
+	if icon != 0 {
+		nid.HBalloonIcon = icon
+		nid.DwInfoFlags = NIIF_USER | NIIF_LARGE_ICON
+	}
 	winapp.ModifyNotifyIcon(&nid)
 }
 

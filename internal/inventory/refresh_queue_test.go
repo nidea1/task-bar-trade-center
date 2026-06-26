@@ -63,6 +63,38 @@ func TestRefreshQueueReleasesPendingStorageWhenEmpty(t *testing.T) {
 	}
 }
 
+func TestRefreshQueueStatusEstimatesRemainingSeconds(t *testing.T) {
+	queue := NewRefreshQueue(func(_ context.Context, _ int) error {
+		return nil
+	}, nil)
+	queue.status = RefreshStatus{Refreshing: true, Completed: 2, Queued: 4}
+	queue.lastStartedAt = time.Now().Add(-10 * time.Second)
+
+	status := queue.Status()
+	if status.EstimatedRemainingSeconds < 19 || status.EstimatedRemainingSeconds > 22 {
+		t.Fatalf("estimated remaining seconds = %d, want about 20", status.EstimatedRemainingSeconds)
+	}
+}
+
+func TestRefreshQueueEnqueueResetsCompletedForNewRun(t *testing.T) {
+	block := make(chan struct{})
+	queue := NewRefreshQueue(func(_ context.Context, _ int) error {
+		<-block
+		return nil
+	}, nil)
+	queue.status.Completed = 8
+	queue.baseDelay = 0
+
+	queue.Enqueue([]int{1})
+	status := queue.Status()
+	close(block)
+	waitForQueue(t, queue)
+
+	if status.Completed != 0 {
+		t.Fatalf("completed at new run start = %d, want 0", status.Completed)
+	}
+}
+
 func waitForQueue(t *testing.T, queue *RefreshQueue) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)

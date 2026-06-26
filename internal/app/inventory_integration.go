@@ -191,13 +191,24 @@ func (provider cacheQuoteProvider) Quote(itemID int) (inventory.PriceQuote, bool
 	}
 	analysis := data.Analysis
 	quote := inventory.PriceQuote{
-		Suggested:    analysis.SuggestedPrice,
-		Instant:      analysis.HighestBuyPrice,
-		HasSuggested: analysis.HasSuggested,
-		HasInstant:   analysis.HasHighestBuy,
-		PricePrefix:  analysis.PricePrefix,
-		PriceSuffix:  analysis.PriceSuffix,
-		UpdatedAt:    analysis.UpdatedAt.Format(time.RFC3339),
+		Suggested:          analysis.SuggestedPrice,
+		Instant:            analysis.HighestBuyPrice,
+		WeeklyAveragePrice: analysis.WeeklyAveragePrice,
+		SpreadPercent:      analysis.SpreadPercent,
+		DailySalesVolume:   analysis.DailySalesVolume,
+		BuyOrderCount:      analysis.BuyOrderCount,
+		SellOrderCount:     analysis.SellOrderCount,
+		HasSuggested:       analysis.HasSuggested,
+		HasInstant:         analysis.HasHighestBuy,
+		HasWeeklyAverage:   analysis.HasWeeklyAverage,
+		HasSpread:          analysis.HasSpread,
+		HasDailySales:      analysis.HasDailySales,
+		HasOrderBook:       analysis.HasOrderBook,
+		Confidence:         analysis.Confidence,
+		HasConfidence:      analysis.HasConfidence,
+		PricePrefix:        analysis.PricePrefix,
+		PriceSuffix:        analysis.PriceSuffix,
+		UpdatedAt:          analysis.UpdatedAt.Format(time.RFC3339),
 	}
 	return quote, quote.HasSuggested || quote.HasInstant
 }
@@ -252,7 +263,7 @@ func missingOrStaleDashboardItemIDs(state inventory.DashboardState, maxAge time.
 	now := time.Now()
 	ids := make([]int, 0)
 	for _, item := range state.Items {
-		if !item.HasPrice || item.UpdatedAt == "" {
+		if item.IconURL == "" || !item.HasPrice || item.UpdatedAt == "" {
 			ids = append(ids, item.ItemID)
 			continue
 		}

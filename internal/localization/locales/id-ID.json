@@ -100,6 +100,7 @@
   "dashboard.waiting_state": "Menunggu status inventaris...",
   "dashboard.updated_relative": "Diperbarui %s",
   "dashboard.updating_pricing_data": "Memperbarui harga: %d selesai, %d tersisa",
+  "dashboard.estimated_remaining": "Perkiraan tersisa: %s",
   "dashboard.connection_error": "Kesalahan Koneksi",
   "dashboard.api_notice": "Pemberitahuan API",
   "hero.knight": "Ksatria",

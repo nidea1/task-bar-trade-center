@@ -118,6 +118,13 @@ func (a *App) GetCurrentMarketScope() (core.CurrentMarketScopeInfo, error) {
 	return core.CurrentMarketScopeInfo{}, nil
 }
 
+func (a *App) GetDashboardFooterInfo() (core.DashboardFooterInfo, error) {
+	if appCore := a.coreApp(); appCore != nil {
+		return appCore.GetDashboardFooterInfo(), nil
+	}
+	return core.DashboardFooterInfo{}, nil
+}
+
 func (a *App) SetDisplayLanguage(preference string) (bool, error) {
 	if appCore := a.coreApp(); appCore != nil {
 		return appCore.SetDisplayLanguage(preference), nil

@@ -100,6 +100,7 @@
   "dashboard.waiting_state": "Odotetaan repun tilaa...",
   "dashboard.updated_relative": "Päivitetty %s",
   "dashboard.updating_pricing_data": "Päivitetään hintoja: %d valmis, %d jäljellä",
+  "dashboard.estimated_remaining": "Arvio jäljellä: %s",
   "dashboard.connection_error": "Yhteysvirhe",
   "dashboard.api_notice": "API-ilmoitus",
   "hero.knight": "Ritari",

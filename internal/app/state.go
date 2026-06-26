@@ -91,6 +91,7 @@ type App struct {
 	inventoryPriceQueue       *inventory.RefreshQueue
 	marketableInventorySeen   map[uint64]struct{}
 	marketableInventorySeeded bool
+	notificationIconCache     map[string]uintptr
 	priceCacheRefreshing      atomic.Bool
 }
 

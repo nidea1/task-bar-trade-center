@@ -100,6 +100,7 @@
   "dashboard.waiting_state": "A aguardar o estado do inventário...",
   "dashboard.updated_relative": "Atualizado: %s",
   "dashboard.updating_pricing_data": "A atualizar preços: %d concluídos, %d restantes",
+  "dashboard.estimated_remaining": "Tempo restante estimado: %s",
   "dashboard.connection_error": "Erro de Ligação",
   "dashboard.api_notice": "Aviso da API",
   "hero.knight": "Cavaleiro",

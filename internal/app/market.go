@@ -49,6 +49,7 @@ func fetchPriceAndUpdateWithScope(config catalog.ItemConfig, useCache bool, scop
 		updatePriceOverlay(config.ID, scope, analysis)
 		return
 	}
+	data = retainCachedIconURL(data, existingCache, hasExistingCache)
 
 	activeApp.priceCacheMu.Lock()
 	activeApp.priceCache[cacheKey] = data
@@ -72,6 +73,13 @@ func marketCacheEntry(scope market.MarketScope, marketHashName string) (market.M
 	defer activeApp.priceCacheMu.RUnlock()
 	data, exists := activeApp.priceCache[market.CacheKey(scope, marketHashName)]
 	return data, exists
+}
+
+func retainCachedIconURL(data market.MarketData, existing market.MarketData, exists bool) market.MarketData {
+	if data.Analysis.IconURL == "" && exists && existing.Analysis.IconURL != "" {
+		data.Analysis.IconURL = existing.Analysis.IconURL
+	}
+	return data
 }
 
 func buildMarketHashName(config catalog.ItemConfig) string {

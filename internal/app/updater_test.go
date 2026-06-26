@@ -180,7 +180,7 @@ func TestRequestElevatedRestartReportsLaunchFailureWithoutClosing(t *testing.T) 
 	activeApp.appHWND = 1
 	activeApp.trayIconAdded = true
 	var notification string
-	publishTrayNotification = func(title, message string) { notification = message }
+	publishTrayNotification = func(title, message string, _ uintptr) { notification = message }
 	launchElevatedRestart = func(path string, pid uint32) error {
 		if path == "" || pid == 0 {
 			t.Fatalf("unexpected elevation launch arguments: %q, %d", path, pid)

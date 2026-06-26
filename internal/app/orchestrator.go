@@ -9,10 +9,11 @@ import (
 func New(callbacks Callbacks) *App {
 	SetCallbacks(callbacks)
 	activeApp = &App{
-		callbacks:  callbacks,
-		allItemMap: make(map[int]catalog.ItemConfig),
-		itemMap:    make(map[int]catalog.ItemConfig),
-		priceCache: make(map[string]market.MarketData),
+		callbacks:             callbacks,
+		allItemMap:            make(map[int]catalog.ItemConfig),
+		itemMap:               make(map[int]catalog.ItemConfig),
+		priceCache:            make(map[string]market.MarketData),
+		notificationIconCache: make(map[string]uintptr),
 	}
 	return activeApp
 }
@@ -55,6 +56,10 @@ func (app *App) GetCurrentLanguage() string {
 
 func (app *App) GetCurrentMarketScope() CurrentMarketScopeInfo {
 	return GetCurrentMarketScope()
+}
+
+func (app *App) GetDashboardFooterInfo() DashboardFooterInfo {
+	return GetDashboardFooterInfo()
 }
 
 func (app *App) SetDisplayLanguage(preference string) bool {

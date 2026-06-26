@@ -81,7 +81,7 @@ func TestNotifyMarketableInventoryItemsQueuesTrayNotification(t *testing.T) {
 	applyDisplayLanguagePreference("en-US")
 	var receivedTitle string
 	var receivedBody string
-	publishTrayNotification = func(title string, message string) {
+	publishTrayNotification = func(title string, message string, _ uintptr) {
 		receivedTitle = title
 		receivedBody = message
 	}
@@ -96,7 +96,7 @@ func TestNotifyMarketableInventoryItemsQueuesTrayNotification(t *testing.T) {
 	notifyMarketableInventoryItems([]marketableInventoryItem{{itemID: 200, name: "Emerald", rarity: "Rare", price: "$12.50", hasPrice: true}})
 	flushTrayNotifications()
 
-	if receivedTitle != "Marketable item acquired" {
+	if receivedTitle != "Emerald Acquired" {
 		t.Fatalf("notification title = %q", receivedTitle)
 	}
 	if !strings.Contains(receivedBody, "Emerald") {

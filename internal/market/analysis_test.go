@@ -92,6 +92,34 @@ func TestMergeMarketDataWithUSDFallback(t *testing.T) {
 	}
 }
 
+func TestMergeMarketDataWithUSDFallbackCopiesIconURL(t *testing.T) {
+	now := time.Now().UTC()
+	eurDE, _ := marketScopeFor("EUR", "DE")
+	usd := MarketData{
+		Analysis: MarketAnalysis{
+			IconURL:   "steam-icon",
+			UpdatedAt: now,
+		},
+	}
+
+	merged := mergeMarketDataWithUSDFallback(MarketData{
+		Analysis: MarketAnalysis{UpdatedAt: now},
+	}, usd, eurDE)
+	if merged.Analysis.IconURL != "steam-icon" {
+		t.Fatalf("merged icon = %q, want steam-icon", merged.Analysis.IconURL)
+	}
+
+	merged = mergeMarketDataWithUSDFallback(MarketData{
+		Analysis: MarketAnalysis{
+			IconURL:   "local-icon",
+			UpdatedAt: now,
+		},
+	}, usd, eurDE)
+	if merged.Analysis.IconURL != "local-icon" {
+		t.Fatalf("merged icon = %q, want local-icon", merged.Analysis.IconURL)
+	}
+}
+
 func TestLegacyCacheCompatibilityAndStaleFallback(t *testing.T) {
 	now := time.Now().UTC()
 	var diskCache map[string]MarketData

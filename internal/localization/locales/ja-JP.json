@@ -100,6 +100,7 @@
   "dashboard.waiting_state": "インベントリの状態を待機中...",
   "dashboard.updated_relative": "更新： %s",
   "dashboard.updating_pricing_data": "価格データを更新中： %d 完了、残り %d",
+  "dashboard.estimated_remaining": "推定残り時間：%s",
   "dashboard.connection_error": "接続エラー",
   "dashboard.api_notice": "API通知",
   "hero.knight": "ナイト",

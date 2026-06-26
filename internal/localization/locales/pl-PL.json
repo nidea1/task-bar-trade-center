@@ -100,6 +100,7 @@
   "dashboard.waiting_state": "Oczekiwanie na stan ekwipunku...",
   "dashboard.updated_relative": "Zaktualizowano %s",
   "dashboard.updating_pricing_data": "Aktualizacja cen: ukończono %d, pozostało %d",
+  "dashboard.estimated_remaining": "Szacowany pozostały czas: %s",
   "dashboard.connection_error": "Błąd Połączenia",
   "dashboard.api_notice": "Komunikat API",
   "hero.knight": "Rycerz",

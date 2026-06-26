@@ -24,6 +24,7 @@ var trayNotifications = struct {
 type trayNotification struct {
 	title   string
 	message string
+	icon    uintptr
 }
 
 var publishTrayNotification = showTrayNotification
@@ -173,12 +174,16 @@ func queueTrayNotification(message string, actionRequired bool) {
 }
 
 func queueRawTrayNotification(message string) {
+	queueRawTrayNotificationWithIcon(message, 0)
+}
+
+func queueRawTrayNotificationWithIcon(message string, icon uintptr) {
 	if activeApp.appHWND == 0 || !activeApp.trayIconAdded {
 		return
 	}
 	title, body := trayNotificationContent(message)
 	trayNotifications.Lock()
-	trayNotifications.pending = append(trayNotifications.pending, trayNotification{title: title, message: body})
+	trayNotifications.pending = append(trayNotifications.pending, trayNotification{title: title, message: body, icon: icon})
 	trayNotifications.Unlock()
 	win32.ProcPostMessageW.Call(activeApp.appHWND, WM_APP_TRAY_NOTIFICATION, 0, 0)
 }
@@ -202,7 +207,7 @@ func flushTrayNotifications() {
 	trayNotifications.pending = nil
 	trayNotifications.Unlock()
 	for _, notification := range pending {
-		publishTrayNotification(notification.title, notification.message)
+		publishTrayNotification(notification.title, notification.message, notification.icon)
 	}
 }
 

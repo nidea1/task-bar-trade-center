@@ -100,6 +100,7 @@
   "dashboard.waiting_state": "Đang chờ trạng thái hành trang...",
   "dashboard.updated_relative": "Đã cập nhật %s",
   "dashboard.updating_pricing_data": "Đang cập nhật giá: %d hoàn thành, %d còn lại",
+  "dashboard.estimated_remaining": "Ước tính còn lại: %s",
   "dashboard.connection_error": "Lỗi Kết nối",
   "dashboard.api_notice": "Thông báo API",
   "hero.knight": "Hiệp sĩ",

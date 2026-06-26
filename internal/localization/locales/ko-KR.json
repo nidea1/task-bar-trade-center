@@ -100,6 +100,7 @@
   "dashboard.waiting_state": "인벤토리 상태 대기 중...",
   "dashboard.updated_relative": "업데이트됨: %s",
   "dashboard.updating_pricing_data": "가격 데이터 업데이트 중: %d 완료, %d 남음",
+  "dashboard.estimated_remaining": "예상 남은 시간: %s",
   "dashboard.connection_error": "연결 오류",
   "dashboard.api_notice": "API 공지",
   "hero.knight": "기사",

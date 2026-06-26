@@ -90,6 +90,17 @@ type CurrentMarketScopeInfo struct {
 	CountryCode  string `json:"country_code"`
 }
 
+type DashboardFooterInfo struct {
+	AppName         string `json:"app_name"`
+	AppShortName    string `json:"app_short_name"`
+	Version         string `json:"version"`
+	CreatorName     string `json:"creator_name"`
+	UpdateStatus    int32  `json:"update_status"`
+	UpdateText      string `json:"update_text"`
+	UpdateAvailable bool   `json:"update_available"`
+	ReleaseURL      string `json:"release_url"`
+}
+
 func GetDisplayLanguages() []LanguageInfo {
 	locales := supportedAppLocales
 	list := make([]LanguageInfo, len(locales))
@@ -136,6 +147,21 @@ func GetCurrentMarketScope() CurrentMarketScopeInfo {
 	return CurrentMarketScopeInfo{
 		CurrencyCode: scope.Currency.Code,
 		CountryCode:  scope.Region.CountryCode,
+	}
+}
+
+func GetDashboardFooterInfo() DashboardFooterInfo {
+	_, releaseURL := updateActionURLs()
+	status := activeApp.updateStatus.Load()
+	return DashboardFooterInfo{
+		AppName:         AppName,
+		AppShortName:    AppShortName,
+		Version:         AppVersion,
+		CreatorName:     AppCreatorName,
+		UpdateStatus:    status,
+		UpdateText:      updateStatusText(),
+		UpdateAvailable: status == UpdateStatusAvailable,
+		ReleaseURL:      releaseURL,
 	}
 }
 
