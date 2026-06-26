@@ -3,6 +3,7 @@ package app
 const (
 	AppName         = "Task Bar Trade Center"
 	AppShortName    = "TBTC"
+	AppUserModelID  = "nidea1.TaskBarTradeCenter"
 	AppProcessName  = "tbtc"
 	AppCreatorName  = "nidea1"
 	AppVersion      = "0.8.1"
@@ -100,7 +101,10 @@ const (
 	NIF_INFO    = 0x00000010
 	NIF_SHOWTIP = 0x00000080
 
-	NIIF_INFO = 0x00000001
+	NIIF_NONE       = 0x00000000
+	NIIF_INFO       = 0x00000001
+	NIIF_USER       = 0x00000004
+	NIIF_LARGE_ICON = 0x00000020
 
 	NOTIFYICON_VERSION_4 = 4
 	IDI_APPLICATION      = 32512
@@ -144,6 +148,7 @@ const (
 	MOD_ALT     = 0x0001
 	MOD_CONTROL = 0x0002
 	VK_I        = 0x49
+	VK_F2       = 0x71
 
 	DashboardHotkeyID = 1
 )

@@ -1,8 +1,50 @@
-html {
-  background: #101318;
+@import "tailwindcss";
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: #030304;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #e1d5bf;
+  min-height: 100vh;
+  overflow: hidden; /* Prevent body scroll, container will handle scrolling */
 }
 
-body {
-  font-family: Inter, Segoe UI, Tahoma, Arial, sans-serif;
-  margin: 0;
+/* Custom drag region for frameless/windowless window */
+.drag-area {
+  --wails-draggable: drag;
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  --wails-draggable: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+/* Game-styled Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #030304;
+  border-left: 1px solid #1c1815;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3e3228;
+  border: 1px solid #5a4838;
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #5a4838;
+  border-color: #8c6e54;
+}
+
+/* Custom text selection */
+::selection {
+  background-color: rgba(227, 169, 67, 0.25);
+  color: #ffbe2d;
 }

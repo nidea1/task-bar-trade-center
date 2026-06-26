@@ -16,6 +16,8 @@ type DashboardOptions struct {
 	Now          time.Time
 }
 
+const stashSlotsPerPage = 100
+
 type groupAccumulator struct {
 	item     DashboardItem
 	seen     map[string]struct{}
@@ -28,7 +30,23 @@ func BuildDashboard(snapshot playerdata.InventorySnapshot, catalog map[int]ItemD
 		now = time.Now()
 	}
 	groups := make(map[int]*groupAccumulator)
-	totals := DashboardTotals{TotalItemCount: len(snapshot.Items)}
+	stashPageCount := dashboardStashPageCount(snapshot)
+	totals := DashboardTotals{
+		TotalItemCount: len(snapshot.Items),
+		StashPageCount: stashPageCount,
+		HeroEquippedValues: map[int]float64{
+			1: 0.0,
+			2: 0.0,
+			3: 0.0,
+			4: 0.0,
+			5: 0.0,
+			6: 0.0,
+		},
+		StashPageValues: make(map[int]float64),
+	}
+	for page := 1; page <= stashPageCount; page++ {
+		totals.StashPageValues[page] = 0
+	}
 
 	for _, owned := range snapshot.Items {
 		desc := catalog[owned.ItemID]
@@ -44,6 +62,10 @@ func BuildDashboard(snapshot playerdata.InventorySnapshot, catalog map[int]ItemD
 					Name:           desc.Name,
 					MarketHashName: desc.MarketHashName,
 					MarketURL:      desc.MarketURL,
+					IconURL:        desc.IconURL,
+					Grade:          desc.Grade,
+					Type:           desc.Type,
+					Gear:           desc.Gear,
 				},
 				seen: make(map[string]struct{}),
 			}
@@ -67,6 +89,17 @@ func BuildDashboard(snapshot playerdata.InventorySnapshot, catalog map[int]ItemD
 				acc.item.TotalSuggested += quote.Suggested
 				totals.SuggestedListingValue += quote.Suggested
 				addLocationValue(&totals, owned.Location, quote.Suggested)
+				if owned.Location == playerdata.LocationStash {
+					// Stash pages have 100 slots each
+					page := (owned.SlotIndex / stashSlotsPerPage) + 1
+					totals.StashPageValues[page] += quote.Suggested
+				}
+				if owned.Location == playerdata.LocationEquipped && owned.EquippedHeroKey > 0 {
+					classID := mapHeroKeyToClassID(owned.EquippedHeroKey)
+					if _, exists := totals.HeroEquippedValues[classID]; exists {
+						totals.HeroEquippedValues[classID] += quote.Suggested
+					}
+				}
 			}
 			if quote.HasInstant {
 				acc.item.TotalInstant += quote.Instant
@@ -90,8 +123,8 @@ func BuildDashboard(snapshot playerdata.InventorySnapshot, catalog map[int]ItemD
 	})
 
 	state := DashboardState{
-		UpdatedAt:      now,
-		SnapshotReadAt: snapshot.ReadAt,
+		UpdatedAt:      now.Format(time.RFC3339),
+		SnapshotReadAt: snapshot.ReadAt.Format(time.RFC3339),
 		MarketScope:    options.MarketScope,
 		CurrencyCode:   options.CurrencyCode,
 		PricePrefix:    options.PricePrefix,
@@ -106,6 +139,20 @@ func BuildDashboard(snapshot playerdata.InventorySnapshot, catalog map[int]ItemD
 		Refresh:        options.Refresh,
 	}
 	return state
+}
+
+func dashboardStashPageCount(snapshot playerdata.InventorySnapshot) int {
+	pageCount := snapshot.StashPageCount
+	for _, owned := range snapshot.Items {
+		if owned.Location != playerdata.LocationStash {
+			continue
+		}
+		page := (owned.SlotIndex / stashSlotsPerPage) + 1
+		if page > pageCount {
+			pageCount = page
+		}
+	}
+	return pageCount
 }
 
 func addLocationValue(totals *DashboardTotals, location playerdata.Location, value float64) {
@@ -175,4 +222,14 @@ func missingPriceItems(items []DashboardItem, limit int) []DashboardItem {
 		return filtered[i].Count > filtered[j].Count
 	})
 	return limitItems(filtered, limit)
+}
+
+func mapHeroKeyToClassID(heroKey int) int {
+	if heroKey >= 101 && heroKey <= 601 && heroKey%100 == 1 {
+		return heroKey / 100
+	}
+	if heroKey >= 1 && heroKey <= 6 {
+		return heroKey
+	}
+	return 0
 }

@@ -33,6 +33,7 @@ type MarketSalePoint struct {
 
 type MarketAnalysis struct {
 	MarketHashName string
+	IconURL        string
 	PricePrefix    string
 	PriceSuffix    string
 	UpdatedAt      time.Time

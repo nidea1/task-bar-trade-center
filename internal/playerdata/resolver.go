@@ -9,6 +9,8 @@ import (
 )
 
 const (
+	stashSlotsPerPage = 100
+
 	playerCurrencies = 0x48
 	playerHeroes     = 0x50
 	playerInventory  = 0x78
@@ -140,11 +142,13 @@ func (resolver *Resolver) readObject(memory Memory, object uintptr, now time.Tim
 	}
 
 	var owned []OwnedItem
+	stashPageCount := 0
 	seen := make(map[uint64]struct{})
 	if heroes := readListInfo(memory, readPtr(memory, object+playerHeroes), 1000); heroes.ok {
 		owned = append(owned, resolver.readEquippedItems(memory, heroes, uniqueToItem, seen)...)
 	}
 	if stash := readListInfo(memory, readPtr(memory, object+playerStash), 200000); stash.ok {
+		stashPageCount = pageCountForSlotCount(stash.size)
 		owned = append(owned, resolver.readSlotItems(memory, stash, uniqueToItem, seen, LocationStash)...)
 	}
 	if inventory := readListInfo(memory, readPtr(memory, object+playerInventory), 200000); inventory.ok {
@@ -156,7 +160,14 @@ func (resolver *Resolver) readObject(memory Memory, object uintptr, now time.Tim
 		gold, _ = readGold(memory, currencies)
 	}
 
-	return InventorySnapshot{ReadAt: now, Gold: gold, Items: owned}, true
+	return InventorySnapshot{ReadAt: now, Gold: gold, StashPageCount: stashPageCount, Items: owned}, true
+}
+
+func pageCountForSlotCount(slotCount int) int {
+	if slotCount <= 0 {
+		return 0
+	}
+	return (slotCount + stashSlotsPerPage - 1) / stashSlotsPerPage
 }
 
 func readPtr(memory Memory, address uintptr) uintptr {

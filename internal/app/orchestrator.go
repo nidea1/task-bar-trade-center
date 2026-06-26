@@ -7,6 +7,7 @@ import (
 )
 
 func New(callbacks Callbacks) *App {
+	SetCallbacks(callbacks)
 	activeApp = &App{
 		callbacks:  callbacks,
 		allItemMap: make(map[int]catalog.ItemConfig),
@@ -34,4 +35,36 @@ func (app *App) RefreshInventoryPrices() (inventory.RefreshStatus, error) {
 
 func (app *App) OpenMarketListing(itemID int) error {
 	return OpenMarketListing(itemID)
+}
+
+func (app *App) GetDisplayLanguages() []LanguageInfo {
+	return GetDisplayLanguages()
+}
+
+func (app *App) GetMarketCurrencies() []CurrencyInfo {
+	return GetMarketCurrencies()
+}
+
+func (app *App) GetMarketRegions() []RegionInfo {
+	return GetMarketRegions()
+}
+
+func (app *App) GetCurrentLanguage() string {
+	return GetCurrentLanguage()
+}
+
+func (app *App) GetCurrentMarketScope() CurrentMarketScopeInfo {
+	return GetCurrentMarketScope()
+}
+
+func (app *App) SetDisplayLanguage(preference string) bool {
+	return SetDisplayLanguage(preference)
+}
+
+func (app *App) SetMarketScope(currencyCode string, countryCode string) bool {
+	return SetMarketScope(currencyCode, countryCode)
+}
+
+func (app *App) GetTranslations() map[string]string {
+	return GetTranslations()
 }

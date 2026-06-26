@@ -20,10 +20,12 @@ type OwnedItem struct {
 	Location        Location `json:"location"`
 	EquippedHeroKey int      `json:"equipped_hero_key,omitempty"`
 	Marketable      bool     `json:"marketable"`
+	SlotIndex       int      `json:"slot_index"`
 }
 
 type InventorySnapshot struct {
-	ReadAt time.Time   `json:"read_at"`
-	Gold   uint64      `json:"gold"`
-	Items  []OwnedItem `json:"items"`
+	ReadAt         time.Time   `json:"read_at"`
+	Gold           uint64      `json:"gold"`
+	StashPageCount int         `json:"stash_page_count"`
+	Items          []OwnedItem `json:"items"`
 }

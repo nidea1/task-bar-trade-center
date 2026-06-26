@@ -57,7 +57,7 @@ func (resolver *Resolver) readSlotItems(memory Memory, list listInfo, uniqueToIt
 			continue
 		}
 		seen[uniqueID] = struct{}{}
-		items = append(items, resolver.ownedItem(itemID, uniqueID, location, 0))
+		items = append(items, resolver.ownedItem(itemID, uniqueID, location, 0, i))
 	}
 	return items
 }
@@ -95,13 +95,13 @@ func (resolver *Resolver) readEquippedItems(memory Memory, heroes listInfo, uniq
 				continue
 			}
 			seen[uniqueID] = struct{}{}
-			items = append(items, resolver.ownedItem(itemID, uniqueID, LocationEquipped, int(heroKeyValue)))
+			items = append(items, resolver.ownedItem(itemID, uniqueID, LocationEquipped, int(heroKeyValue), int(slot)))
 		}
 	}
 	return items
 }
 
-func (resolver *Resolver) ownedItem(itemID int, uniqueID uint64, location Location, heroKey int) OwnedItem {
+func (resolver *Resolver) ownedItem(itemID int, uniqueID uint64, location Location, heroKey int, slotIndex int) OwnedItem {
 	meta := resolver.metadata[itemID]
 	return OwnedItem{
 		ItemID:          itemID,
@@ -109,6 +109,7 @@ func (resolver *Resolver) ownedItem(itemID int, uniqueID uint64, location Locati
 		Location:        location,
 		EquippedHeroKey: heroKey,
 		Marketable:      meta.Marketable,
+		SlotIndex:       slotIndex,
 	}
 }
 

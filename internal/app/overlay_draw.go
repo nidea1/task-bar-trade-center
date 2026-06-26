@@ -6,6 +6,7 @@ import (
 
 	"fmt"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"unsafe"
@@ -341,8 +342,32 @@ func drawOverlayText(hdc uintptr, text string, rect win32.RECT, color uintptr, f
 	win32.ProcDrawTextW.Call(hdc, uintptr(unsafe.Pointer(&textUTF16[0])), ^uintptr(0), uintptr(unsafe.Pointer(&rect)), format)
 }
 
-func withOverlayFont(hdc uintptr, height int32, weight uintptr, draw func()) {
+type fontKey struct {
+	height int32
+	weight uintptr
+}
+
+var (
+	fontCache   = make(map[fontKey]uintptr)
+	fontCacheMu sync.Mutex
+)
+
+func getCachedFont(height int32, weight uintptr) uintptr {
+	fontCacheMu.Lock()
+	defer fontCacheMu.Unlock()
+
+	key := fontKey{height: height, weight: weight}
+	if font, ok := fontCache[key]; ok {
+		return font
+	}
+
 	font := createOverlayFont(height, weight)
+	fontCache[key] = font
+	return font
+}
+
+func withOverlayFont(hdc uintptr, height int32, weight uintptr, draw func()) {
+	font := getCachedFont(height, weight)
 	if font == 0 {
 		draw()
 		return
@@ -353,7 +378,6 @@ func withOverlayFont(hdc uintptr, height int32, weight uintptr, draw func()) {
 	if oldFont != 0 {
 		win32.ProcSelectObject.Call(hdc, oldFont)
 	}
-	win32.ProcDeleteObject.Call(font)
 }
 
 func createOverlayFont(height int32, weight uintptr) uintptr {

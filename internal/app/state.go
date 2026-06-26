@@ -85,6 +85,7 @@ type App struct {
 	// Inventory integration
 	inventoryMu             sync.Mutex
 	inventoryResolver       *playerdata.Resolver
+	lastSnapshot            *playerdata.InventorySnapshot
 	inventoryDashboardState inventory.DashboardState
 	inventoryPriceQueue     *inventory.RefreshQueue
 	priceCacheRefreshing    atomic.Bool

@@ -34,8 +34,8 @@ func TestBuildDashboardGroupsAndValuesInventory(t *testing.T) {
 		400: {Name: "Box", Marketable: true},
 	}
 	quotes := quoteMap{
-		100: {Suggested: 2, Instant: 1.5, HasSuggested: true, HasInstant: true, PricePrefix: "$", UpdatedAt: now},
-		200: {Suggested: 10, Instant: 8, HasSuggested: true, HasInstant: true, PricePrefix: "$", UpdatedAt: now},
+		100: {Suggested: 2, Instant: 1.5, HasSuggested: true, HasInstant: true, PricePrefix: "$", UpdatedAt: now.Format(time.RFC3339)},
+		200: {Suggested: 10, Instant: 8, HasSuggested: true, HasInstant: true, PricePrefix: "$", UpdatedAt: now.Format(time.RFC3339)},
 	}
 
 	state := BuildDashboard(snapshot, catalog, quotes, DashboardOptions{Now: now, PricePrefix: "$"})
@@ -60,5 +60,89 @@ func TestBuildDashboardGroupsAndValuesInventory(t *testing.T) {
 	}
 	if len(state.MissingPrices) != 1 || state.MissingPrices[0].ItemID != 400 {
 		t.Fatalf("missing = %+v", state.MissingPrices)
+	}
+}
+
+func TestBuildDashboardHeroEquippedValues(t *testing.T) {
+	now := time.Unix(1700000000, 0)
+	snapshot := playerdata.InventorySnapshot{
+		ReadAt: now,
+		Gold:   0,
+		Items: []playerdata.OwnedItem{
+			{ItemID: 100, UniqueID: 1, Location: playerdata.LocationEquipped, EquippedHeroKey: 101, Marketable: true},  // Knight (1)
+			{ItemID: 200, UniqueID: 2, Location: playerdata.LocationEquipped, EquippedHeroKey: 201, Marketable: true},  // Ranger (2)
+			{ItemID: 300, UniqueID: 3, Location: playerdata.LocationEquipped, EquippedHeroKey: 301, Marketable: true},  // Sorcerer (3)
+			{ItemID: 400, UniqueID: 4, Location: playerdata.LocationInventory, EquippedHeroKey: 401, Marketable: true}, // Not equipped
+		},
+	}
+	catalog := map[int]ItemDescriptor{
+		100: {Name: "Sword", Marketable: true},
+		200: {Name: "Bow", Marketable: true},
+		300: {Name: "Staff", Marketable: true},
+		400: {Name: "Scepter", Marketable: true},
+	}
+	quotes := quoteMap{
+		100: {Suggested: 10, HasSuggested: true},
+		200: {Suggested: 20, HasSuggested: true},
+		300: {Suggested: 30, HasSuggested: true},
+		400: {Suggested: 40, HasSuggested: true},
+	}
+
+	state := BuildDashboard(snapshot, catalog, quotes, DashboardOptions{Now: now})
+
+	if state.Totals.HeroEquippedValues[1] != 10 {
+		t.Errorf("Knight equipped value = %f, want 10", state.Totals.HeroEquippedValues[1])
+	}
+	if state.Totals.HeroEquippedValues[2] != 20 {
+		t.Errorf("Ranger equipped value = %f, want 20", state.Totals.HeroEquippedValues[2])
+	}
+	if state.Totals.HeroEquippedValues[3] != 30 {
+		t.Errorf("Sorcerer equipped value = %f, want 30", state.Totals.HeroEquippedValues[3])
+	}
+	if state.Totals.HeroEquippedValues[4] != 0 {
+		t.Errorf("Priest equipped value = %f, want 0 (item in inventory)", state.Totals.HeroEquippedValues[4])
+	}
+}
+
+func TestBuildDashboardIncludesEmptyStashPages(t *testing.T) {
+	now := time.Unix(1700000000, 0)
+	snapshot := playerdata.InventorySnapshot{
+		ReadAt:         now,
+		StashPageCount: 7,
+		Items: []playerdata.OwnedItem{
+			{ItemID: 100, UniqueID: 1, Location: playerdata.LocationStash, SlotIndex: 0, Marketable: true},
+			{ItemID: 200, UniqueID: 2, Location: playerdata.LocationStash, SlotIndex: 350, Marketable: true},
+		},
+	}
+	catalog := map[int]ItemDescriptor{
+		100: {Name: "Ruby", Marketable: true},
+		200: {Name: "Emerald", Marketable: true},
+	}
+	quotes := quoteMap{
+		100: {Suggested: 2, HasSuggested: true},
+		200: {Suggested: 5, HasSuggested: true},
+	}
+
+	state := BuildDashboard(snapshot, catalog, quotes, DashboardOptions{Now: now})
+
+	if state.Totals.StashPageCount != 7 {
+		t.Fatalf("stash page count = %d, want 7", state.Totals.StashPageCount)
+	}
+	if len(state.Totals.StashPageValues) != 7 {
+		t.Fatalf("stash page values = %+v, want 7 pages", state.Totals.StashPageValues)
+	}
+	for page := 1; page <= 7; page++ {
+		if _, exists := state.Totals.StashPageValues[page]; !exists {
+			t.Fatalf("stash page %d missing from %+v", page, state.Totals.StashPageValues)
+		}
+	}
+	if state.Totals.StashPageValues[1] != 2 {
+		t.Errorf("stash page 1 value = %f, want 2", state.Totals.StashPageValues[1])
+	}
+	if state.Totals.StashPageValues[4] != 5 {
+		t.Errorf("stash page 4 value = %f, want 5", state.Totals.StashPageValues[4])
+	}
+	if state.Totals.StashPageValues[7] != 0 {
+		t.Errorf("stash page 7 value = %f, want 0", state.Totals.StashPageValues[7])
 	}
 }

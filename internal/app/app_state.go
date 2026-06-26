@@ -4,6 +4,7 @@ import (
 	"github.com/nidea1/task-bar-trade-center/internal/win32"
 
 	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -175,10 +176,24 @@ func queueRawTrayNotification(message string) {
 	if activeApp.appHWND == 0 || !activeApp.trayIconAdded {
 		return
 	}
+	title, body := trayNotificationContent(message)
 	trayNotifications.Lock()
-	trayNotifications.pending = append(trayNotifications.pending, trayNotification{title: AppName, message: message})
+	trayNotifications.pending = append(trayNotifications.pending, trayNotification{title: title, message: body})
 	trayNotifications.Unlock()
 	win32.ProcPostMessageW.Call(activeApp.appHWND, WM_APP_TRAY_NOTIFICATION, 0, 0)
+}
+
+func trayNotificationContent(message string) (string, string) {
+	title, body, hasBody := strings.Cut(message, "\n")
+	title = strings.TrimSpace(title)
+	body = strings.TrimSpace(body)
+	if title == "" {
+		title = AppShortName
+	}
+	if !hasBody || body == "" {
+		body = " "
+	}
+	return title, body
 }
 
 func flushTrayNotifications() {

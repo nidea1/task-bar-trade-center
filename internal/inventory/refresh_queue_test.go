@@ -35,7 +35,7 @@ func TestRefreshQueueBacksOffOnRateLimit(t *testing.T) {
 	queue.Enqueue([]int{10})
 	waitForQueue(t, queue)
 	status := queue.Status()
-	if status.BackoffUntil.IsZero() || status.LastError == "" {
+	if status.BackoffUntil == "" || status.LastError == "" {
 		t.Fatalf("status = %+v, want backoff and error", status)
 	}
 }

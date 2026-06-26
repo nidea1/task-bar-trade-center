@@ -11,17 +11,20 @@ type FetchFunc func(context.Context, int) error
 type RateLimitFunc func(error) bool
 
 type RefreshQueue struct {
-	mu          sync.Mutex
-	fetch       FetchFunc
-	rateLimited RateLimitFunc
-	baseDelay   time.Duration
-	jitter      float64
-	backoffs    []time.Duration
-	status      RefreshStatus
-	pending     []int
-	seen        map[int]struct{}
-	running     bool
-	backoffStep int
+	mu             sync.Mutex
+	fetch          FetchFunc
+	rateLimited    RateLimitFunc
+	baseDelay      time.Duration
+	jitter         float64
+	backoffs       []time.Duration
+	status         RefreshStatus
+	pending        []int
+	seen           map[int]struct{}
+	running        bool
+	backoffStep    int
+	backoffUntil   time.Time
+	lastStartedAt  time.Time
+	lastFinishedAt time.Time
 }
 
 func NewRefreshQueue(fetch FetchFunc, rateLimited RateLimitFunc) *RefreshQueue {
@@ -38,7 +41,7 @@ func NewRefreshQueue(fetch FetchFunc, rateLimited RateLimitFunc) *RefreshQueue {
 func (queue *RefreshQueue) Enqueue(ids []int) int {
 	queue.mu.Lock()
 	now := time.Now()
-	if !queue.status.BackoffUntil.IsZero() && now.Before(queue.status.BackoffUntil) {
+	if !queue.backoffUntil.IsZero() && now.Before(queue.backoffUntil) {
 		queue.mu.Unlock()
 		return 0
 	}
@@ -58,7 +61,7 @@ func (queue *RefreshQueue) Enqueue(ids []int) int {
 	if !queue.running && len(queue.pending) > 0 {
 		queue.running = true
 		queue.status.Refreshing = true
-		queue.status.LastStartedAt = now
+		queue.lastStartedAt = now
 		go queue.run()
 	}
 	queue.mu.Unlock()
@@ -68,7 +71,18 @@ func (queue *RefreshQueue) Enqueue(ids []int) int {
 func (queue *RefreshQueue) Status() RefreshStatus {
 	queue.mu.Lock()
 	defer queue.mu.Unlock()
-	return queue.status
+	
+	status := queue.status
+	if !queue.backoffUntil.IsZero() {
+		status.BackoffUntil = queue.backoffUntil.Format(time.RFC3339)
+	}
+	if !queue.lastStartedAt.IsZero() {
+		status.LastStartedAt = queue.lastStartedAt.Format(time.RFC3339)
+	}
+	if !queue.lastFinishedAt.IsZero() {
+		status.LastFinishedAt = queue.lastFinishedAt.Format(time.RFC3339)
+	}
+	return status
 }
 
 func (queue *RefreshQueue) run() {
@@ -120,7 +134,7 @@ func (queue *RefreshQueue) finish(lastError string) {
 	queue.status.Refreshing = false
 	queue.status.Queued = len(queue.pending)
 	queue.status.LastError = lastError
-	queue.status.LastFinishedAt = time.Now()
+	queue.lastFinishedAt = time.Now()
 }
 
 func (queue *RefreshQueue) enterBackoff(message string) {
@@ -133,10 +147,10 @@ func (queue *RefreshQueue) enterBackoff(message string) {
 	}
 	queue.running = false
 	queue.status.Refreshing = false
-	queue.status.BackoffUntil = time.Now().Add(delay)
+	queue.backoffUntil = time.Now().Add(delay)
 	queue.status.Queued = len(queue.pending)
 	queue.status.LastError = message
-	queue.status.LastFinishedAt = time.Now()
+	queue.lastFinishedAt = time.Now()
 }
 
 func (queue *RefreshQueue) delay() time.Duration {

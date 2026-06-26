@@ -77,7 +77,7 @@ func addTrayIcon() {
 func loadAppIcon(hInstance uintptr, size int32) uintptr {
 	icon, embedded := winapp.LoadIconResource(hInstance, AppIconResourceID, size, IDI_APPLICATION)
 	if embedded {
-		fmt.Printf("Application icon (%dx%d) loaded from embedded resource.\n", size, size)
+		fmt.Printf("Application icon (%dx%d) loaded successfully.\n", size, size)
 		return icon
 	}
 	fmt.Printf("Embedded application icon (%dx%d) could not be loaded; using default icon.\n", size, size)
@@ -144,7 +144,7 @@ func showTrayNotification(title, message string) {
 	nid.UFlags = NIF_INFO
 	copyUTF16(nid.SzInfoTitle[:], title)
 	copyUTF16(nid.SzInfo[:], message)
-	nid.DwInfoFlags = NIIF_INFO
+	nid.DwInfoFlags = NIIF_NONE
 	winapp.ModifyNotifyIcon(&nid)
 }
 
@@ -232,6 +232,7 @@ func handleTrayCommand(commandID uint32) {
 			fmt.Printf("Market currency changed to %s.\n", market.FormatScope(scope))
 			saveSettingsToDisk()
 			refreshActiveMarketPrice()
+			rebuildDashboardState("currency-changed")
 		}
 		return
 	}
@@ -241,6 +242,7 @@ func handleTrayCommand(commandID uint32) {
 			fmt.Printf("Market region changed to %s.\n", market.FormatScope(scope))
 			saveSettingsToDisk()
 			refreshActiveMarketPrice()
+			rebuildDashboardState("region-changed")
 		}
 		return
 	}

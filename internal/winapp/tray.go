@@ -19,6 +19,22 @@ func LoadIconResource(hInstance uintptr, resourceID uintptr, size int32, fallbac
 	if icon != 0 {
 		return icon, true
 	}
+
+	// Fallback to load from assets/icon.ico on disk (useful in development)
+	if pathPtr, err := syscall.UTF16PtrFromString("assets/icon.ico"); err == nil {
+		fileIcon, _, _ := win32.ProcLoadImageW.Call(
+			0,
+			uintptr(unsafe.Pointer(pathPtr)),
+			1,      // IMAGE_ICON
+			uintptr(size),
+			uintptr(size),
+			0x0010, // LR_LOADFROMFILE
+		)
+		if fileIcon != 0 {
+			return fileIcon, true
+		}
+	}
+
 	fallbackIcon, _, _ := win32.ProcLoadIconW.Call(0, fallbackID)
 	return fallbackIcon, false
 }

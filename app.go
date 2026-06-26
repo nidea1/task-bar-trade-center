@@ -81,6 +81,62 @@ func (a *App) OpenMarketListing(itemID int) error {
 	return nil
 }
 
+func (a *App) GetDisplayLanguages() ([]core.LanguageInfo, error) {
+	if appCore := a.coreApp(); appCore != nil {
+		return appCore.GetDisplayLanguages(), nil
+	}
+	return nil, nil
+}
+
+func (a *App) GetMarketCurrencies() ([]core.CurrencyInfo, error) {
+	if appCore := a.coreApp(); appCore != nil {
+		return appCore.GetMarketCurrencies(), nil
+	}
+	return nil, nil
+}
+
+func (a *App) GetMarketRegions() ([]core.RegionInfo, error) {
+	if appCore := a.coreApp(); appCore != nil {
+		return appCore.GetMarketRegions(), nil
+	}
+	return nil, nil
+}
+
+func (a *App) GetCurrentLanguage() (string, error) {
+	if appCore := a.coreApp(); appCore != nil {
+		return appCore.GetCurrentLanguage(), nil
+	}
+	return "", nil
+}
+
+func (a *App) GetCurrentMarketScope() (core.CurrentMarketScopeInfo, error) {
+	if appCore := a.coreApp(); appCore != nil {
+		return appCore.GetCurrentMarketScope(), nil
+	}
+	return core.CurrentMarketScopeInfo{}, nil
+}
+
+func (a *App) SetDisplayLanguage(preference string) (bool, error) {
+	if appCore := a.coreApp(); appCore != nil {
+		return appCore.SetDisplayLanguage(preference), nil
+	}
+	return false, nil
+}
+
+func (a *App) SetMarketScope(currencyCode string, countryCode string) (bool, error) {
+	if appCore := a.coreApp(); appCore != nil {
+		return appCore.SetMarketScope(currencyCode, countryCode), nil
+	}
+	return false, nil
+}
+
+func (a *App) GetTranslations() (map[string]string, error) {
+	if appCore := a.coreApp(); appCore != nil {
+		return appCore.GetTranslations(), nil
+	}
+	return nil, nil
+}
+
 func (a *App) context() (context.Context, bool) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()

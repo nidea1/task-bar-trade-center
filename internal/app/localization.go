@@ -38,6 +38,14 @@ func currentDisplayLanguagePreference() string {
 	return localeService.Preference()
 }
 
+func currentTranslations() map[string]string {
+	lang := currentDisplayLanguage()
+	if catalog, ok := localizedMessages[lang]; ok {
+		return catalog
+	}
+	return englishMessages
+}
+
 func displayLanguageName(code string) string {
 	return localeService.DisplayName(code)
 }
@@ -52,6 +60,7 @@ func selectDisplayLanguage(preference string) bool {
 	if activeApp.showOverlay.Load() {
 		redrawOverlay()
 	}
+	rebuildDashboardState("language-changed")
 	return true
 }
 

@@ -231,3 +231,11 @@ func marketDataFromPriceOverview(marketHashName string, body []byte, now time.Ti
 		Analysis: analysis,
 	}, true
 }
+
+func ParseIconURL(body []byte) string {
+	match := iconURLPattern.FindSubmatch(body)
+	if len(match) != 2 {
+		return ""
+	}
+	return string(match[1])
+}

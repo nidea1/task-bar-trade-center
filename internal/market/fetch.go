@@ -109,10 +109,12 @@ func fetchDataForScope(config catalog.ItemConfig, marketHashName string, now tim
 	hasOrderBook := false
 	var history []MarketSalePoint
 
+	var iconURL string
 	listingBody, _, err := steamGet(client, referer, "")
 	if err != nil {
 		requestErrors = append(requestErrors, "listing: "+err.Error())
 	} else {
+		iconURL = ParseIconURL(listingBody)
 		if isSSRListingForScope(listingBody, scope) {
 			orderBook, hasOrderBook = parseSSRItemOrderBook(listingBody, scope.Currency)
 			history = parseSSRPriceHistory(listingBody)
@@ -150,13 +152,16 @@ func fetchDataForScope(config catalog.ItemConfig, marketHashName string, now tim
 	}
 
 	if hasOrderBook || len(history) > 0 {
-		return marketDataFromSources(marketHashName, orderBook, hasOrderBook, history, now, scope.Currency), nil
+		data := marketDataFromSources(marketHashName, orderBook, hasOrderBook, history, now, scope.Currency)
+		data.Analysis.IconURL = iconURL
+		return data, nil
 	}
 
 	body, _, err := fetchPriceOverview(client, marketHashName, scope)
 	if err != nil {
 		requestErrors = append(requestErrors, "priceoverview: "+err.Error())
 	} else if data, ok := marketDataFromPriceOverview(marketHashName, body, now, scope.Currency); ok {
+		data.Analysis.IconURL = iconURL
 		return data, nil
 	} else {
 		requestErrors = append(requestErrors, "priceoverview: response did not contain price data")

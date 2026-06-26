@@ -63,9 +63,10 @@ var (
 	ProcRegisterHotKey             = User32.NewProc("RegisterHotKey")
 	ProcUnregisterHotKey           = User32.NewProc("UnregisterHotKey")
 
-	Shell32             = syscall.NewLazyDLL("shell32.dll")
-	ProcShellNotifyIcon = Shell32.NewProc("Shell_NotifyIconW")
-	ProcShellExecuteW   = Shell32.NewProc("ShellExecuteW")
+	Shell32                                     = syscall.NewLazyDLL("shell32.dll")
+	ProcShellNotifyIcon                         = Shell32.NewProc("Shell_NotifyIconW")
+	ProcShellExecuteW                           = Shell32.NewProc("ShellExecuteW")
+	ProcSetCurrentProcessExplicitAppUserModelID = Shell32.NewProc("SetCurrentProcessExplicitAppUserModelID")
 
 	Gdi32                = syscall.NewLazyDLL("gdi32.dll")
 	ProcCreateSolidBrush = Gdi32.NewProc("CreateSolidBrush")

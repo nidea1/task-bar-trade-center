@@ -83,7 +83,7 @@ func appendMarketScopeMenus(menu uintptr, scope market.MarketScope) {
 					if scope.Currency.Code == "USD" && scope.Region.CountryCode == region.CountryCode {
 						flags |= MF_CHECKED
 					}
-					label := "USD â€” " + region.Name
+					label := "USD — " + region.Name
 					appendTrayMenuItem(currencyMenu, flags, MenuRegionBase+uint32(regionIndex), label)
 				}
 				continue

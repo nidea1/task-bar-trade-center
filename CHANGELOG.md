@@ -6,6 +6,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Migrated the application to the Wails framework, replacing the legacy window overlay/rendering system with a React, Vite, and TypeScript frontend.
+- Created a game-themed dashboard UI (located in `frontend/`) featuring RPG aesthetic design, custom fonts, animations, and layouts.
+- Added new dashboard metrics: Stash/Inventory Value, Hero Gear Value, and Total Value.
+- Implemented game-themed custom selectors (`GameDropdown`) for Language and Region/Currency selection.
+- Static integration of 6 animated pixel-art hero gifs (`Hero_101.gif` to `Hero_601.gif`) corresponding to active character classes.
+- Added localization support for all 18 languages across the entire React dashboard, including metrics, item locations, buttons, relative times, and notifications.
+- Added a localization helper supporting comma-separated locations splitting and locale-aware capitalization (correctly mapping Turkish dotted/dotless `I`/`İ` rules).
+- Implemented backend APIs for preferences retrieval and state propagation: `GetDisplayLanguages`, `GetMarketCurrencies`, `GetMarketRegions`, `GetCurrentLanguage`, `GetCurrentMarketScope`, `SetDisplayLanguage`, `SetMarketScope`, and `GetTranslations`.
+- Added localized strings for `location.stash`, `location.inventory`, and `location.equipped` across all 18 JSON translation catalog files.
+- Added `SlotIndex` to `OwnedItem` and `StashPageCount` calculation to `InventorySnapshot` (dividing slot counts by 100 slots per page).
+- Enabled fetching of `IconURL` from Steam listing body (`ParseIconURL`) and storing it in `Analysis.IconURL`.
+
+### Changed
+- Structured the codebase into internal packages inside `internal/` (such as `internal/app`, `internal/catalog`, `internal/game`, `internal/il2cpp`, `internal/inventory`, `internal/localization`, `internal/market`, `internal/playerdata`, `internal/win32`, `internal/winapp`, `internal/updater`, `internal/tbhmem`, `internal/overlay`).
+- Consolidated global state and Wails backend bindings inside a stateful `App` struct.
+- Rebuilt inventory dashboard caching logic, utilizing `activeApp.lastSnapshot` to cache active inventory snapshot data.
+- Refactored `RefreshQueue` fields `backoffUntil`, `lastStartedAt`, and `lastFinishedAt` to use `time.Time` and serialize them as RFC3339 strings in Wails JS bindings.
+- Enabled loading application icon from disk (`assets/icon.ico`) as a fallback in development for the system tray menu.
+- Hooked settings adjustments from both the tray menu and the frontend selectors to trigger `rebuildDashboardState`.
+- Cleaned up obsolete package types and redundant type alias wrappers from Phase 1 of migration.
+- Updated grid column breakpoints in the items panel to `md:grid-cols-2` to support dual-column layouts at the minimum dashboard width of 960px.
+- Replaced the dashboard header logo and drag-bar icons with the application icon asset.
+
+### Fixed
+- Fixed select dropdown rendering to prevent the layout panel height from expanding vertically when menus are opened.
+- Resolved Turkish locale lowercase/uppercase mapping issues by dynamically setting the document element lang attribute and using `toLocaleUpperCase(currentLanguage)`.
+- Fixed unused sync import compile error in `inventory_integration.go`.
+- Pre-initialized activeApp to prevent nil-pointer dereferences in tests.
+
 ## [0.8.1] - 2026-06-25
 
 ### Fixed

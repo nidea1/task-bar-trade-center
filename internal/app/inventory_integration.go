@@ -68,15 +68,21 @@ func readInventoryDashboardState() (inventory.DashboardState, error) {
 		return inventory.DashboardState{}, fmt.Errorf("PlayerSaveData could not be resolved")
 	}
 
+	activeApp.inventoryMu.Lock()
+	activeApp.lastSnapshot = &snapshot
+	activeApp.inventoryMu.Unlock()
+
 	scope := market.CurrentScope()
-	return inventory.BuildDashboard(snapshot, inventoryItemCatalog(scope), cacheQuoteProvider{scope: scope}, inventory.DashboardOptions{
+	state := inventory.BuildDashboard(snapshot, inventoryItemCatalog(scope), cacheQuoteProvider{scope: scope}, inventory.DashboardOptions{
 		MarketScope:  market.FormatScope(scope),
 		CurrencyCode: scope.Currency.Code,
 		PricePrefix:  scope.Currency.PricePrefix,
 		PriceSuffix:  scope.Currency.PriceSuffix,
 		Refresh:      currentInventoryRefreshStatus(),
 		Now:          time.Now(),
-	}), nil
+	})
+	state.Translations = currentTranslations()
+	return state, nil
 }
 
 func currentInventoryResolver() *playerdata.Resolver {
@@ -104,11 +110,25 @@ func inventoryItemCatalog(scope market.MarketScope) map[int]inventory.ItemDescri
 		if name == "" {
 			name = config.Name["en-US"]
 		}
+		gear := ""
+		if config.Gear != nil {
+			gear = *config.Gear
+		}
 		marketableConfig, marketable := activeApp.itemMap[id]
-		descriptor := inventory.ItemDescriptor{Name: name, Marketable: marketable}
+		descriptor := inventory.ItemDescriptor{
+			Name:       name,
+			Grade:      config.Grade,
+			Type:       config.Type,
+			Gear:       gear,
+			Marketable: marketable,
+		}
 		if marketable {
-			descriptor.MarketHashName = buildMarketHashName(marketableConfig)
+			hashName := buildMarketHashName(marketableConfig)
+			descriptor.MarketHashName = hashName
 			descriptor.MarketURL = steamMarketListingURLForScope(marketableConfig, scope)
+			if cacheData, exists := marketCacheEntry(scope, hashName); exists && cacheData.Analysis.IconURL != "" {
+				descriptor.IconURL = "https://community.cloudflare.steamstatic.com/economy/image/" + cacheData.Analysis.IconURL
+			}
 		}
 		catalog[id] = descriptor
 	}
@@ -132,7 +152,7 @@ func (provider cacheQuoteProvider) Quote(itemID int) (inventory.PriceQuote, bool
 		HasInstant:   analysis.HasHighestBuy,
 		PricePrefix:  analysis.PricePrefix,
 		PriceSuffix:  analysis.PriceSuffix,
-		UpdatedAt:    analysis.UpdatedAt,
+		UpdatedAt:    analysis.UpdatedAt.Format(time.RFC3339),
 	}
 	return quote, quote.HasSuggested || quote.HasInstant
 }
@@ -175,7 +195,11 @@ func missingOrStaleDashboardItemIDs(state inventory.DashboardState, maxAge time.
 	now := time.Now()
 	ids := make([]int, 0)
 	for _, item := range state.Items {
-		if !item.HasPrice || item.UpdatedAt.IsZero() || now.Sub(item.UpdatedAt) > maxAge {
+		if !item.HasPrice || item.UpdatedAt == "" {
+			ids = append(ids, item.ItemID)
+			continue
+		}
+		if parsed, err := time.Parse(time.RFC3339, item.UpdatedAt); err != nil || now.Sub(parsed) > maxAge {
 			ids = append(ids, item.ItemID)
 		}
 	}
@@ -224,4 +248,53 @@ func isSteamRateLimitError(err error) bool {
 	}
 	message := strings.ToLower(err.Error())
 	return strings.Contains(message, "429") || strings.Contains(message, "too many")
+}
+
+func rebuildDashboardState(reason string) {
+	activeApp.inventoryMu.Lock()
+	snapshot := activeApp.lastSnapshot
+	activeApp.inventoryMu.Unlock()
+
+	if snapshot == nil {
+		// If we don't have a cached snapshot in memory, and the game is running, we can read memory.
+		if activeApp.gameProcessHandle != 0 && activeApp.gameProcessID != 0 {
+			go refreshInventoryDashboardState(reason)
+		} else {
+			// If not running, let's update the translations and scope on the cached dashboard state
+			activeApp.inventoryMu.Lock()
+			state := activeApp.inventoryDashboardState
+			scope := market.CurrentScope()
+			state.MarketScope = market.FormatScope(scope)
+			state.CurrencyCode = scope.Currency.Code
+			state.PricePrefix = scope.Currency.PricePrefix
+			state.PriceSuffix = scope.Currency.PriceSuffix
+			state.Translations = currentTranslations()
+			activeApp.inventoryDashboardState = state
+			activeApp.inventoryMu.Unlock()
+
+			writeInventoryDashboardState(state)
+			callDashboardUpdated(state)
+		}
+		return
+	}
+
+	scope := market.CurrentScope()
+	state := inventory.BuildDashboard(*snapshot, inventoryItemCatalog(scope), cacheQuoteProvider{scope: scope}, inventory.DashboardOptions{
+		MarketScope:  market.FormatScope(scope),
+		CurrencyCode: scope.Currency.Code,
+		PricePrefix:  scope.Currency.PricePrefix,
+		PriceSuffix:  scope.Currency.PriceSuffix,
+		Refresh:      currentInventoryRefreshStatus(),
+		Now:          time.Now(),
+	})
+	state.Translations = currentTranslations()
+
+	activeApp.inventoryMu.Lock()
+	activeApp.inventoryDashboardState = state
+	activeApp.inventoryMu.Unlock()
+
+	writeInventoryDashboardState(state)
+	callDashboardUpdated(state)
+	fmt.Printf("[INVENTORY] dashboard state rebuilt (%s): items=%d marketable=%d priced=%d\n",
+		reason, state.Totals.TotalItemCount, state.Totals.MarketableItemCount, state.Totals.PricedItemCount)
 }

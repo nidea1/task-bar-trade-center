@@ -246,3 +246,37 @@ func TestCalculateSuggestedPrice(t *testing.T) {
 		})
 	}
 }
+
+func TestParseIconURL(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "unescaped JSON",
+			body: `"icon_url":"abcdef123"`,
+			want: "abcdef123",
+		},
+		{
+			name: "escaped JSON inside JS string",
+			body: `\"icon_url\":\"abcdef123\"`,
+			want: "abcdef123",
+		},
+		{
+			name: "triple escaped JSON inside JS string",
+			body: `\\\"icon_url\\\":\\\"abcdef123\\\"`,
+			want: "abcdef123",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ParseIconURL([]byte(tt.body))
+			if got != tt.want {
+				t.Errorf("ParseIconURL() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+

@@ -17,6 +17,7 @@ func Run() {
 	runtime.LockOSThread()
 	hideConsoleWindowIfNeeded()
 
+	configureNotificationIdentity()
 	createAppWindow()
 	setAppStatus(AppStatusStarting)
 	addTrayIcon()
@@ -115,6 +116,7 @@ func attachGameAndWatchHoveredItems() {
 		activeApp.gameReady.Store(true)
 		setAppStatus(AppStatusReady)
 		go refreshInventoryDashboardState("game-attached")
+		go preScanTooltipAOB()
 		watchHoveredItems(pHandle, gameAssemblyBase)
 		if handleGameClosed() {
 			return
@@ -354,4 +356,30 @@ func showAlreadyRunningMessage() {
 	caption, _ := syscall.UTF16PtrFromString("Task Bar Trade Center")
 	// MB_OK = 0x00000000 | MB_ICONWARNING = 0x00000030
 	win32.ProcMessageBoxW.Call(0, uintptr(unsafe.Pointer(text)), uintptr(unsafe.Pointer(caption)), 0x00000000|0x00000030)
+}
+
+func preScanTooltipAOB() {
+	if !EnablePriceHUD {
+		return
+	}
+	pHandle := activeApp.gameProcessHandle
+	base := activeApp.gameAssemblyBase
+	if pHandle == 0 || base == 0 {
+		return
+	}
+
+	activeApp.gameLayoutMu.RLock()
+	layout := activeApp.activeGameLayout
+	activeApp.gameLayoutMu.RUnlock()
+
+	fmt.Println("Pre-scanning tooltip AOB signatures in the background...")
+	
+	// Pre-resolve X
+	activeApp.tooltipXAOBResolver.Resolve("x", pHandle, base, layout.TooltipXPointerBaseAOB, layout.TooltipXPointerOffsets)
+	// Pre-resolve Y
+	activeApp.tooltipYAOBResolver.Resolve("y", pHandle, base, layout.TooltipYPointerBaseAOB, layout.TooltipYPointerOffsets)
+	// Pre-resolve Height
+	activeApp.tooltipHeightAOBResolver.Resolve("height", pHandle, base, layout.TooltipHeightPointerBaseAOB, layout.TooltipHeightPointerOffsets)
+	
+	fmt.Println("Tooltip AOB background pre-scan completed.")
 }

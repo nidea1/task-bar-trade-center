@@ -19,7 +19,7 @@ func GetInventoryDashboard() (inventory.DashboardState, error) {
 	state, err := readInventoryDashboardState()
 	if err != nil {
 		cached := currentInventoryDashboardState()
-		if !cached.UpdatedAt.IsZero() {
+		if cached.UpdatedAt != "" {
 			cached.Refresh = currentInventoryRefreshStatus()
 			return cached, nil
 		}
@@ -55,4 +55,94 @@ func OpenMarketListing(itemID int) error {
 	}
 	openURLInBrowser(steamMarketListingURLForScope(config, market.CurrentScope()))
 	return nil
+}
+
+type LanguageInfo struct {
+	Code string `json:"code"`
+	Name string `json:"name"`
+}
+
+type CurrencyInfo struct {
+	Code string `json:"code"`
+	Name string `json:"name"`
+}
+
+type RegionInfo struct {
+	CountryCode  string `json:"country_code"`
+	Name         string `json:"name"`
+	CurrencyCode string `json:"currency_code"`
+}
+
+type CurrentMarketScopeInfo struct {
+	CurrencyCode string `json:"currency_code"`
+	CountryCode  string `json:"country_code"`
+}
+
+func GetDisplayLanguages() []LanguageInfo {
+	locales := supportedAppLocales
+	list := make([]LanguageInfo, len(locales))
+	for i, l := range locales {
+		list[i] = LanguageInfo{
+			Code: l.Code,
+			Name: l.Name,
+		}
+	}
+	return list
+}
+
+func GetMarketCurrencies() []CurrencyInfo {
+	currencies := supportedMarketCurrencies
+	list := make([]CurrencyInfo, len(currencies))
+	for i, c := range currencies {
+		list[i] = CurrencyInfo{
+			Code: c.Code,
+			Name: c.Code,
+		}
+	}
+	return list
+}
+
+func GetMarketRegions() []RegionInfo {
+	regions := supportedMarketRegions
+	list := make([]RegionInfo, len(regions))
+	for i, r := range regions {
+		list[i] = RegionInfo{
+			CountryCode:  r.CountryCode,
+			Name:         r.Name,
+			CurrencyCode: r.CurrencyCode,
+		}
+	}
+	return list
+}
+
+func GetCurrentLanguage() string {
+	return currentDisplayLanguagePreference()
+}
+
+func GetCurrentMarketScope() CurrentMarketScopeInfo {
+	scope := market.CurrentScope()
+	return CurrentMarketScopeInfo{
+		CurrencyCode: scope.Currency.Code,
+		CountryCode:  scope.Region.CountryCode,
+	}
+}
+
+func SetDisplayLanguage(preference string) bool {
+	return selectDisplayLanguage(preference)
+}
+
+func SetMarketScope(currencyCode string, countryCode string) bool {
+	scope, changed, selected := market.SelectRegion(currencyCode, countryCode)
+	if selected && changed {
+		fmt.Printf("Market region changed via dashboard to %s.\n", market.FormatScope(scope))
+		saveSettingsToDisk()
+		refreshActiveMarketPrice()
+		rebuildDashboardState("region-changed")
+		return true
+	}
+	return false
+}
+
+func GetTranslations() map[string]string {
+	return currentTranslations()
 }

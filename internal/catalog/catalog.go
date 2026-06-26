@@ -15,6 +15,7 @@ type ItemConfig struct {
 	Name       map[string]string `json:"name"`
 	Grade      string            `json:"grade"`
 	Type       string            `json:"type"`
+	Gear       *string           `json:"gear"`
 	Marketable bool              `json:"marketable"`
 }
 

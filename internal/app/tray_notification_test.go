@@ -15,9 +15,11 @@ func TestTrayNotificationsEmitOnlyForDistinctStateTransitions(t *testing.T) {
 	originalUpdateStatus := activeApp.updateStatus.Load()
 
 	var received []string
+	var receivedTitles []string
 	activeApp.appHWND = 1
 	activeApp.trayIconAdded = true
-	publishTrayNotification = func(_ string, message string) {
+	publishTrayNotification = func(title string, message string) {
+		receivedTitles = append(receivedTitles, title)
 		received = append(received, message)
 	}
 	applyDisplayLanguagePreference("tr-TR")
@@ -39,8 +41,8 @@ func TestTrayNotificationsEmitOnlyForDistinctStateTransitions(t *testing.T) {
 
 	setAppStatus(AppStatusWaitingForGame)
 	flushTrayNotifications()
-	if len(received) != 1 || !strings.Contains(received[0], "TaskBarHero") {
-		t.Fatalf("WaitingForGame notification = %q", received)
+	if len(receivedTitles) != 1 || !strings.Contains(receivedTitles[0], "TaskBarHero") {
+		t.Fatalf("WaitingForGame notification title = %q", receivedTitles)
 	}
 
 	setAppStatus(AppStatusWaitingForGame)
@@ -58,8 +60,9 @@ func TestTrayNotificationsEmitOnlyForDistinctStateTransitions(t *testing.T) {
 	if len(received) != 2 {
 		t.Fatalf("expected WaitingForGame + UpdateFailed notifications, got = %q", received)
 	}
-	if strings.Contains(strings.Join(received, "\n"), "diagnostic detail") {
-		t.Fatalf("technical diagnostics leaked into tray notification: %q", received)
+	allNotificationText := strings.Join(append(receivedTitles, received...), "\n")
+	if strings.Contains(allNotificationText, "diagnostic detail") {
+		t.Fatalf("technical diagnostics leaked into tray notification: %q", allNotificationText)
 	}
 }
 
@@ -70,9 +73,11 @@ func TestStartupNotificationAndLanguageMenuMapping(t *testing.T) {
 	originalPreference := currentDisplayLanguagePreference()
 
 	var received []string
+	var receivedTitles []string
 	activeApp.appHWND = 1
 	activeApp.trayIconAdded = true
-	publishTrayNotification = func(_ string, message string) {
+	publishTrayNotification = func(title string, message string) {
+		receivedTitles = append(receivedTitles, title)
 		received = append(received, message)
 	}
 	applyDisplayLanguagePreference("en-US")
@@ -87,8 +92,15 @@ func TestStartupNotificationAndLanguageMenuMapping(t *testing.T) {
 
 	notifyApplicationStarted()
 	flushTrayNotifications()
-	if len(received) != 1 || received[0] != "Starting…" {
-		t.Fatalf("startup notification should be 'Starting…', got = %q", received)
+	if len(receivedTitles) != 1 || receivedTitles[0] != tr("status.starting") {
+		t.Fatalf("startup notification title should be %q, got = %q", tr("status.starting"), receivedTitles)
+	}
+
+	if received[0] != " " {
+		t.Fatalf("startup notification body should be blank, got = %q", received[0])
+	}
+	if strings.Contains(receivedTitles[0]+received[0], AppName) {
+		t.Fatalf("startup notification content should not repeat app name, got title=%q body=%q", receivedTitles[0], received[0])
 	}
 
 	if language, ok := appLanguageForMenuCommand(MenuLanguageBase + 8); !ok || language != "ja-JP" {

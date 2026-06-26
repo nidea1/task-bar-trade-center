@@ -11,11 +11,11 @@ import (
 )
 
 func registerDashboardHotkey() {
-	if !winapp.RegisterHotkey(activeApp.appHWND, DashboardHotkeyID, MOD_CONTROL|MOD_ALT, VK_I) {
+	if !winapp.RegisterHotkey(activeApp.appHWND, DashboardHotkeyID, 0, VK_F2) {
 		fmt.Println("Inventory dashboard hotkey could not be registered.")
 		return
 	}
-	fmt.Println("Inventory dashboard hotkey registered: Ctrl+Alt+I.")
+	fmt.Println("Inventory dashboard hotkey registered: F2.")
 }
 
 func unregisterDashboardHotkey() {
