@@ -60,8 +60,6 @@ const HERO_CLASSES = [
     { id: 6, name: "Slayer", key: "hero.slayer", color: "text-[#f05046]", gif: slayerGif }
 ];
 
-const MIN_VISIBLE_STASH_PAGES = 7;
-
 type ThemeMode = "dark" | "light";
 type PriceMode = "suggested" | "instant";
 type SortMode = "price_desc" | "price_asc" | "name_asc" | "count_desc" | "rarity_desc";
@@ -254,7 +252,7 @@ function App() {
     useEffect(() => {
         mountedRef.current = true;
         load();
-        const timer = window.setInterval(load, 5000);
+        const timer = window.setInterval(load, 10000);
         
         GetDisplayLanguages().then((list: {code: string; name: string}[] | null | undefined) => {
             if (mountedRef.current) setLanguages(list || []);
@@ -366,6 +364,7 @@ function App() {
     };
 
     const isCurrentlyRefreshing = state?.refresh?.refreshing || refreshing;
+    const isWaitingForInventory = !state?.updated_at;
 
     return (
         <main className={`dashboard-shell theme-${themeMode} h-screen bg-[#030304] text-[#e1d5bf] flex flex-col select-none overflow-hidden`}>
@@ -400,8 +399,8 @@ function App() {
                 <header className="game-panel !overflow-visible">
                     <div className="game-header dashboard-header">
                         <div className="dashboard-brand">
-                            <div className="p-1 bg-[#030304] rounded border border-[#463d30] w-10 h-10 flex items-center justify-center overflow-hidden shrink-0">
-                                <img src={appIcon} alt="App Logo" className="w-8 h-8 object-contain" />
+                            <div className="dashboard-logo-frame">
+                                <img src={appIcon} alt="App Logo" className="dashboard-logo" />
                             </div>
                             <div className="min-w-0">
                                 <h1 className="dashboard-title text-lg font-bold tracking-wider gold-text uppercase">
@@ -423,7 +422,7 @@ function App() {
                                     aria-label={`${controlThemeLabel}: ${themeLabel}`}
                                     title={`${controlThemeLabel}: ${themeLabel}`}
                                 >
-                                    {themeMode === "dark" ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+                                    {themeMode === "dark" ? <Moon className="dashboard-theme-icon" /> : <Sun className="dashboard-theme-icon" />}
                                 </button>
 
                                 <GameDropdown
@@ -488,6 +487,9 @@ function App() {
                     <div className="game-accent-line" />
 
                     {/* Stash/Inventory, Hero Gear and Total display bar */}
+                    {isWaitingForInventory ? (
+                        <DashboardValueBarSkeleton />
+                    ) : (
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between px-4 py-2.5 bg-[#08080a] text-xs gap-3">
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                             <div className="flex items-center gap-2">
@@ -514,6 +516,7 @@ function App() {
                             <span>{totals?.priced_item_count ?? 0}/{totals?.marketable_item_count ?? 0} {t("dashboard.priced_uppercase", "PRICED")}</span>
                         </div>
                     </div>
+                    )}
                 </header>
 
                 {/* ═══ Error Notifications ═══ */}
@@ -546,6 +549,10 @@ function App() {
                 )}
 
                 {/* ═══ Core Metrics Grid ═══ */}
+                {isWaitingForInventory ? (
+                    <DashboardLoadingSkeleton title={t("dashboard.waiting_state", "Waiting for inventory state...")} />
+                ) : (
+                <>
                 <section className="metrics-grid">
                     <MetricCard
                         label={t("dashboard.suggested_value", "Suggested Value")}
@@ -564,29 +571,6 @@ function App() {
                         value={formatPrice(totals?.stash_value, state)}
                         icon={<Archive className="w-4 h-4" />}
                         iconColor="text-[#ffbe2d]"
-                        tooltipDirection="down"
-                        tooltip={
-                            <div className="space-y-1.5 text-left text-[11px]">
-                                <div className="font-bold text-[#ffbe2d] uppercase tracking-wider text-[10px]">
-                                    {t("dashboard.storage_breakdown", "Storage Breakdown")}
-                                </div>
-                                <div className="h-[1px] bg-[#463d30]" />
-                                <div className="flex justify-between gap-4">
-                                    <span className="text-[#9a896f] uppercase">{t("location.inventory", "Inventory")}</span>
-                                    <span className="font-bold font-mono" title={formatPrice(totals?.inventory_value, state)}>{formatPrice(totals?.inventory_value, state)}</span>
-                                </div>
-                                {stashPageEntries(totals).map(([page, val, count]) => (
-                                    <div key={page} className="flex justify-between gap-4">
-                                        <span className="text-[#9a896f] uppercase">
-                                            {t("dashboard.stash_page", "Stash Page")} {page}
-                                        </span>
-                                        <span className="font-bold font-mono" title={`${formatPrice(Number(val), state)} · ${count} ${t("dashboard.items_uppercase", "ITEMS").toLowerCase()}`}>
-                                            {formatPrice(Number(val), state)}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                        }
                     />
                     <MetricCard
                         label={t("dashboard.equipped_gear", "Equipped Gear")}
@@ -649,8 +633,100 @@ function App() {
                         <MissingPricesPanel title={t("dashboard.missing_prices", "Missing Prices")} items={state?.missing_prices || []} state={state} currentLanguage={currentLanguage} />
                     )}
                 </section>
+                </>
+                )}
             </div>
         </main>
+    );
+}
+
+function DashboardValueBarSkeleton() {
+    return (
+        <div className="dashboard-value-skeleton" aria-hidden="true">
+            <div className="dashboard-skeleton-row">
+                <span className="dashboard-skeleton-line dashboard-skeleton-icon" />
+                <span className="dashboard-skeleton-line dashboard-skeleton-value" />
+                <span className="dashboard-skeleton-line dashboard-skeleton-label" />
+            </div>
+            <div className="dashboard-skeleton-row">
+                <span className="dashboard-skeleton-line dashboard-skeleton-icon" />
+                <span className="dashboard-skeleton-line dashboard-skeleton-value" />
+                <span className="dashboard-skeleton-line dashboard-skeleton-label" />
+            </div>
+            <div className="dashboard-skeleton-row">
+                <span className="dashboard-skeleton-line dashboard-skeleton-icon" />
+                <span className="dashboard-skeleton-line dashboard-skeleton-value" />
+                <span className="dashboard-skeleton-line dashboard-skeleton-label" />
+            </div>
+        </div>
+    );
+}
+
+function DashboardLoadingSkeleton({ title }: { title: string }) {
+    const metricSkeletons = [0, 1, 2, 3, 4];
+    const heroSkeletons = [0, 1, 2, 3, 4, 5];
+    const itemSkeletons = [0, 1, 2, 3, 4, 5];
+
+    return (
+        <div className="dashboard-loading-stack" role="status" aria-live="polite">
+            <section className="game-panel dashboard-loading-panel">
+                <div className="dashboard-loading-copy">
+                    <RefreshCw className="w-4 h-4 animate-spin text-[#ffbe2d]" />
+                    <span>{title}</span>
+                </div>
+                <div className="dashboard-loading-bars" aria-hidden="true">
+                    <span className="dashboard-skeleton-line dashboard-loading-bar-wide" />
+                    <span className="dashboard-skeleton-line dashboard-loading-bar" />
+                </div>
+            </section>
+
+            <section className="metrics-grid" aria-hidden="true">
+                {metricSkeletons.map((item) => (
+                    <div key={item} className="game-metric metric-card dashboard-metric-skeleton">
+                        <div className="dashboard-skeleton-stack">
+                            <span className="dashboard-skeleton-line dashboard-skeleton-label" />
+                            <span className="dashboard-skeleton-line dashboard-skeleton-value" />
+                        </div>
+                        <span className="dashboard-skeleton-line dashboard-skeleton-tile" />
+                    </div>
+                ))}
+            </section>
+
+            <section className="space-y-2" aria-hidden="true">
+                <span className="dashboard-skeleton-line dashboard-section-title-skeleton" />
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                    {heroSkeletons.map((item) => (
+                        <div key={item} className="game-metric dashboard-hero-skeleton">
+                            <div className="dashboard-skeleton-stack">
+                                <span className="dashboard-skeleton-line dashboard-skeleton-label" />
+                                <span className="dashboard-skeleton-line dashboard-skeleton-value" />
+                            </div>
+                            <span className="dashboard-skeleton-line dashboard-skeleton-avatar" />
+                        </div>
+                    ))}
+                </div>
+            </section>
+
+            <section className="game-panel dashboard-items-skeleton" aria-hidden="true">
+                <div className="game-header dashboard-items-skeleton-header">
+                    <span className="dashboard-skeleton-line dashboard-items-heading-skeleton" />
+                    <span className="dashboard-skeleton-line dashboard-items-badge-skeleton" />
+                </div>
+                <div className="game-accent-line" />
+                <div className="dashboard-items-skeleton-grid">
+                    {itemSkeletons.map((item) => (
+                        <div key={item} className="inventory-card dashboard-item-skeleton-card">
+                            <div className="dashboard-skeleton-line dashboard-item-icon-skeleton" />
+                            <div className="dashboard-skeleton-stack dashboard-item-copy-skeleton">
+                                <span className="dashboard-skeleton-line dashboard-item-title-skeleton" />
+                                <span className="dashboard-skeleton-line dashboard-item-meta-skeleton" />
+                                <span className="dashboard-skeleton-line dashboard-item-price-skeleton" />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </section>
+        </div>
     );
 }
 
@@ -1160,24 +1236,6 @@ function formatTokenLabel(value: string) {
         .filter(Boolean)
         .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
         .join(" ");
-}
-
-function stashPageEntries(totals?: DashboardState["totals"]) {
-    const values = totals?.stash_page_values || {};
-    const counts = totals?.stash_page_counts || {};
-    const hasCounts = Boolean(totals?.stash_page_counts);
-    const maxValuePage = Object.keys(values).reduce((max, page) => {
-        const pageNumber = Number(page);
-        return Number.isFinite(pageNumber) && pageNumber > max ? pageNumber : max;
-    }, 0);
-    const maxPage = Math.max(MIN_VISIBLE_STASH_PAGES, totals?.stash_page_count ?? 0, maxValuePage);
-    const entries: Array<[number, number, number]> = [];
-    for (let page = 1; page <= maxPage; page++) {
-        const count = Number(counts[page] ?? 0);
-        const value = hasCounts && count === 0 ? 0 : Number(values[page] ?? 0);
-        entries.push([page, value, count]);
-    }
-    return entries;
 }
 
 interface DropdownOption {

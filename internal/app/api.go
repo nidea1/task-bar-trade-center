@@ -8,7 +8,7 @@ import (
 	"github.com/nidea1/task-bar-trade-center/internal/market"
 )
 
-const inventoryDashboardPollCacheMaxAge = 10 * time.Second
+const inventoryDashboardPollCacheMaxAge = 15 * time.Second
 
 func RunRestartAfterUpdateHelper() bool {
 	return runRestartAfterUpdateHelper()
@@ -23,18 +23,14 @@ func GetInventoryDashboard() (inventory.DashboardState, error) {
 		return cached, nil
 	}
 
-	state, err := readInventoryDashboardStateLocked()
-	if err != nil {
-		cached := currentInventoryDashboardState()
-		if cached.UpdatedAt != "" {
-			cached.Refresh = currentInventoryRefreshStatus()
-			cached.Translations = currentTranslations()
-			return cached, nil
-		}
-		return inventory.DashboardState{}, err
+	cached := currentInventoryDashboardState()
+	if canReadInventorySnapshot() {
+		go refreshInventoryDashboardState("dashboard-cache-miss")
 	}
-	storeInventoryDashboardState(state)
-	return state, nil
+	if cached.UpdatedAt != "" {
+		return withCurrentDashboardRuntimeFields(cached), nil
+	}
+	return currentInventoryDashboardShellState(), nil
 }
 
 func RefreshInventoryPrices() (inventory.RefreshStatus, error) {
@@ -61,9 +57,7 @@ func freshInventoryDashboardCache(maxAge time.Duration) (inventory.DashboardStat
 	if err != nil || time.Since(updatedAt) > maxAge {
 		return inventory.DashboardState{}, false
 	}
-	cached.Refresh = currentInventoryRefreshStatus()
-	cached.Translations = currentTranslations()
-	return cached, true
+	return withCurrentDashboardRuntimeFields(cached), true
 }
 
 func OpenMarketListing(itemID int) error {

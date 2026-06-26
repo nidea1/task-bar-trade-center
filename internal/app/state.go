@@ -89,6 +89,8 @@ type App struct {
 	lastSnapshot              *playerdata.InventorySnapshot
 	inventoryDashboardState   inventory.DashboardState
 	inventoryPriceQueue       *inventory.RefreshQueue
+	marketableInventorySeen   map[uint64]struct{}
+	marketableInventorySeeded bool
 	priceCacheRefreshing      atomic.Bool
 }
 

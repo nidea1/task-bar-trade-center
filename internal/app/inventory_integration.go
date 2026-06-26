@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nidea1/task-bar-trade-center/internal/game"
 	"github.com/nidea1/task-bar-trade-center/internal/inventory"
 	"github.com/nidea1/task-bar-trade-center/internal/market"
 	"github.com/nidea1/task-bar-trade-center/internal/playerdata"
@@ -16,6 +17,8 @@ import (
 type cacheQuoteProvider struct {
 	scope market.MarketScope
 }
+
+const inventoryDashboardMonitorInterval = 10 * time.Second
 
 func refreshInventoryDashboardState(reason string) {
 	if !activeApp.inventoryDashboardBuildMu.TryLock() {
@@ -58,6 +61,25 @@ func currentInventoryDashboardState() inventory.DashboardState {
 	return activeApp.inventoryDashboardState
 }
 
+func currentInventoryDashboardShellState() inventory.DashboardState {
+	return withCurrentDashboardRuntimeFields(inventory.DashboardState{})
+}
+
+func withCurrentDashboardRuntimeFields(state inventory.DashboardState) inventory.DashboardState {
+	scope := market.CurrentScope()
+	state.MarketScope = market.FormatScope(scope)
+	state.CurrencyCode = scope.Currency.Code
+	state.PricePrefix = scope.Currency.PricePrefix
+	state.PriceSuffix = scope.Currency.PriceSuffix
+	state.Refresh = currentInventoryRefreshStatus()
+	state.Translations = currentTranslations()
+	return state
+}
+
+func canReadInventorySnapshot() bool {
+	return activeApp.gameProcessHandle != 0 && activeApp.gameProcessID != 0
+}
+
 func readInventoryDashboardStateLocked() (inventory.DashboardState, error) {
 	activeApp.inventoryDashboardBuildMu.Lock()
 	defer activeApp.inventoryDashboardBuildMu.Unlock()
@@ -65,23 +87,11 @@ func readInventoryDashboardStateLocked() (inventory.DashboardState, error) {
 }
 
 func readInventoryDashboardState() (inventory.DashboardState, error) {
-	if activeApp.gameProcessHandle == 0 || activeApp.gameProcessID == 0 {
-		return inventory.DashboardState{}, fmt.Errorf("game process is not attached")
+	snapshot, err := readInventorySnapshot()
+	if err != nil {
+		return inventory.DashboardState{}, err
 	}
-	memory := tbhmem.FromHandle(activeApp.gameProcessID, activeApp.gameProcessHandle)
-	if memory == nil {
-		return inventory.DashboardState{}, fmt.Errorf("game process handle is unavailable")
-	}
-
-	resolver := currentInventoryResolver()
-	snapshot, ok := resolver.ReadSnapshot(memory, time.Now())
-	if !ok {
-		return inventory.DashboardState{}, fmt.Errorf("PlayerSaveData could not be resolved")
-	}
-
-	activeApp.inventoryMu.Lock()
-	activeApp.lastSnapshot = &snapshot
-	activeApp.inventoryMu.Unlock()
+	storeInventorySnapshotAndNotify(snapshot)
 
 	scope := market.CurrentScope()
 	state := inventory.BuildDashboard(snapshot, inventoryItemCatalog(scope), cacheQuoteProvider{scope: scope}, inventory.DashboardOptions{
@@ -94,6 +104,30 @@ func readInventoryDashboardState() (inventory.DashboardState, error) {
 	})
 	state.Translations = currentTranslations()
 	return state, nil
+}
+
+func readInventorySnapshot() (playerdata.InventorySnapshot, error) {
+	if !canReadInventorySnapshot() {
+		return playerdata.InventorySnapshot{}, fmt.Errorf("game process is not attached")
+	}
+	memory := tbhmem.FromHandle(activeApp.gameProcessID, activeApp.gameProcessHandle)
+	if memory == nil {
+		return playerdata.InventorySnapshot{}, fmt.Errorf("game process handle is unavailable")
+	}
+
+	resolver := currentInventoryResolver()
+	snapshot, ok := resolver.ReadSnapshot(memory, time.Now())
+	if !ok {
+		return playerdata.InventorySnapshot{}, fmt.Errorf("PlayerSaveData could not be resolved")
+	}
+	return snapshot, nil
+}
+
+func storeInventorySnapshotAndNotify(snapshot playerdata.InventorySnapshot) {
+	activeApp.inventoryMu.Lock()
+	activeApp.lastSnapshot = &snapshot
+	activeApp.inventoryMu.Unlock()
+	notifyMarketableInventoryItems(recordMarketableInventoryItems(snapshot))
 }
 
 func currentInventoryResolver() *playerdata.Resolver {
@@ -178,6 +212,18 @@ func writeInventoryDashboardState(state inventory.DashboardState) error {
 func openInventoryDashboard() {
 	go refreshInventoryDashboardState("open-dashboard")
 	callOpenDashboard()
+}
+
+func monitorInventoryDashboardState(processHandle uintptr) {
+	ticker := time.NewTicker(inventoryDashboardMonitorInterval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		if processHandle == 0 || game.HasProcessExited(processHandle) || activeApp.gameProcessHandle != processHandle {
+			return
+		}
+		refreshInventoryDashboardState("inventory-monitor")
+	}
 }
 
 func refreshInventoryPricesFromDashboard() {

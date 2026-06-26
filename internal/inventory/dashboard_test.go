@@ -111,16 +111,22 @@ func TestBuildDashboardIncludesEmptyStashPages(t *testing.T) {
 		StashPageCount: 7,
 		Items: []playerdata.OwnedItem{
 			{ItemID: 100, UniqueID: 1, Location: playerdata.LocationStash, SlotIndex: 0, Marketable: true},
-			{ItemID: 200, UniqueID: 2, Location: playerdata.LocationStash, SlotIndex: 350, Marketable: true},
+			{ItemID: 200, UniqueID: 2, Location: playerdata.LocationStash, SlotIndex: 401, Marketable: true},
+			{ItemID: 300, UniqueID: 3, Location: playerdata.LocationStash, SlotIndex: 520, Marketable: true},
+			{ItemID: 400, UniqueID: 4, Location: playerdata.LocationStash, SlotIndex: 650, Marketable: true},
 		},
 	}
 	catalog := map[int]ItemDescriptor{
 		100: {Name: "Ruby", Marketable: true},
 		200: {Name: "Emerald", Marketable: true},
+		300: {Name: "Topaz", Marketable: true},
+		400: {Name: "Sapphire", Marketable: true},
 	}
 	quotes := quoteMap{
 		100: {Suggested: 2, HasSuggested: true},
 		200: {Suggested: 5, HasSuggested: true},
+		300: {Suggested: 6, HasSuggested: true},
+		400: {Suggested: 7, HasSuggested: true},
 	}
 
 	state := BuildDashboard(snapshot, catalog, quotes, DashboardOptions{Now: now})
@@ -151,13 +157,16 @@ func TestBuildDashboardIncludesEmptyStashPages(t *testing.T) {
 	if state.Totals.StashPageCounts[2] != 0 {
 		t.Errorf("stash page 2 count = %d, want 0", state.Totals.StashPageCounts[2])
 	}
-	if state.Totals.StashPageValues[4] != 5 {
-		t.Errorf("stash page 4 value = %f, want 5", state.Totals.StashPageValues[4])
+	if state.Totals.StashPageValues[5] != 5 {
+		t.Errorf("stash page 5 value = %f, want 5", state.Totals.StashPageValues[5])
 	}
-	if state.Totals.StashPageCounts[4] != 1 {
-		t.Errorf("stash page 4 count = %d, want 1", state.Totals.StashPageCounts[4])
+	if state.Totals.StashPageCounts[5] != 1 {
+		t.Errorf("stash page 5 count = %d, want 1", state.Totals.StashPageCounts[5])
 	}
-	if state.Totals.StashPageValues[7] != 0 {
-		t.Errorf("stash page 7 value = %f, want 0", state.Totals.StashPageValues[7])
+	if state.Totals.StashPageValues[6] != 6 {
+		t.Errorf("stash page 6 value = %f, want 6", state.Totals.StashPageValues[6])
+	}
+	if state.Totals.StashPageValues[7] != 7 {
+		t.Errorf("stash page 7 value = %f, want 7", state.Totals.StashPageValues[7])
 	}
 }

@@ -57,7 +57,7 @@ func (resolver *Resolver) readSlotItems(memory Memory, list listInfo, uniqueToIt
 			continue
 		}
 		seen[uniqueID] = struct{}{}
-		items = append(items, resolver.ownedItem(itemID, uniqueID, location, 0, i))
+		items = append(items, resolver.ownedItem(itemID, uniqueID, location, 0, readSlotPosition(memory, slot, i, list.size)))
 	}
 	return items
 }
@@ -111,6 +111,22 @@ func (resolver *Resolver) ownedItem(itemID int, uniqueID uint64, location Locati
 		Marketable:      meta.Marketable,
 		SlotIndex:       slotIndex,
 	}
+}
+
+func readSlotPosition(memory Memory, slot uintptr, fallback int, listSize int) int {
+	value, ok := memory.ReadInt32(slot + slotIndex)
+	if !ok || value < 0 {
+		return fallback
+	}
+	// The save slot list is normally the physical slot order. Some builds also
+	// expose a sparse Index field; use it only when the list is compressed.
+	if int(value) < listSize {
+		return fallback
+	}
+	if value > 5000 {
+		return fallback
+	}
+	return int(value)
 }
 
 func countSlotMatches(memory Memory, list listInfo, uniqueToItem map[uint64]int) (filled int, known int) {

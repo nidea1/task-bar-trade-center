@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added stash page item counts to inventory dashboard totals and the React dashboard stash page summary.
 - Added a missing-prices side panel next to the all-marketable-items dashboard view.
 - Added regression coverage for market-scope inventory repricing, stash page counts, refresh queue cleanup, and USD fallback currency formatting.
+- Added dashboard loading skeletons and a shell dashboard state so the Wails UI can open before inventory memory is readable.
+- Added tray notifications for newly acquired marketable inventory items, including localized item details and price-refresh fallback text.
+- Added a Wails dashboard window icon helper that applies the app icon to the custom dashboard window class.
+- Added regression coverage for dashboard shell responses, marketable item notifications, sparse stash slot indexes, stale equipped references, and PlayerSaveData candidate selection.
 
 ### Changed
 - Structured the codebase into internal packages inside `internal/` (such as `internal/app`, `internal/catalog`, `internal/game`, `internal/il2cpp`, `internal/inventory`, `internal/localization`, `internal/market`, `internal/playerdata`, `internal/win32`, `internal/winapp`, `internal/updater`, `internal/tbhmem`, `internal/overlay`).
@@ -37,6 +41,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reworked the item dashboard layout around the filtered all-items grid, compact controls, stable dropdown labels, and better overflow/tooltips.
 - Configured Vite and Tailwind development scanning to ignore generated, backend, build, and `ext-project-refs` paths.
 - Changed the system display-language preference sentinel from `system` to `sys`.
+- Changed inventory dashboard reads to return cached or shell state immediately while refreshing snapshots in the background.
+- Added periodic inventory dashboard monitoring while TaskBarHero is attached.
+- Improved PlayerSaveData resolution by preferring higher-gold candidates, briefly reusing fresh resolved objects, and reading sparse save-slot indexes when available.
+- Updated dashboard polling cadence and icon sizing/branding styles.
 
 ### Removed
 - Removed the obsolete Windows-only `tools/playerdiag` diagnostic utility.
@@ -51,6 +59,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed refresh queue pending storage being retained after queued work drains.
 - Fixed dashboard async loads from updating React state after unmount or while another load is already in flight.
 - Fixed Turkish hatchet labeling from `Nacak` to `Balta`.
+- Fixed dashboard API calls failing before the game process is attached by returning localized runtime fields with an empty shell state.
+- Fixed stale hero-equipped references overriding current inventory/stash slot locations.
+- Fixed stash page value tests and slot mapping for sparse pages beyond the compressed slot list.
 
 ## [0.8.1] - 2026-06-25
 

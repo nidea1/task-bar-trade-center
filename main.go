@@ -8,6 +8,7 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	windowsOptions "github.com/wailsapp/wails/v2/pkg/options/windows"
 )
 
 //go:embed all:frontend/dist
@@ -28,6 +29,9 @@ func main() {
 		StartHidden:       true,
 		HideWindowOnClose: true,
 		Frameless:         true,
+		Windows: &windowsOptions.Options{
+			WindowClassName: core.DashboardWindowClassName,
+		},
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},

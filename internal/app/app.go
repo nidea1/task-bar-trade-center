@@ -116,6 +116,7 @@ func attachGameAndWatchHoveredItems() {
 		activeApp.gameReady.Store(true)
 		setAppStatus(AppStatusReady)
 		go refreshInventoryDashboardState("game-attached")
+		go monitorInventoryDashboardState(pHandle)
 		go preScanTooltipAOB()
 		watchHoveredItems(pHandle, gameAssemblyBase)
 		if handleGameClosed() {
@@ -171,6 +172,7 @@ func configureGameProcess(pid uint32, processHandle uintptr, gameAssemblyBase ui
 	activeApp.tooltipXAOBResolver.Reset()
 	activeApp.tooltipYAOBResolver.Reset()
 	activeApp.tooltipHeightAOBResolver.Reset()
+	resetMarketableInventoryNotifications()
 }
 
 func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
@@ -373,13 +375,13 @@ func preScanTooltipAOB() {
 	activeApp.gameLayoutMu.RUnlock()
 
 	fmt.Println("Pre-scanning tooltip AOB signatures in the background...")
-	
+
 	// Pre-resolve X
 	activeApp.tooltipXAOBResolver.Resolve("x", pHandle, base, layout.TooltipXPointerBaseAOB, layout.TooltipXPointerOffsets)
 	// Pre-resolve Y
 	activeApp.tooltipYAOBResolver.Resolve("y", pHandle, base, layout.TooltipYPointerBaseAOB, layout.TooltipYPointerOffsets)
 	// Pre-resolve Height
 	activeApp.tooltipHeightAOBResolver.Resolve("height", pHandle, base, layout.TooltipHeightPointerBaseAOB, layout.TooltipHeightPointerOffsets)
-	
+
 	fmt.Println("Tooltip AOB background pre-scan completed.")
 }

@@ -1,13 +1,14 @@
 package app
 
 const (
-	AppName         = "Task Bar Trade Center"
-	AppShortName    = "TBTC"
-	AppUserModelID  = "nidea1.TaskBarTradeCenter"
-	AppProcessName  = "tbtc"
-	AppCreatorName  = "nidea1"
-	AppVersion      = "0.8.1"
-	GameProcessName = "TaskBarHero.exe"
+	AppName                  = "Task Bar Trade Center"
+	AppShortName             = "TBTC"
+	AppUserModelID           = "nidea1.TaskBarTradeCenter"
+	AppProcessName           = "tbtc"
+	DashboardWindowClassName = AppProcessName + "DashboardWindow"
+	AppCreatorName           = "nidea1"
+	AppVersion               = "0.8.1"
+	GameProcessName          = "TaskBarHero.exe"
 
 	EnablePriceHUD           = true
 	EnableDynamicTooltipScan = false
@@ -44,6 +45,7 @@ const (
 	WM_PAINT                  = 0x000F
 	WM_CLOSE                  = 0x0010
 	WM_DESTROY                = 0x0002
+	WM_SETICON                = 0x0080
 	WM_COMMAND                = 0x0111
 	WM_HOTKEY                 = 0x0312
 	WM_OVERLAY_UPDATE         = 0x8001
@@ -108,7 +110,9 @@ const (
 
 	NOTIFYICON_VERSION_4 = 4
 	IDI_APPLICATION      = 32512
-	AppIconResourceID    = 1
+	AppIconResourceID    = 3
+	ICON_SMALL           = 0
+	ICON_BIG             = 1
 
 	WM_CONTEXTMENU = 0x007B
 	WM_LBUTTONDOWN = 0x0201

@@ -34,6 +34,7 @@ func (a *App) startup(ctx context.Context) {
 	a.mu.Lock()
 	a.core = appCore
 	a.mu.Unlock()
+	core.ApplyDashboardWindowIcon()
 	go appCore.Run()
 }
 
@@ -50,6 +51,7 @@ func (a *App) showDashboard() {
 	}
 	runtime.WindowShow(ctx)
 	runtime.WindowUnminimise(ctx)
+	core.ApplyDashboardWindowIcon()
 }
 
 func (a *App) quit() {

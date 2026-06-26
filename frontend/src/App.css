@@ -224,6 +224,32 @@
   min-width: 0;
 }
 
+.dashboard-logo-frame {
+  width: 52px;
+  height: 52px;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 6px;
+  background:
+    radial-gradient(circle at 50% 35%, rgba(255, 190, 45, 0.18), transparent 58%),
+    #030304;
+  border: 1px solid #7e5326;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 190, 45, 0.12),
+    0 0 16px rgba(255, 190, 45, 0.12);
+}
+
+.dashboard-logo {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.65));
+}
+
 .dashboard-title,
 .dashboard-market,
 .dashboard-updated {
@@ -333,11 +359,17 @@
 }
 
 .dashboard-theme-toggle {
-  width: 36px;
-  height: 32px;
-  min-width: 36px;
+  width: 32px;
+  height: 30px;
+  min-width: 32px;
   padding: 0;
   flex-shrink: 0;
+}
+
+.dashboard-theme-icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.25;
 }
 
 @media (max-width: 980px) {
@@ -345,6 +377,16 @@
     grid-template-columns: minmax(190px, 235px) minmax(0, 1fr);
     gap: 0.5rem 0.75rem;
     padding: 0.55rem 0.9rem;
+  }
+
+  .dashboard-logo-frame {
+    width: 46px;
+    height: 46px;
+  }
+
+  .dashboard-logo {
+    width: 38px;
+    height: 38px;
   }
 
   .dashboard-title {
@@ -381,9 +423,9 @@
   }
 
   .dashboard-theme-toggle {
-    width: 34px;
-    height: 30px;
-    min-width: 34px;
+    width: 30px;
+    height: 29px;
+    min-width: 30px;
   }
 
   .dashboard-refresh-row {
@@ -411,6 +453,209 @@
   .dashboard-refresh-row {
     justify-content: flex-start;
     justify-items: start;
+  }
+}
+
+/* ---- Dashboard Loading Skeleton ---- */
+.dashboard-value-skeleton {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 0.625rem 1rem;
+  background: #08080a;
+}
+
+.dashboard-skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 190px;
+}
+
+.dashboard-loading-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.dashboard-loading-panel {
+  min-height: 84px;
+  padding: 1rem;
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(180px, 1fr);
+  align-items: center;
+  gap: 1rem;
+}
+
+.dashboard-loading-copy {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
+  color: #ffbe2d;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dashboard-loading-bars,
+.dashboard-skeleton-stack {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.dashboard-skeleton-line {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: 3px;
+  background: linear-gradient(90deg, rgba(70, 61, 48, 0.5), rgba(126, 83, 38, 0.36), rgba(70, 61, 48, 0.5));
+}
+
+.dashboard-skeleton-line::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 190, 45, 0.16), transparent);
+  animation: dashboard-skeleton-shimmer 1.35s ease-in-out infinite;
+}
+
+.dashboard-skeleton-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+}
+
+.dashboard-skeleton-label {
+  width: 86px;
+  height: 9px;
+}
+
+.dashboard-skeleton-value {
+  width: 104px;
+  height: 13px;
+}
+
+.dashboard-skeleton-tile,
+.dashboard-skeleton-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.dashboard-loading-bar-wide {
+  width: 100%;
+  height: 12px;
+}
+
+.dashboard-loading-bar {
+  width: min(68%, 420px);
+  height: 10px;
+}
+
+.dashboard-metric-skeleton,
+.dashboard-hero-skeleton {
+  min-height: 58px;
+  padding: 0.625rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.625rem;
+}
+
+.dashboard-section-title-skeleton {
+  width: 132px;
+  height: 10px;
+}
+
+.dashboard-items-skeleton {
+  min-height: 260px;
+}
+
+.dashboard-items-skeleton-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.dashboard-items-heading-skeleton {
+  width: 190px;
+  height: 12px;
+}
+
+.dashboard-items-badge-skeleton {
+  width: 40px;
+  height: 18px;
+}
+
+.dashboard-items-skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: #030304;
+}
+
+.inventory-card.dashboard-item-skeleton-card {
+  min-height: 106px;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.75rem;
+  cursor: default;
+  pointer-events: none;
+}
+
+.inventory-card.dashboard-item-skeleton-card:hover {
+  transform: none;
+}
+
+.dashboard-item-icon-skeleton {
+  width: 42px;
+  height: 42px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.dashboard-item-copy-skeleton {
+  flex: 1;
+  padding-top: 0.2rem;
+}
+
+.dashboard-item-title-skeleton {
+  width: 82%;
+  height: 12px;
+}
+
+.dashboard-item-meta-skeleton {
+  width: 62%;
+  height: 9px;
+}
+
+.dashboard-item-price-skeleton {
+  width: 72%;
+  height: 18px;
+  margin-top: 0.25rem;
+}
+
+@keyframes dashboard-skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@media (max-width: 760px) {
+  .dashboard-loading-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-skeleton-row {
+    min-width: 100%;
   }
 }
 
@@ -795,6 +1040,33 @@
 
 .theme-light .dashboard-dropdown-prefix {
   color: #6b7280;
+}
+
+.theme-light .dashboard-logo-frame {
+  background:
+    radial-gradient(circle at 50% 35%, rgba(184, 137, 69, 0.18), transparent 58%),
+    #ffffff;
+  border-color: #c98b22;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.8),
+    0 3px 12px rgba(15, 23, 42, 0.1);
+}
+
+.theme-light .dashboard-value-skeleton,
+.theme-light .dashboard-items-skeleton-grid {
+  background: #edf1f4;
+}
+
+.theme-light .dashboard-loading-copy {
+  color: #a15c07;
+}
+
+.theme-light .dashboard-skeleton-line {
+  background: linear-gradient(90deg, #d8e0ea, #c8b08e, #d8e0ea);
+}
+
+.theme-light .dashboard-skeleton-line::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
 }
 
 .theme-light .bg-\[\#030304\] {

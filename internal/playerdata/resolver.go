@@ -9,7 +9,8 @@ import (
 )
 
 const (
-	stashSlotsPerPage = 100
+	stashSlotsPerPage  = 100
+	cachedObjectMaxAge = 2 * time.Second
 
 	playerCurrencies = 0x48
 	playerHeroes     = 0x50
@@ -26,6 +27,7 @@ const (
 
 	itemSaveItemKey  = 0x10
 	itemSaveUniqueID = 0x18
+	slotIndex        = 0x10
 	slotUniqueID     = 0x18
 
 	maxClassRefs = 50000
@@ -39,8 +41,9 @@ type Memory interface {
 }
 
 type Resolver struct {
-	metadata     map[int]ItemMetadata
-	cachedObject uintptr
+	metadata               map[int]ItemMetadata
+	cachedObject           uintptr
+	cachedObjectResolvedAt time.Time
 }
 
 type listInfo struct {
@@ -54,6 +57,7 @@ type listInfo struct {
 type candidate struct {
 	object uintptr
 	score  int
+	gold   uint64
 }
 
 func NewResolver(metadata map[int]ItemMetadata) *Resolver {
@@ -65,13 +69,30 @@ func NewResolver(metadata map[int]ItemMetadata) *Resolver {
 }
 
 func (resolver *Resolver) ReadSnapshot(memory Memory, now time.Time) (InventorySnapshot, bool) {
-	if resolver.cachedObject != 0 {
+	if now.IsZero() {
+		now = time.Now()
+	}
+	if resolver.cachedObject != 0 && now.Sub(resolver.cachedObjectResolvedAt) < cachedObjectMaxAge {
 		if snapshot, ok := resolver.readObject(memory, resolver.cachedObject, now); ok {
 			return snapshot, true
 		}
 		resolver.cachedObject = 0
 	}
 
+	if snapshot, ok := resolver.resolveAndReadObject(memory, now); ok {
+		return snapshot, true
+	}
+
+	if resolver.cachedObject != 0 {
+		if snapshot, ok := resolver.readObject(memory, resolver.cachedObject, now); ok {
+			return snapshot, true
+		}
+		resolver.cachedObject = 0
+	}
+	return InventorySnapshot{}, false
+}
+
+func (resolver *Resolver) resolveAndReadObject(memory Memory, now time.Time) (InventorySnapshot, bool) {
 	classes, ok := il2cpp.ResolveClassByName(memory, "PlayerSaveData")
 	if !ok {
 		return InventorySnapshot{}, false
@@ -87,9 +108,9 @@ func (resolver *Resolver) ReadSnapshot(memory Memory, now time.Time) (InventoryS
 				continue
 			}
 			object := ref - il2cpp.ObjectClassOffset
-			score, ok := resolver.validateObject(memory, object)
-			if ok && score > best.score {
-				best = candidate{object: object, score: score}
+			next, ok := resolver.validateObject(memory, object)
+			if ok && betterCandidate(next, best) {
+				best = next
 			}
 		}
 	}
@@ -97,17 +118,28 @@ func (resolver *Resolver) ReadSnapshot(memory Memory, now time.Time) (InventoryS
 		return InventorySnapshot{}, false
 	}
 	resolver.cachedObject = best.object
+	resolver.cachedObjectResolvedAt = now
 	return resolver.readObject(memory, best.object, now)
 }
 
-func (resolver *Resolver) validateObject(memory Memory, object uintptr) (int, bool) {
+func betterCandidate(next candidate, best candidate) bool {
+	if best.object == 0 {
+		return true
+	}
+	if next.gold != best.gold {
+		return next.gold > best.gold
+	}
+	return next.score > best.score
+}
+
+func (resolver *Resolver) validateObject(memory Memory, object uintptr) (candidate, bool) {
 	items := readListInfo(memory, readPtr(memory, object+playerItems), 200000)
 	if !items.ok || items.size <= 0 {
-		return 0, false
+		return candidate{}, false
 	}
 	uniqueToItem, validItems := resolver.readItemSaveDataList(memory, items)
 	if validItems < 3 {
-		return 0, false
+		return candidate{}, false
 	}
 
 	score := validItems
@@ -123,12 +155,14 @@ func (resolver *Resolver) validateObject(memory Memory, object uintptr) (int, bo
 		_, known := countEquippedMatches(memory, heroes, uniqueToItem)
 		score += known * 3
 	}
+	var gold uint64
 	if currencies := readListInfo(memory, readPtr(memory, object+playerCurrencies), 1000); currencies.ok {
-		if _, ok := readGold(memory, currencies); ok {
+		if value, ok := readGold(memory, currencies); ok {
+			gold = value
 			score += 10
 		}
 	}
-	return score, score > validItems
+	return candidate{object: object, score: score, gold: gold}, score > validItems
 }
 
 func (resolver *Resolver) readObject(memory Memory, object uintptr, now time.Time) (InventorySnapshot, bool) {
@@ -144,15 +178,17 @@ func (resolver *Resolver) readObject(memory Memory, object uintptr, now time.Tim
 	var owned []OwnedItem
 	stashPageCount := 0
 	seen := make(map[uint64]struct{})
-	if heroes := readListInfo(memory, readPtr(memory, object+playerHeroes), 1000); heroes.ok {
-		owned = append(owned, resolver.readEquippedItems(memory, heroes, uniqueToItem, seen)...)
-	}
 	if stash := readListInfo(memory, readPtr(memory, object+playerStash), 200000); stash.ok {
 		stashPageCount = pageCountForSlotCount(stash.size)
 		owned = append(owned, resolver.readSlotItems(memory, stash, uniqueToItem, seen, LocationStash)...)
 	}
 	if inventory := readListInfo(memory, readPtr(memory, object+playerInventory), 200000); inventory.ok {
 		owned = append(owned, resolver.readSlotItems(memory, inventory, uniqueToItem, seen, LocationInventory)...)
+	}
+	// Storage slots are the stronger current-location signal when a save-backed hero
+	// equipped array lags after an unequip.
+	if heroes := readListInfo(memory, readPtr(memory, object+playerHeroes), 1000); heroes.ok {
+		owned = append(owned, resolver.readEquippedItems(memory, heroes, uniqueToItem, seen)...)
 	}
 
 	var gold uint64
