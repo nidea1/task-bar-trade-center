@@ -1,6 +1,9 @@
 package app
 
 import (
+	"github.com/nidea1/task-bar-trade-center/internal/market"
+	"github.com/nidea1/task-bar-trade-center/internal/win32"
+
 	"fmt"
 	"runtime"
 	"syscall"
@@ -79,7 +82,7 @@ func startMonitoringAfterLocalInitialization() {
 	go attachGameAndWatchHoveredItems()
 	go checkUpdatesOnStartup()
 	go refreshGameLayoutInBackground()
-	go fetchExchangeRatesFromAPI()
+	go market.FetchExchangeRatesFromAPI()
 	fmt.Println("startup monitor_ready")
 }
 
@@ -122,7 +125,7 @@ func attachGameAndWatchHoveredItems() {
 func waitForGameProcess() uint32 {
 	var pid uint32
 	for pid == 0 {
-		pid = findProcessID(GameProcessName)
+		pid = game.FindProcessID(GameProcessName)
 		if pid == 0 {
 			fmt.Printf("Waiting for %s... Launch the game.\n", GameProcessName)
 			time.Sleep(2 * time.Second)
@@ -145,10 +148,10 @@ func openGameProcess(pid uint32) (uintptr, bool) {
 func waitForGameAssembly(processHandle uintptr) (uintptr, bool) {
 	var gameAssemblyBase uintptr
 	for gameAssemblyBase == 0 {
-		if hasProcessExited(processHandle) {
+		if game.HasProcessExited(processHandle) {
 			return 0, false
 		}
-		gameAssemblyBase = getModuleBaseAddress(processHandle, "GameAssembly.dll")
+		gameAssemblyBase = game.ModuleBaseAddress(processHandle, "GameAssembly.dll")
 		if gameAssemblyBase == 0 {
 			fmt.Println("Waiting for GameAssembly.dll to load into memory...")
 			time.Sleep(1 * time.Second)
@@ -175,7 +178,7 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 	aobResolver := game.HoveredItemAOBResolver{}
 
 	for {
-		if hasProcessExited(pHandle) {
+		if game.HasProcessExited(pHandle) {
 			return
 		}
 
@@ -292,7 +295,7 @@ func marketableItemExists(itemID int32) bool {
 }
 
 func runOverlayMessageLoop() {
-	var msg MSG
+	var msg win32.MSG
 	for {
 		ret, _, _ := procGetMessageW.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
 		if ret == 0 || ret == ^uintptr(0) {

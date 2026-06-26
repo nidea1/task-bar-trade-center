@@ -1,5 +1,9 @@
 package app
 
+import (
+	"github.com/nidea1/task-bar-trade-center/internal/market"
+)
+
 import "github.com/nidea1/task-bar-trade-center/internal/winapp"
 
 func showTrayMenu() {
@@ -12,10 +16,10 @@ func showTrayMenu() {
 	cacheSize := priceCacheSize()
 	refreshing := PriceCacheRefreshing.Load()
 	ready := GameReady.Load()
-	scope := currentMarketScope()
+	scope := market.CurrentScope()
 
 	appendTrayMenuItem(menu, MF_STRING|MF_GRAYED, 0, tr("menu.status", appStatusText()))
-	appendTrayMenuItem(menu, MF_STRING|MF_GRAYED, 0, tr("menu.currency_region", formatMarketScope(scope)))
+	appendTrayMenuItem(menu, MF_STRING|MF_GRAYED, 0, tr("menu.currency_region", market.FormatScope(scope)))
 	appendMarketScopeMenus(menu, scope)
 	appendLanguageMenu(menu)
 	appendTraySeparator(menu)
@@ -66,7 +70,7 @@ func appendTrayMenuItem(menu uintptr, flags uint32, id uint32, text string) {
 	winapp.AppendMenuItem(menu, flags, id, text)
 }
 
-func appendMarketScopeMenus(menu uintptr, scope MarketScope) {
+func appendMarketScopeMenus(menu uintptr, scope market.MarketScope) {
 	currencyMenu := winapp.NewPopupMenu()
 	if currencyMenu != 0 {
 		for index, currency := range supportedMarketCurrencies {
@@ -85,10 +89,10 @@ func appendMarketScopeMenus(menu uintptr, scope MarketScope) {
 				continue
 			}
 
-			if hasAdditionalRegionSelection(currency) {
+			if market.HasAdditionalRegionSelection(currency) {
 				eurRegionMenu := winapp.NewPopupMenu()
 				if eurRegionMenu == 0 {
-					appendTrayMenuItem(currencyMenu, MF_STRING|MF_GRAYED, 0, marketCurrencyMenuLabel(currency, scope))
+					appendTrayMenuItem(currencyMenu, MF_STRING|MF_GRAYED, 0, market.CurrencyMenuLabel(currency, scope))
 					continue
 				}
 				for regionIndex, region := range supportedMarketRegions {
@@ -101,7 +105,7 @@ func appendMarketScopeMenus(menu uintptr, scope MarketScope) {
 					}
 					appendTrayMenuItem(eurRegionMenu, flags, MenuRegionBase+uint32(regionIndex), region.Name)
 				}
-				appendTrayPopupMenu(currencyMenu, eurRegionMenu, marketCurrencyMenuLabel(currency, scope))
+				appendTrayPopupMenu(currencyMenu, eurRegionMenu, market.CurrencyMenuLabel(currency, scope))
 				continue
 			}
 
@@ -109,7 +113,7 @@ func appendMarketScopeMenus(menu uintptr, scope MarketScope) {
 			if currency.Code == scope.Currency.Code {
 				flags |= MF_CHECKED
 			}
-			appendTrayMenuItem(currencyMenu, flags, MenuCurrencyBase+uint32(index), marketCurrencyMenuLabel(currency, scope))
+			appendTrayMenuItem(currencyMenu, flags, MenuCurrencyBase+uint32(index), market.CurrencyMenuLabel(currency, scope))
 		}
 		appendTrayPopupMenu(menu, currencyMenu, tr("menu.currency"))
 	}
@@ -137,4 +141,31 @@ func appendTrayPopupMenu(menu uintptr, popupMenu uintptr, text string) {
 
 func appendTraySeparator(menu uintptr) {
 	winapp.AppendSeparator(menu, MF_SEPARATOR)
+}
+
+var (
+	supportedMarketCurrencies = market.SupportedCurrencies()
+	supportedMarketRegions    = market.SupportedRegions()
+)
+
+func marketCurrencyForMenuCommand(commandID uint32) (market.MarketCurrency, bool) {
+	if commandID < MenuCurrencyBase {
+		return market.MarketCurrency{}, false
+	}
+	index := int(commandID - MenuCurrencyBase)
+	if index < 0 || index >= len(supportedMarketCurrencies) {
+		return market.MarketCurrency{}, false
+	}
+	return supportedMarketCurrencies[index], true
+}
+
+func marketRegionForMenuCommand(commandID uint32) (market.MarketRegion, bool) {
+	if commandID < MenuRegionBase {
+		return market.MarketRegion{}, false
+	}
+	index := int(commandID - MenuRegionBase)
+	if index < 0 || index >= len(supportedMarketRegions) {
+		return market.MarketRegion{}, false
+	}
+	return supportedMarketRegions[index], true
 }

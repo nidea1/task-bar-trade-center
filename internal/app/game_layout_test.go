@@ -1,6 +1,8 @@
 package app
 
 import (
+	"github.com/nidea1/task-bar-trade-center/internal/overlay"
+
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -77,9 +79,9 @@ func TestLoadGameLayoutPrefersLocalDevelopmentFile(t *testing.T) {
 }
 
 func TestOverlayPlacementMatchesCalibrationWhenTooltipYChanges(t *testing.T) {
-	want := OverlayPlacementCalibration{TooltipY: 173, TooltipHeight: 348, PanelWidth: 200, OffsetY: 116}
+	want := overlay.PlacementCalibration{TooltipY: 173, TooltipHeight: 348, PanelWidth: 200, OffsetY: 116}
 	previousLayout := ActiveGameLayout
-	ActiveGameLayout = GameLayout{PlacementCalibrations: []OverlayPlacementCalibration{want}}
+	ActiveGameLayout = game.GameLayout{PlacementCalibrations: []overlay.PlacementCalibration{want}}
 	t.Cleanup(func() { ActiveGameLayout = previousLayout })
 	if got := overlayPlacementForTooltip(681, 348); got != want {
 		t.Fatalf("placement = %+v, want %+v", got, want)
@@ -87,9 +89,9 @@ func TestOverlayPlacementMatchesCalibrationWhenTooltipYChanges(t *testing.T) {
 }
 
 func TestOverlayPlacementUsesFixedTooltipWidth(t *testing.T) {
-	want := OverlayPlacementCalibration{TooltipY: 199, TooltipHeight: 398, PanelWidth: 200, OffsetY: 66}
+	want := overlay.PlacementCalibration{TooltipY: 199, TooltipHeight: 398, PanelWidth: 200, OffsetY: 66}
 	previousLayout := ActiveGameLayout
-	ActiveGameLayout = GameLayout{PlacementCalibrations: []OverlayPlacementCalibration{want}}
+	ActiveGameLayout = game.GameLayout{PlacementCalibrations: []overlay.PlacementCalibration{want}}
 	t.Cleanup(func() { ActiveGameLayout = previousLayout })
 
 	if got := overlayPlacementForTooltip(want.TooltipY, want.TooltipHeight); got != want {
@@ -192,7 +194,7 @@ func TestUpdateGameLayoutConfigs(t *testing.T) {
 }
 
 func TestScanOffsets(t *testing.T) {
-	pid := findProcessID(GameProcessName)
+	pid := game.FindProcessID(GameProcessName)
 	if pid == 0 {
 		t.Log("TaskBarHero.exe is not running, skipping inspection")
 		return
@@ -203,7 +205,7 @@ func TestScanOffsets(t *testing.T) {
 	}
 	defer procCloseHandle.Call(pHandle)
 
-	gameAssemblyBase := getModuleBaseAddress(pHandle, "GameAssembly.dll")
+	gameAssemblyBase := game.ModuleBaseAddress(pHandle, "GameAssembly.dll")
 	if gameAssemblyBase == 0 {
 		t.Fatalf("Could not find GameAssembly.dll base address")
 	}

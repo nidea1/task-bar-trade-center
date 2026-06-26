@@ -1,5 +1,9 @@
 package app
 
+import (
+	"github.com/nidea1/task-bar-trade-center/internal/win32"
+)
+
 import "testing"
 
 func TestMarketOverlayRectFallsBackToCursorWhenTooltipMemoryIsUnavailable(t *testing.T) {
@@ -22,8 +26,8 @@ func TestMarketOverlayRectFallsBackToCursorWhenTooltipMemoryIsUnavailable(t *tes
 	GameAssemblyBase = 0
 	ShowOverlay.Store(true)
 	HasLastOverlayRect = false
-	cursorScreenPosition = func() (POINT, bool) {
-		return POINT{X: 100, Y: 100}, true
+	cursorScreenPosition = func() (win32.POINT, bool) {
+		return win32.POINT{X: 100, Y: 100}, true
 	}
 
 	rect, ok := marketOverlayRect()

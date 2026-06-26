@@ -1,6 +1,8 @@
 package app
 
 import (
+	"github.com/nidea1/task-bar-trade-center/internal/win32"
+
 	"fmt"
 	"syscall"
 	"unsafe"
@@ -21,7 +23,7 @@ func createOverlayWindow() {
 	windowTitle, _ := syscall.UTF16PtrFromString(AppName + " Price HUD")
 	hInstance, _, _ := procGetModuleHandleW.Call(0)
 
-	wcex := WNDCLASSEX{
+	wcex := win32.WNDCLASSEX{
 		Style:         CS_HREDRAW | CS_VREDRAW,
 		LpfnWndProc:   syscall.NewCallback(wndProc),
 		HInstance:     hInstance,
@@ -89,7 +91,7 @@ func wndProc(hWnd uintptr, msg uint32, wParam uintptr, lParam uintptr) uintptr {
 		procUpdateWindow.Call(hWnd)
 		return 0
 	case WM_PAINT:
-		var ps PAINTSTRUCT
+		var ps win32.PAINTSTRUCT
 		hdc, _, _ := procBeginPaint.Call(hWnd, uintptr(unsafe.Pointer(&ps)))
 
 		if ShowOverlay.Load() {
@@ -101,7 +103,7 @@ func wndProc(hWnd uintptr, msg uint32, wParam uintptr, lParam uintptr) uintptr {
 			if height <= 0 {
 				height = TooltipOverlayHeight
 			}
-			rect := RECT{
+			rect := win32.RECT{
 				Left:   0,
 				Top:    0,
 				Right:  width,

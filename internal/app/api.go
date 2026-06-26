@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"github.com/nidea1/task-bar-trade-center/internal/market"
 
 	"github.com/nidea1/task-bar-trade-center/internal/inventory"
 )
@@ -52,6 +53,6 @@ func OpenMarketListing(itemID int) error {
 	if !exists {
 		return fmt.Errorf("market listing is not available")
 	}
-	openURLInBrowser(steamMarketListingURLForScope(config, currentMarketScope()))
+	openURLInBrowser(steamMarketListingURLForScope(config, market.CurrentScope()))
 	return nil
 }

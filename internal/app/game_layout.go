@@ -10,7 +10,7 @@ import (
 	"github.com/nidea1/task-bar-trade-center/internal/game"
 )
 
-const gameLayoutUserAgent = AppShortName + "-GameLayout"
+const gameLayoutUserAgent = AppShortName + "-game.GameLayout"
 
 var (
 	embeddedGameLayoutJSON = game.EmbeddedLayoutJSON()
@@ -151,7 +151,7 @@ func updateGameLayoutConfigs() {
 	setConfigurationStatus(ConfigStatusRefreshing, "")
 	localLayoutPath := strings.TrimSpace(os.Getenv(game.LayoutPathEnvironment))
 	var raw []byte
-	var layout GameLayout
+	var layout game.GameLayout
 	var err error
 	var loadedFromLocal bool
 
@@ -197,7 +197,7 @@ func updateGameLayoutConfigs() {
 	setConfigurationStatus(ConfigStatusCurrent, "")
 }
 
-func setActiveGameLayout(layout GameLayout, source string) {
+func setActiveGameLayout(layout game.GameLayout, source string) {
 	GameLayoutMu.Lock()
 	ActiveGameLayout = layout
 	GameLayoutSource = source

@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"github.com/nidea1/task-bar-trade-center/internal/market"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,16 +11,16 @@ import (
 func TestSettingsPersistLanguage(t *testing.T) {
 	originalPath := SettingsFilePath
 	originalPreference := currentDisplayLanguagePreference()
-	originalScope := currentMarketScope()
+	originalScope := market.CurrentScope()
 	t.Cleanup(func() {
 		SettingsFilePath = originalPath
 		applyDisplayLanguagePreference(originalPreference)
-		setMarketScope(originalScope.Currency.Code, originalScope.Region.CountryCode)
+		market.SetScope(originalScope.Currency.Code, originalScope.Region.CountryCode)
 	})
 
 	SettingsFilePath = filepath.Join(t.TempDir(), "settings.json")
 	applyDisplayLanguagePreference("tr-TR")
-	if _, ok := setMarketScope("EUR", "DE"); !ok {
+	if _, ok := market.SetScope("EUR", "DE"); !ok {
 		t.Fatal("could not select EUR/DE")
 	}
 	saveSettingsToDisk()

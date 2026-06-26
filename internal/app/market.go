@@ -1,6 +1,8 @@
 package app
 
 import (
+	"github.com/nidea1/task-bar-trade-center/internal/catalog"
+
 	"fmt"
 	"sort"
 	"time"
@@ -8,21 +10,21 @@ import (
 	"github.com/nidea1/task-bar-trade-center/internal/market"
 )
 
-func fetchPriceAndUpdate(config ItemConfig) {
-	fetchPriceAndUpdateWithScope(config, true, currentMarketScope())
+func fetchPriceAndUpdate(config catalog.ItemConfig) {
+	fetchPriceAndUpdateWithScope(config, true, market.CurrentScope())
 }
 
-func refreshPriceAndUpdate(config ItemConfig) {
-	fetchPriceAndUpdateWithScope(config, false, currentMarketScope())
+func refreshPriceAndUpdate(config catalog.ItemConfig) {
+	fetchPriceAndUpdateWithScope(config, false, market.CurrentScope())
 }
 
-func fetchPriceAndUpdateWithCache(config ItemConfig, useCache bool) {
-	fetchPriceAndUpdateWithScope(config, useCache, currentMarketScope())
+func fetchPriceAndUpdateWithCache(config catalog.ItemConfig, useCache bool) {
+	fetchPriceAndUpdateWithScope(config, useCache, market.CurrentScope())
 }
 
-func fetchPriceAndUpdateWithScope(config ItemConfig, useCache bool, scope MarketScope) {
+func fetchPriceAndUpdateWithScope(config catalog.ItemConfig, useCache bool, scope market.MarketScope) {
 	marketHashName := buildMarketHashName(config)
-	cacheKey := marketCacheKey(scope, marketHashName)
+	cacheKey := market.CacheKey(scope, marketHashName)
 	now := time.Now()
 
 	existingCache, hasExistingCache := marketCacheEntry(scope, marketHashName)
@@ -61,47 +63,47 @@ func fetchPriceAndUpdateWithScope(config ItemConfig, useCache bool, scope Market
 	updatePriceOverlay(config.ID, scope, data.Analysis)
 }
 
-func fetchMarketData(config ItemConfig, marketHashName string, now time.Time, scope MarketScope) (MarketData, error) {
+func fetchMarketData(config catalog.ItemConfig, marketHashName string, now time.Time, scope market.MarketScope) (market.MarketData, error) {
 	return market.FetchData(config, marketHashName, now, scope)
 }
 
-func marketCacheEntry(scope MarketScope, marketHashName string) (MarketData, bool) {
+func marketCacheEntry(scope market.MarketScope, marketHashName string) (market.MarketData, bool) {
 	PriceCacheMu.RLock()
 	defer PriceCacheMu.RUnlock()
-	data, exists := PriceCache[marketCacheKey(scope, marketHashName)]
+	data, exists := PriceCache[market.CacheKey(scope, marketHashName)]
 	return data, exists
 }
 
-func buildMarketHashName(config ItemConfig) string {
+func buildMarketHashName(config catalog.ItemConfig) string {
 	return market.BuildHashName(config)
 }
 
-func steamMarketListingURL(config ItemConfig) string {
+func steamMarketListingURL(config catalog.ItemConfig) string {
 	return market.ListingURL(config)
 }
 
-func steamMarketListingURLForScope(config ItemConfig, scope MarketScope) string {
+func steamMarketListingURLForScope(config catalog.ItemConfig, scope market.MarketScope) string {
 	return market.ListingURLForScope(config, scope)
 }
 
-func priceHistoryURL(marketHashName string, scope MarketScope) string {
+func priceHistoryURL(marketHashName string, scope market.MarketScope) string {
 	return market.PriceHistoryURL(marketHashName, scope)
 }
 
-func itemOrdersHistogramURL(itemNameID string, scope MarketScope) string {
+func itemOrdersHistogramURL(itemNameID string, scope market.MarketScope) string {
 	return market.ItemOrdersHistogramURL(itemNameID, scope)
 }
 
-func priceOverviewURL(marketHashName string, scope MarketScope) string {
+func priceOverviewURL(marketHashName string, scope market.MarketScope) string {
 	return market.PriceOverviewURL(marketHashName, scope)
 }
 
-func logMarketPrice(config ItemConfig, scope MarketScope, marketHashName string, analysis MarketAnalysis, source string) {
-	fmt.Printf("[MARKET:%s] [%s] %s (ID: %d, grade: %s, type: %s) | %s => suggested=%s\n", source, formatMarketScope(scope), config.Name["en-US"], config.ID, config.Grade, config.Type, marketHashName, formatAnalysisPrice(analysis.SuggestedPrice, analysis.HasSuggested, analysis))
+func logMarketPrice(config catalog.ItemConfig, scope market.MarketScope, marketHashName string, analysis market.MarketAnalysis, source string) {
+	fmt.Printf("[MARKET:%s] [%s] %s (ID: %d, grade: %s, type: %s) | %s => suggested=%s\n", source, market.FormatScope(scope), config.Name["en-US"], config.ID, config.Grade, config.Type, marketHashName, market.FormatAnalysisPrice(analysis.SuggestedPrice, analysis.HasSuggested, analysis))
 }
 
-func updatePriceOverlay(itemID int, scope MarketScope, analysis MarketAnalysis) {
-	if ActiveItemID.Load() != int32(itemID) || currentMarketScope() != scope {
+func updatePriceOverlay(itemID int, scope market.MarketScope, analysis market.MarketAnalysis) {
+	if ActiveItemID.Load() != int32(itemID) || market.CurrentScope() != scope {
 		return
 	}
 	setCurrentMarketAnalysis(analysis)
@@ -148,7 +150,7 @@ func refreshCachedPricesInBackground() int {
 	}
 	requestTrayTooltipUpdate()
 
-	scope := currentMarketScope()
+	scope := market.CurrentScope()
 	configs := cachedPriceConfigs(scope)
 	if len(configs) == 0 {
 		PriceCacheRefreshing.Store(false)
@@ -173,18 +175,18 @@ func refreshCachedPricesInBackground() int {
 	return len(configs)
 }
 
-func cachedPriceConfigs(scope MarketScope) []ItemConfig {
+func cachedPriceConfigs(scope market.MarketScope) []catalog.ItemConfig {
 	PriceCacheMu.RLock()
 	cachedNames := make(map[string]struct{}, len(PriceCache))
 	for cacheKey := range PriceCache {
-		cachedScope, marketHashName, ok := parseMarketCacheKey(cacheKey)
+		cachedScope, marketHashName, ok := market.ParseCacheKey(cacheKey)
 		if ok && cachedScope == scope {
 			cachedNames[marketHashName] = struct{}{}
 		}
 	}
 	PriceCacheMu.RUnlock()
 
-	configs := make([]ItemConfig, 0, len(cachedNames))
+	configs := make([]catalog.ItemConfig, 0, len(cachedNames))
 	for _, config := range ItemMap {
 		if _, exists := cachedNames[buildMarketHashName(config)]; exists {
 			configs = append(configs, config)

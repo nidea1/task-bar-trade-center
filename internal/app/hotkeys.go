@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"github.com/nidea1/task-bar-trade-center/internal/market"
 	"syscall"
 
 	"github.com/nidea1/task-bar-trade-center/internal/winapp"
@@ -65,7 +66,7 @@ func openActiveItemMarketLink() {
 		return
 	}
 
-	marketURL := steamMarketListingURLForScope(config, currentMarketScope())
+	marketURL := steamMarketListingURLForScope(config, market.CurrentScope())
 	fmt.Printf("Opening Steam market listing for %s: %s\n", config.Name["en-US"], marketURL)
 	openURLInBrowser(marketURL)
 }

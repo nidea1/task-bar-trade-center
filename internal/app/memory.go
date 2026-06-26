@@ -1,16 +1,18 @@
 package app
 
 import (
+	"github.com/nidea1/task-bar-trade-center/internal/win32"
+
 	"fmt"
 	"time"
 
 	"github.com/nidea1/task-bar-trade-center/internal/game"
 )
 
-func readTooltipRectFromMemory() (RECT, bool) {
+func readTooltipRectFromMemory() (win32.RECT, bool) {
 	if GameProcessHandle == 0 || GameAssemblyBase == 0 {
 		logTooltipDebug("handle/base missing: handle=0x%X gameAssembly=0x%X", GameProcessHandle, GameAssemblyBase)
-		return RECT{}, false
+		return win32.RECT{}, false
 	}
 
 	GameLayoutMu.RLock()
@@ -30,18 +32,18 @@ func readTooltipRectFromMemory() (RECT, bool) {
 			yTrace,
 			heightTrace,
 		)
-		return RECT{}, false
+		return win32.RECT{}, false
 	}
 
 	x, ok := game.ReadFloat32(GameProcessHandle, xAddress)
 	if !ok {
 		logTooltipDebug("x read failed: xAddr=0x%X", xAddress)
-		return RECT{}, false
+		return win32.RECT{}, false
 	}
 	y, ok := game.ReadFloat32(GameProcessHandle, yAddress)
 	if !ok {
 		logTooltipDebug("y read failed: yAddr=0x%X", yAddress)
-		return RECT{}, false
+		return win32.RECT{}, false
 	}
 	width := float32(TooltipOverlayReferenceWidth)
 	height := float32(TooltipOverlayReferenceHeight)
@@ -63,13 +65,13 @@ func readTooltipRectFromMemory() (RECT, bool) {
 	logTooltipDebug("base=0x%X xBase=0x%X yBase=0x%X heightBase=0x%X | xAddr=0x%X yAddr=0x%X heightAddr=0x%X heightSource=%s | raw x=%.2f y=%.2f normalized x=%.2f y=%.2f w=%.2f h=%.2f", GameAssemblyBase, xBase, yBase, heightBase, xAddress, yAddress, heightAddress, heightSource, rawX, rawY, x, y, width, height)
 	if width < 150 || width > 650 || height < 60 || height > 700 {
 		logTooltipDebug("values rejected by size range: x=%.2f y=%.2f w=%.2f h=%.2f", x, y, width, height)
-		return RECT{}, false
+		return win32.RECT{}, false
 	}
 
 	clientOrigin, ok := gameClientScreenOrigin()
 	if !ok {
 		logTooltipDebug("game client origin not found: pid=%d hwnd=0x%X", GameProcessID, GameWindowHWND)
-		return RECT{}, false
+		return win32.RECT{}, false
 	}
 
 	localLeft := int32(x + 0.5)
@@ -80,17 +82,17 @@ func readTooltipRectFromMemory() (RECT, bool) {
 	bottom := clientOrigin.Y + int32(y+height+0.5)
 	if right <= left || bottom <= top {
 		logTooltipDebug("rect rejected: rect=(%d,%d,%d,%d) values x=%.2f y=%.2f w=%.2f h=%.2f", left, top, right, bottom, x, y, width, height)
-		return RECT{}, false
+		return win32.RECT{}, false
 	}
 
 	screen := virtualScreenRect()
 	if right < screen.Left || left > screen.Right || bottom < screen.Top || top > screen.Bottom {
 		logTooltipDebug("rect outside screen: rect=(%d,%d,%d,%d) screen=(%d,%d,%d,%d)", left, top, right, bottom, screen.Left, screen.Top, screen.Right, screen.Bottom)
-		return RECT{}, false
+		return win32.RECT{}, false
 	}
 	logTooltipDebug("tooltip local=(%d,%d,%d,%d) clientOrigin=(%d,%d) screenRect=(%d,%d,%d,%d)", localLeft, localTop, int32(x+width+0.5), int32(y+height+0.5), clientOrigin.X, clientOrigin.Y, left, top, right, bottom)
 
-	return RECT{
+	return win32.RECT{
 		Left:   left,
 		Top:    top,
 		Right:  right,

@@ -1,6 +1,9 @@
 package app
 
 import (
+	"github.com/nidea1/task-bar-trade-center/internal/catalog"
+	"github.com/nidea1/task-bar-trade-center/internal/market"
+
 	"sync"
 	"sync/atomic"
 	"time"
@@ -79,13 +82,13 @@ var (
 	procLineTo                     = win32.ProcLineTo
 	procGetPixel                   = win32.ProcGetPixel
 
-	AllItemMap   = make(map[int]ItemConfig)
-	ItemMap      = make(map[int]ItemConfig)
-	PriceCache   = make(map[string]MarketData)
+	AllItemMap   = make(map[int]catalog.ItemConfig)
+	ItemMap      = make(map[int]catalog.ItemConfig)
+	PriceCache   = make(map[string]market.MarketData)
 	PriceCacheMu sync.RWMutex
 
 	GameLayoutMu             sync.RWMutex
-	ActiveGameLayout         GameLayout
+	ActiveGameLayout         game.GameLayout
 	GameLayoutSource         string
 	GameLayoutReadHealth     game.PointerReadHealth
 	TooltipXAOBResolver      game.TooltipAOBResolver
@@ -93,7 +96,7 @@ var (
 	TooltipHeightAOBResolver game.TooltipAOBResolver
 
 	CurrentPriceText      = "Loading market..."
-	CurrentMarketAnalysis MarketAnalysis
+	CurrentMarketAnalysis market.MarketAnalysis
 	CurrentOverlayHasData bool
 	CurrentItemName       = ""
 	ActiveItemID          atomic.Int32
@@ -108,7 +111,7 @@ var (
 	PriceCacheRefreshing  atomic.Bool
 	GameReady             atomic.Bool
 	AppStatus             atomic.Int32
-	LastOverlayRect       RECT
+	LastOverlayRect       win32.RECT
 	HasLastOverlayRect    bool
 	LastTooltipDebugLog   time.Time
 	GameProcessID         uint32
@@ -141,14 +144,14 @@ func setCurrentPriceText(val string) {
 	CurrentOverlayHasData = false
 }
 
-func setCurrentMarketAnalysis(analysis MarketAnalysis) {
+func setCurrentMarketAnalysis(analysis market.MarketAnalysis) {
 	CurrentPriceTextMutex.Lock()
 	defer CurrentPriceTextMutex.Unlock()
 	CurrentMarketAnalysis = analysis
 	CurrentOverlayHasData = true
 }
 
-func getCurrentMarketAnalysis() (MarketAnalysis, bool) {
+func getCurrentMarketAnalysis() (market.MarketAnalysis, bool) {
 	CurrentPriceTextMutex.RLock()
 	defer CurrentPriceTextMutex.RUnlock()
 	return CurrentMarketAnalysis, CurrentOverlayHasData

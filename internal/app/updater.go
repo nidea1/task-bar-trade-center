@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"github.com/nidea1/task-bar-trade-center/internal/game"
 	"net/http"
 	"os"
 	"os/exec"
@@ -28,7 +29,7 @@ var (
 	startExecutableProcess = func(executablePath string, args ...string) error {
 		return exec.Command(executablePath, args...).Start()
 	}
-	waitForUpdateParentExit = waitForProcessExit
+	waitForUpdateParentExit = game.WaitForProcessExit
 	launchElevatedRestart   = launchElevatedRestartProcess
 )
 

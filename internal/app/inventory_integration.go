@@ -1,17 +1,17 @@
 package app
 
 import (
+	"github.com/nidea1/task-bar-trade-center/internal/market"
+
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/nidea1/task-bar-trade-center/internal/inventory"
 	"github.com/nidea1/task-bar-trade-center/internal/playerdata"
+	filestore "github.com/nidea1/task-bar-trade-center/internal/storage"
 	"github.com/nidea1/task-bar-trade-center/internal/tbhmem"
 )
 
@@ -23,7 +23,7 @@ var (
 )
 
 type cacheQuoteProvider struct {
-	scope MarketScope
+	scope market.MarketScope
 }
 
 func refreshInventoryDashboardState(reason string) {
@@ -76,9 +76,9 @@ func readInventoryDashboardState() (inventory.DashboardState, error) {
 		return inventory.DashboardState{}, fmt.Errorf("PlayerSaveData could not be resolved")
 	}
 
-	scope := currentMarketScope()
+	scope := market.CurrentScope()
 	return inventory.BuildDashboard(snapshot, inventoryItemCatalog(scope), cacheQuoteProvider{scope: scope}, inventory.DashboardOptions{
-		MarketScope:  formatMarketScope(scope),
+		MarketScope:  market.FormatScope(scope),
 		CurrencyCode: scope.Currency.Code,
 		PricePrefix:  scope.Currency.PricePrefix,
 		PriceSuffix:  scope.Currency.PriceSuffix,
@@ -105,7 +105,7 @@ func playerItemMetadata() map[int]playerdata.ItemMetadata {
 	return metadata
 }
 
-func inventoryItemCatalog(scope MarketScope) map[int]inventory.ItemDescriptor {
+func inventoryItemCatalog(scope market.MarketScope) map[int]inventory.ItemDescriptor {
 	catalog := make(map[int]inventory.ItemDescriptor, len(AllItemMap))
 	for id, config := range AllItemMap {
 		name := config.Name[currentDisplayLanguage()]
@@ -149,36 +149,7 @@ func writeInventoryDashboardState(state inventory.DashboardState) error {
 	if InventoryStateFilePath == "" {
 		return nil
 	}
-	return writeJSONAtomic(InventoryStateFilePath, state)
-}
-
-func writeJSONAtomic(path string, value any) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(value, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-*")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
-
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmpPath, path)
+	return filestore.WriteJSONAtomic(InventoryStateFilePath, state)
 }
 
 func openInventoryDashboard() {
@@ -241,14 +212,14 @@ func fetchInventoryMarketPrice(_ context.Context, itemID int) error {
 	if !exists {
 		return nil
 	}
-	scope := currentMarketScope()
+	scope := market.CurrentScope()
 	marketHashName := buildMarketHashName(config)
 	data, err := fetchMarketData(config, marketHashName, time.Now(), scope)
 	if err != nil {
 		return err
 	}
 	PriceCacheMu.Lock()
-	PriceCache[marketCacheKey(scope, marketHashName)] = data
+	PriceCache[market.CacheKey(scope, marketHashName)] = data
 	writePriceCacheFileLocked()
 	PriceCacheMu.Unlock()
 	refreshInventoryDashboardState("price-refreshed")

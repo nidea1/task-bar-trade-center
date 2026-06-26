@@ -1,6 +1,8 @@
 package app
 
 import (
+	"github.com/nidea1/task-bar-trade-center/internal/market"
+
 	"encoding/json"
 	"fmt"
 	"os"
@@ -57,7 +59,7 @@ func loadPriceCacheFromDisk() int {
 		return 0
 	}
 
-	var diskCache map[string]MarketData
+	var diskCache map[string]market.MarketData
 	if err := json.Unmarshal(bytes, &diskCache); err != nil {
 		fmt.Printf("Price cache file could not be parsed: %v\n", err)
 		return 0
@@ -78,14 +80,14 @@ func loadPriceCacheFromDisk() int {
 	return count
 }
 
-func normalizePriceCache(diskCache map[string]MarketData) (map[string]MarketData, bool) {
-	normalized := make(map[string]MarketData, len(diskCache))
-	legacy := make(map[string]MarketData)
+func normalizePriceCache(diskCache map[string]market.MarketData) (map[string]market.MarketData, bool) {
+	normalized := make(map[string]market.MarketData, len(diskCache))
+	legacy := make(map[string]market.MarketData)
 	for cacheKey, data := range diskCache {
 		if cacheKey == "" || data.CachedAt.IsZero() {
 			continue
 		}
-		if _, _, ok := parseMarketCacheKey(cacheKey); ok {
+		if _, _, ok := market.ParseCacheKey(cacheKey); ok {
 			normalized[cacheKey] = data
 			continue
 		}
@@ -93,7 +95,7 @@ func normalizePriceCache(diskCache map[string]MarketData) (map[string]MarketData
 	}
 
 	for marketHashName, data := range legacy {
-		cacheKey := marketCacheKey(defaultMarketScope(), marketHashName)
+		cacheKey := market.CacheKey(market.DefaultScope(), marketHashName)
 		if _, exists := normalized[cacheKey]; !exists {
 			normalized[cacheKey] = data
 		}
@@ -112,10 +114,10 @@ func writePriceCacheFileLocked() {
 }
 
 type AppSettings struct {
-	OverlayMode     int32  `json:"overlay_mode"`
-	MarketCurrency  string `json:"market_currency"`
-	MarketCountry   string `json:"market_country"`
-	DisplayLanguage string `json:"display_language"`
+	OverlayMode        int32  `json:"overlay_mode"`
+	MarketCurrencyCode string `json:"market_currency"`
+	MarketCountry      string `json:"market_country"`
+	DisplayLanguage    string `json:"display_language"`
 }
 
 func loadSettingsFromDisk() {
@@ -135,10 +137,10 @@ func loadSettingsFromDisk() {
 	}
 
 	OverlayMode.Store(settings.OverlayMode)
-	scope := marketScopeFromSettings(settings.MarketCurrency, settings.MarketCountry)
-	setMarketScope(scope.Currency.Code, scope.Region.CountryCode)
+	scope := market.ScopeFromSettings(settings.MarketCurrencyCode, settings.MarketCountry)
+	market.SetScope(scope.Currency.Code, scope.Region.CountryCode)
 	applyDisplayLanguagePreference(settings.DisplayLanguage)
-	fmt.Printf("Settings loaded from disk: overlayMode=%d market=%s language=%s\n", settings.OverlayMode, formatMarketScope(scope), currentDisplayLanguage())
+	fmt.Printf("Settings loaded from disk: overlayMode=%d market=%s language=%s\n", settings.OverlayMode, market.FormatScope(scope), currentDisplayLanguage())
 }
 
 func saveSettingsToDisk() {
@@ -146,12 +148,12 @@ func saveSettingsToDisk() {
 		return
 	}
 
-	scope := currentMarketScope()
+	scope := market.CurrentScope()
 	settings := AppSettings{
-		OverlayMode:     OverlayMode.Load(),
-		MarketCurrency:  scope.Currency.Code,
-		MarketCountry:   scope.Region.CountryCode,
-		DisplayLanguage: currentDisplayLanguagePreference(),
+		OverlayMode:        OverlayMode.Load(),
+		MarketCurrencyCode: scope.Currency.Code,
+		MarketCountry:      scope.Region.CountryCode,
+		DisplayLanguage:    currentDisplayLanguagePreference(),
 	}
 
 	if err := filestore.WriteJSON(SettingsFilePath, settings); err != nil {

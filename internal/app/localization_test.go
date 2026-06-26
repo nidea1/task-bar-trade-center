@@ -1,6 +1,9 @@
 package app
 
 import (
+	"github.com/nidea1/task-bar-trade-center/internal/catalog"
+	"github.com/nidea1/task-bar-trade-center/internal/market"
+
 	"strings"
 	"testing"
 	"time"
@@ -71,7 +74,7 @@ func TestSemanticOverlayIsRenderedInCurrentLanguage(t *testing.T) {
 	})
 
 	applyDisplayLanguagePreference("tr-TR")
-	setCurrentMarketAnalysis(MarketAnalysis{
+	setCurrentMarketAnalysis(market.MarketAnalysis{
 		UpdatedAt:        time.Now(),
 		SuggestedPrice:   12.5,
 		HasSuggested:     true,
@@ -95,7 +98,7 @@ func TestSemanticOverlayIsRenderedInCurrentLanguage(t *testing.T) {
 
 func TestGetCurrentItemNameLocalization(t *testing.T) {
 	originalItemMap := AllItemMap
-	AllItemMap = make(map[int]ItemConfig)
+	AllItemMap = make(map[int]catalog.ItemConfig)
 	originalPreference := currentDisplayLanguagePreference()
 	t.Cleanup(func() {
 		AllItemMap = originalItemMap
@@ -103,7 +106,7 @@ func TestGetCurrentItemNameLocalization(t *testing.T) {
 		applyDisplayLanguagePreference(originalPreference)
 	})
 
-	AllItemMap[123] = ItemConfig{
+	AllItemMap[123] = catalog.ItemConfig{
 		ID: 123,
 		Name: map[string]string{
 			"en-US": "English Name",

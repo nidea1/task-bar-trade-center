@@ -1,6 +1,9 @@
 package app
 
 import (
+	"github.com/nidea1/task-bar-trade-center/internal/market"
+	"github.com/nidea1/task-bar-trade-center/internal/win32"
+
 	"fmt"
 	"syscall"
 	"unsafe"
@@ -17,7 +20,7 @@ func createAppWindow() {
 	AppIconLarge = loadAppIcon(hInstance, cxIcon)
 	AppIconSmall = loadAppIcon(hInstance, cxSmIcon)
 
-	wcex := WNDCLASSEX{
+	wcex := win32.WNDCLASSEX{
 		Style:         CS_HREDRAW | CS_VREDRAW,
 		LpfnWndProc:   syscall.NewCallback(appWndProc),
 		HInstance:     hInstance,
@@ -91,8 +94,8 @@ func removeTrayIcon() {
 	TrayIconAdded = false
 }
 
-func newNotifyIconData() NOTIFYICONDATAW {
-	nid := NOTIFYICONDATAW{
+func newNotifyIconData() win32.NOTIFYICONDATAW {
+	nid := win32.NOTIFYICONDATAW{
 		HWnd:             AppHWND,
 		UID:              TrayIconID,
 		UCallbackMessage: WM_TRAY_ICON,
@@ -224,18 +227,18 @@ func handleTrayCommand(commandID uint32) {
 		return
 	}
 	if currency, ok := marketCurrencyForMenuCommand(commandID); ok {
-		scope, changed, selected := selectMarketCurrency(currency.Code)
+		scope, changed, selected := market.SelectCurrency(currency.Code)
 		if selected && changed {
-			fmt.Printf("Market currency changed to %s.\n", formatMarketScope(scope))
+			fmt.Printf("Market currency changed to %s.\n", market.FormatScope(scope))
 			saveSettingsToDisk()
 			refreshActiveMarketPrice()
 		}
 		return
 	}
 	if region, ok := marketRegionForMenuCommand(commandID); ok {
-		scope, changed, selected := selectMarketRegion(region.CurrencyCode, region.CountryCode)
+		scope, changed, selected := market.SelectRegion(region.CurrencyCode, region.CountryCode)
 		if selected && changed {
-			fmt.Printf("Market region changed to %s.\n", formatMarketScope(scope))
+			fmt.Printf("Market region changed to %s.\n", market.FormatScope(scope))
 			saveSettingsToDisk()
 			refreshActiveMarketPrice()
 		}

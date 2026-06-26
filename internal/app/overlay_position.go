@@ -1,19 +1,22 @@
 package app
 
 import (
+	"github.com/nidea1/task-bar-trade-center/internal/game"
+	"github.com/nidea1/task-bar-trade-center/internal/win32"
+
 	"unsafe"
 
 	"github.com/nidea1/task-bar-trade-center/internal/overlay"
 )
 
-func marketOverlayRect() (RECT, bool) {
+func marketOverlayRect() (win32.RECT, bool) {
 	if tooltipRect, ok := readTooltipRectFromMemory(); ok {
 		LastOverlayRect = placeOverlayByTooltipRect(tooltipRect)
 		HasLastOverlayRect = true
 		return LastOverlayRect, true
 	}
 	if !ShowOverlay.Load() {
-		return RECT{}, false
+		return win32.RECT{}, false
 	}
 	if cursor, ok := cursorScreenPosition(); ok {
 		LastOverlayRect = fallbackOverlayRect(cursor)
@@ -23,19 +26,19 @@ func marketOverlayRect() (RECT, bool) {
 	if HasLastOverlayRect {
 		return LastOverlayRect, true
 	}
-	return RECT{}, false
+	return win32.RECT{}, false
 }
 
-var cursorScreenPosition = func() (POINT, bool) {
-	var cursor POINT
+var cursorScreenPosition = func() (win32.POINT, bool) {
+	var cursor win32.POINT
 	result, _, _ := procGetCursorPos.Call(uintptr(unsafe.Pointer(&cursor)))
 	return cursor, result != 0
 }
 
-func findTooltipRect(cursor POINT) (RECT, bool) {
+func findTooltipRect(cursor win32.POINT) (win32.RECT, bool) {
 	screen := virtualScreenRect()
 	if screen.Right <= screen.Left || screen.Bottom <= screen.Top {
-		return RECT{}, false
+		return win32.RECT{}, false
 	}
 
 	left := overlay.ClampInt32(cursor.X-360, screen.Left, screen.Right-1)
@@ -43,12 +46,12 @@ func findTooltipRect(cursor POINT) (RECT, bool) {
 	top := overlay.ClampInt32(cursor.Y-520, screen.Top, screen.Bottom-1)
 	bottom := overlay.ClampInt32(cursor.Y+260, screen.Top, screen.Bottom-1)
 	if right <= left || bottom <= top {
-		return RECT{}, false
+		return win32.RECT{}, false
 	}
 
 	hdc, _, _ := procGetDC.Call(0)
 	if hdc == 0 {
-		return RECT{}, false
+		return win32.RECT{}, false
 	}
 	defer procReleaseDC.Call(0, hdc)
 
@@ -70,7 +73,7 @@ func findTooltipRect(cursor POINT) (RECT, bool) {
 
 	visited := make([]bool, len(panelPixels))
 	bestScore := -1
-	var best RECT
+	var best win32.RECT
 
 	for i, isPanel := range panelPixels {
 		if !isPanel || visited[i] {
@@ -84,7 +87,7 @@ func findTooltipRect(cursor POINT) (RECT, bool) {
 			continue
 		}
 
-		rect := RECT{
+		rect := win32.RECT{
 			Left:   overlay.ClampInt32(left+int32(minCol)*step-step, screen.Left, screen.Right-1),
 			Top:    overlay.ClampInt32(top+int32(minRow)*step-step, screen.Top, screen.Bottom-1),
 			Right:  overlay.ClampInt32(left+int32(maxCol+1)*step+step, screen.Left, screen.Right),
@@ -105,7 +108,7 @@ func findTooltipRect(cursor POINT) (RECT, bool) {
 	}
 
 	if bestScore < 0 {
-		return RECT{}, false
+		return win32.RECT{}, false
 	}
 	return best, true
 }
@@ -161,17 +164,17 @@ func activeOverlayHeight() int32 {
 	return calculateRequiredHeight(data, OverlayMode.Load())
 }
 
-func placeOverlayByTooltipRect(tooltipRect RECT) RECT {
+func placeOverlayByTooltipRect(tooltipRect win32.RECT) win32.RECT {
 	screen := virtualScreenRect()
-	var clientOrigin POINT
+	var clientOrigin win32.POINT
 	hasClientOrigin := false
 	if origin, ok := gameClientScreenOrigin(); ok {
 		clientOrigin = origin
 		hasClientOrigin = true
 	}
 	GameLayoutMu.RLock()
-	placementCalibrations := append([]OverlayPlacementCalibration(nil), ActiveGameLayout.PlacementCalibrations...)
-	xCalibrations := append([]OverlayXCalibration(nil), ActiveGameLayout.XCalibrations...)
+	placementCalibrations := append([]overlay.PlacementCalibration(nil), ActiveGameLayout.PlacementCalibrations...)
+	xCalibrations := append([]overlay.XCalibration(nil), ActiveGameLayout.XCalibrations...)
 	GameLayoutMu.RUnlock()
 	return overlay.PlaceByTooltipRect(tooltipRect, screen, clientOrigin, hasClientOrigin, activeOverlayHeight(), placementCalibrations, xCalibrations, overlayPlacementConfig())
 }
@@ -180,16 +183,16 @@ func scaleByReference(value int32, referenceValue int32, referenceBase int32) in
 	return overlay.ScaleByReference(value, referenceValue, referenceBase)
 }
 
-func overlayPlacementForTooltip(localY int32, height int32) OverlayPlacementCalibration {
+func overlayPlacementForTooltip(localY int32, height int32) overlay.PlacementCalibration {
 	GameLayoutMu.RLock()
-	calibrations := append([]OverlayPlacementCalibration(nil), ActiveGameLayout.PlacementCalibrations...)
+	calibrations := append([]overlay.PlacementCalibration(nil), ActiveGameLayout.PlacementCalibrations...)
 	GameLayoutMu.RUnlock()
 	return overlay.PlacementForTooltip(localY, height, calibrations, overlayPlacementConfig())
 }
 
 func findClosestXOffset(localX int32) int32 {
 	GameLayoutMu.RLock()
-	calibrations := append([]OverlayXCalibration(nil), ActiveGameLayout.XCalibrations...)
+	calibrations := append([]overlay.XCalibration(nil), ActiveGameLayout.XCalibrations...)
 	GameLayoutMu.RUnlock()
 	return overlay.FindClosestXOffset(localX, calibrations)
 }
@@ -202,7 +205,7 @@ func absInt32(value int32) int32 {
 	return overlay.AbsInt32(value)
 }
 
-func fallbackOverlayRect(cursor POINT) RECT {
+func fallbackOverlayRect(cursor win32.POINT) win32.RECT {
 	return overlay.FallbackRect(cursor, virtualScreenRect(), activeOverlayHeight(), overlayPlacementConfig())
 }
 
@@ -210,12 +213,12 @@ func isTooltipPanelPixel(color uint32) bool {
 	return overlay.IsTooltipPanelPixel(color)
 }
 
-func distancePointToRect(point POINT, rect RECT) int {
+func distancePointToRect(point win32.POINT, rect win32.RECT) int {
 	return overlay.DistancePointToRect(point, rect)
 }
 
-func overlayClientRect(screenRect RECT) RECT {
-	return RECT{
+func overlayClientRect(screenRect win32.RECT) win32.RECT {
+	return win32.RECT{
 		Left:   screenRect.Left - OverlayOriginX,
 		Top:    screenRect.Top - OverlayOriginY,
 		Right:  screenRect.Right - OverlayOriginX,
@@ -223,7 +226,7 @@ func overlayClientRect(screenRect RECT) RECT {
 	}
 }
 
-func virtualScreenRect() RECT {
+func virtualScreenRect() win32.RECT {
 	left := getSystemMetric(SM_XVIRTUALSCREEN)
 	top := getSystemMetric(SM_YVIRTUALSCREEN)
 	width := getSystemMetric(SM_CXVIRTUALSCREEN)
@@ -234,7 +237,7 @@ func virtualScreenRect() RECT {
 		width = getSystemMetric(SM_CXSCREEN)
 		height = getSystemMetric(SM_CYSCREEN)
 	}
-	return RECT{
+	return win32.RECT{
 		Left:   left,
 		Top:    top,
 		Right:  left + width,
@@ -267,4 +270,23 @@ func overlayPlacementConfig() overlay.PlacementConfig {
 		AnchorOffsetX:       TooltipOverlayAnchorOffsetX,
 		AnchorOffsetY:       TooltipOverlayAnchorOffsetY,
 	}
+}
+
+func gameClientScreenOrigin() (win32.POINT, bool) {
+	if GameProcessID == 0 {
+		return win32.POINT{}, false
+	}
+	if GameWindowHWND == 0 || !game.IsWindowVisible(GameWindowHWND) {
+		GameWindowHWND = game.FindMainWindowByPID(GameProcessID)
+	}
+	if GameWindowHWND == 0 {
+		return win32.POINT{}, false
+	}
+
+	origin, ok := game.ClientScreenOrigin(GameWindowHWND)
+	if !ok {
+		GameWindowHWND = 0
+		return win32.POINT{}, false
+	}
+	return origin, true
 }
