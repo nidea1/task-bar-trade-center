@@ -110,11 +110,12 @@ func writePriceCacheFileLocked() {
 }
 
 type AppSettings struct {
-	OverlayModeSetting int32  `json:"overlay_mode"`
-	MarketCurrencyCode string `json:"market_currency"`
-	MarketCountry      string `json:"market_country"`
-	DisplayLanguage    string `json:"display_language"`
-	MinRarityNotify    string `json:"min_rarity_notify"`
+	OverlayModeSetting int32             `json:"overlay_mode"`
+	MarketCurrencyCode string            `json:"market_currency"`
+	MarketCountry      string            `json:"market_country"`
+	DisplayLanguage    string            `json:"display_language"`
+	MinRarityNotify    string            `json:"min_rarity_notify"`
+	Dashboard          DashboardSettings `json:"dashboard"`
 }
 
 func rarityLevel(grade string) int {
@@ -197,8 +198,11 @@ func loadSettingsFromDisk() {
 		minRarity = "COMMON"
 	}
 	activeApp.minRarityNotifyLevel.Store(int32(rarityLevel(minRarity)))
+	activeApp.dashboardSettingsMu.Lock()
+	activeApp.dashboardSettings = normalizeDashboardSettings(settings.Dashboard)
+	activeApp.dashboardSettingsMu.Unlock()
 
-	fmt.Printf("Settings loaded from disk: overlayMode=%d market=%s language=%s minRarity=%s\n", settings.OverlayModeSetting, market.FormatScope(scope), currentDisplayLanguage(), minRarity)
+	fmt.Printf("Settings loaded from disk: overlayMode=%d market=%s language=%s minRarity=%s dashboard=%+v\n", settings.OverlayModeSetting, market.FormatScope(scope), currentDisplayLanguage(), minRarity, currentDashboardSettings())
 }
 
 func saveSettingsToDisk() {
@@ -213,6 +217,7 @@ func saveSettingsToDisk() {
 		MarketCountry:      scope.Region.CountryCode,
 		DisplayLanguage:    currentDisplayLanguagePreference(),
 		MinRarityNotify:    rarityGrade(int(activeApp.minRarityNotifyLevel.Load())),
+		Dashboard:          currentDashboardSettings(),
 	}
 
 	if err := filestore.WriteJSON(activeApp.settingsFilePath, settings); err != nil {

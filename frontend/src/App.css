@@ -281,6 +281,11 @@
   min-width: 0;
 }
 
+.dashboard-selector-row .game-button,
+.dashboard-refresh-button {
+  height: 30px;
+}
+
 .dashboard-refresh-row {
   display: flex;
   align-items: center;
@@ -298,6 +303,8 @@
 .dashboard-refresh-button {
   min-width: 152px;
   flex-shrink: 0;
+  padding-top: 0;
+  padding-bottom: 0;
   white-space: nowrap;
 }
 
@@ -737,6 +744,11 @@
 
   .dashboard-selector-row {
     gap: 0.4rem;
+  }
+
+  .dashboard-selector-row .game-button,
+  .dashboard-refresh-button {
+    height: 29px;
   }
 
   .dashboard-control-sm {

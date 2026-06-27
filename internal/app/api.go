@@ -116,6 +116,68 @@ type DashboardFooterInfo struct {
 	ReleaseURL      string `json:"release_url"`
 }
 
+type DashboardSettings struct {
+	ThemeMode          string `json:"theme_mode"`
+	PriceMode          string `json:"price_mode"`
+	RarityFilter       string `json:"rarity_filter"`
+	EquipmentFilter    string `json:"equipment_filter"`
+	SortMode           string `json:"sort_mode"`
+	MarketableItemsTab string `json:"marketable_items_tab"`
+}
+
+func defaultDashboardSettings() DashboardSettings {
+	return DashboardSettings{
+		ThemeMode:          "dark",
+		PriceMode:          "suggested",
+		RarityFilter:       "all",
+		EquipmentFilter:    "all",
+		SortMode:           "price_desc",
+		MarketableItemsTab: "all",
+	}
+}
+
+func normalizeDashboardSettings(settings DashboardSettings) DashboardSettings {
+	normalized := defaultDashboardSettings()
+	switch settings.ThemeMode {
+	case "dark", "light":
+		normalized.ThemeMode = settings.ThemeMode
+	}
+	switch settings.PriceMode {
+	case "suggested", "instant":
+		normalized.PriceMode = settings.PriceMode
+	}
+	if settings.RarityFilter != "" {
+		normalized.RarityFilter = settings.RarityFilter
+	}
+	if settings.EquipmentFilter != "" {
+		normalized.EquipmentFilter = settings.EquipmentFilter
+	}
+	switch settings.SortMode {
+	case "price_desc", "price_asc", "name_asc", "count_desc", "rarity_desc":
+		normalized.SortMode = settings.SortMode
+	}
+	switch settings.MarketableItemsTab {
+	case "best", "all":
+		normalized.MarketableItemsTab = settings.MarketableItemsTab
+	}
+	return normalized
+}
+
+func currentDashboardSettings() DashboardSettings {
+	activeApp.dashboardSettingsMu.RLock()
+	defer activeApp.dashboardSettingsMu.RUnlock()
+	return normalizeDashboardSettings(activeApp.dashboardSettings)
+}
+
+func setDashboardSettings(settings DashboardSettings) DashboardSettings {
+	normalized := normalizeDashboardSettings(settings)
+	activeApp.dashboardSettingsMu.Lock()
+	activeApp.dashboardSettings = normalized
+	activeApp.dashboardSettingsMu.Unlock()
+	saveSettingsToDisk()
+	return normalized
+}
+
 func GetDisplayLanguages() []LanguageInfo {
 	locales := supportedAppLocales
 	list := make([]LanguageInfo, len(locales))
@@ -178,6 +240,14 @@ func GetDashboardFooterInfo() DashboardFooterInfo {
 		UpdateAvailable: status == UpdateStatusAvailable,
 		ReleaseURL:      releaseURL,
 	}
+}
+
+func GetDashboardSettings() DashboardSettings {
+	return currentDashboardSettings()
+}
+
+func SetDashboardSettings(settings DashboardSettings) DashboardSettings {
+	return setDashboardSettings(settings)
 }
 
 func SetDisplayLanguage(preference string) bool {

@@ -11,7 +11,9 @@ import {
     SetDisplayLanguage,
     SetMarketScope,
     GetDashboardFooterInfo,
+    GetDashboardSettings,
     GetMinRarityNotify,
+    SetDashboardSettings,
     SetMinRarityNotify,
 } from "../wailsjs/go/main/App";
 import {
@@ -42,6 +44,7 @@ import {
     PriceMode,
     SortMode,
     MarketableItemsTab,
+    DashboardSettings,
     DashboardState,
     DashboardFooterInfo
 } from './types';
@@ -70,6 +73,41 @@ import MarketableItemsTabsPanel from './components/MarketableItemsTabsPanel';
 import MissingPricesPanel from './components/MissingPricesPanel';
 import DashboardFooter from './components/DashboardFooter';
 
+const defaultDashboardSettings: DashboardSettings = {
+    theme_mode: "dark",
+    price_mode: "suggested",
+    rarity_filter: "all",
+    equipment_filter: "all",
+    sort_mode: "price_desc",
+    marketable_items_tab: "all",
+};
+
+type DashboardSettingsInput = {
+    theme_mode?: string;
+    price_mode?: string;
+    rarity_filter?: string;
+    equipment_filter?: string;
+    sort_mode?: string;
+    marketable_items_tab?: string;
+};
+
+function normalizeDashboardSettings(settings?: DashboardSettingsInput | null): DashboardSettings {
+    const sortMode = settings?.sort_mode;
+    return {
+        theme_mode: settings?.theme_mode === "light" ? "light" : defaultDashboardSettings.theme_mode,
+        price_mode: settings?.price_mode === "instant" ? "instant" : defaultDashboardSettings.price_mode,
+        rarity_filter: settings?.rarity_filter || defaultDashboardSettings.rarity_filter,
+        equipment_filter: settings?.equipment_filter || defaultDashboardSettings.equipment_filter,
+        sort_mode: (
+            sortMode === "price_asc"
+            || sortMode === "name_asc"
+            || sortMode === "count_desc"
+            || sortMode === "rarity_desc"
+        ) ? sortMode : defaultDashboardSettings.sort_mode,
+        marketable_items_tab: settings?.marketable_items_tab === "best" ? "best" : defaultDashboardSettings.marketable_items_tab,
+    };
+}
+
 function App() {
     const [state, setState] = useState<DashboardState | null>(null);
     const [error, setError] = useState<string>("");
@@ -92,6 +130,7 @@ function App() {
     const [itemSearch, setItemSearch] = useState("");
     const mountedRef = useRef(false);
     const loadInFlightRef = useRef(false);
+    const dashboardSettingsLoadedRef = useRef(false);
 
     const t = (key: string, fallback?: string) => {
         if (state?.translations && state.translations[key]) {
@@ -153,6 +192,29 @@ function App() {
         GetMinRarityNotify().then((grade: string) => {
             if (mountedRef.current) setMinRarityNotifyState(grade);
         });
+        GetDashboardSettings()
+            .then((settings: DashboardSettingsInput | null) => {
+                if (!mountedRef.current) return;
+                const normalized = normalizeDashboardSettings(settings);
+                const storedThemeMode = readStoredThemeMode();
+                const nextThemeMode = normalized.theme_mode === "dark" && storedThemeMode === "light"
+                    ? storedThemeMode
+                    : normalized.theme_mode;
+                setThemeMode(nextThemeMode);
+                setPriceMode(normalized.price_mode);
+                setRarityFilter(normalized.rarity_filter);
+                setEquipmentFilter(normalized.equipment_filter);
+                setSortMode(normalized.sort_mode);
+                setMarketableItemsTab(normalized.marketable_items_tab);
+            })
+            .catch(() => {
+                // Dashboard preferences are non-critical; current defaults remain usable.
+            })
+            .finally(() => {
+                if (mountedRef.current) {
+                    dashboardSettingsLoadedRef.current = true;
+                }
+            });
 
         const unsubscribe = EventsOn("inventory-dashboard-updated", (nextState: unknown) => {
             if (!mountedRef.current) return;
@@ -179,6 +241,20 @@ function App() {
         document.documentElement.dataset.theme = themeMode;
         window.localStorage.setItem("dashboard-theme", themeMode);
     }, [themeMode]);
+
+    useEffect(() => {
+        if (!dashboardSettingsLoadedRef.current) return;
+        SetDashboardSettings({
+            theme_mode: themeMode,
+            price_mode: priceMode,
+            rarity_filter: rarityFilter,
+            equipment_filter: equipmentFilter,
+            sort_mode: sortMode,
+            marketable_items_tab: marketableItemsTab,
+        }).catch(() => {
+            // Local UI state can continue even if settings persistence fails.
+        });
+    }, [themeMode, priceMode, rarityFilter, equipmentFilter, sortMode, marketableItemsTab]);
 
     useEffect(() => {
         if (!state?.refresh?.refreshing && !refreshing && !forceRefreshing) {

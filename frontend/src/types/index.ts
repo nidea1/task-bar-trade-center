@@ -3,6 +3,15 @@ export type PriceMode = "suggested" | "instant";
 export type SortMode = "price_desc" | "price_asc" | "name_asc" | "count_desc" | "rarity_desc";
 export type MarketableItemsTab = "best" | "all";
 
+export interface DashboardSettings {
+    theme_mode: ThemeMode;
+    price_mode: PriceMode;
+    rarity_filter: string;
+    equipment_filter: string;
+    sort_mode: SortMode;
+    marketable_items_tab: MarketableItemsTab;
+}
+
 export interface RarityMeta {
     rank: number;
     color: string;

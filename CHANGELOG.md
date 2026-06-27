@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-06-27
+
+### Fixed
+- Persisted dashboard preferences in the shared settings file so version updates no longer reset theme, price mode, filters, sort order, or the active marketable-items tab.
+- Aligned the dashboard smart refresh and force refresh buttons with the dropdown controls so the header row keeps a consistent height.
+
 ## [0.10.1] - 2026-06-27
 
 ### Fixed

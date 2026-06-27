@@ -132,6 +132,13 @@ func (a *App) GetDashboardFooterInfo() (core.DashboardFooterInfo, error) {
 	return core.DashboardFooterInfo{}, nil
 }
 
+func (a *App) GetDashboardSettings() (core.DashboardSettings, error) {
+	if appCore := a.coreApp(); appCore != nil {
+		return appCore.GetDashboardSettings(), nil
+	}
+	return core.DashboardSettings{}, nil
+}
+
 func (a *App) GetMinRarityNotify() (string, error) {
 	if appCore := a.coreApp(); appCore != nil {
 		return appCore.GetMinRarityNotify(), nil
@@ -151,6 +158,13 @@ func (a *App) SetMinRarityNotify(grade string) (bool, error) {
 		return appCore.SetMinRarityNotify(grade), nil
 	}
 	return false, nil
+}
+
+func (a *App) SetDashboardSettings(settings core.DashboardSettings) (core.DashboardSettings, error) {
+	if appCore := a.coreApp(); appCore != nil {
+		return appCore.SetDashboardSettings(settings), nil
+	}
+	return core.DashboardSettings{}, nil
 }
 
 func (a *App) SetMarketScope(currencyCode string, countryCode string) (bool, error) {

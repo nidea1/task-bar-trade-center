@@ -29,21 +29,23 @@ type App struct {
 	appLogFile              *os.File
 
 	// Windows HWNDs and hooks
-	appHWND            uintptr
-	appIconLarge       uintptr
-	appIconSmall       uintptr
-	trayIconAdded      bool
-	mouseHook          uintptr
-	mouseHookCallback  uintptr
-	overlayHWND        uintptr
-	overlayOriginX     int32
-	overlayOriginY     int32
-	overlayWidth       atomic.Int32
-	overlayHeight      atomic.Int32
-	showOverlay        atomic.Bool
-	overlayMode        atomic.Int32
-	lastOverlayRect    win32.RECT
-	hasLastOverlayRect bool
+	appHWND             uintptr
+	appIconLarge        uintptr
+	appIconSmall        uintptr
+	trayIconAdded       bool
+	mouseHook           uintptr
+	mouseHookCallback   uintptr
+	overlayHWND         uintptr
+	overlayOriginX      int32
+	overlayOriginY      int32
+	overlayWidth        atomic.Int32
+	overlayHeight       atomic.Int32
+	showOverlay         atomic.Bool
+	overlayMode         atomic.Int32
+	lastOverlayRect     win32.RECT
+	hasLastOverlayRect  bool
+	dashboardSettingsMu sync.RWMutex
+	dashboardSettings   DashboardSettings
 
 	appStatus            atomic.Int32
 	configurationStatus  atomic.Int32
@@ -118,6 +120,7 @@ var activeApp = &App{
 	iconMetadata:              make(map[string]iconMetadataEntry),
 	notificationIconCache:     make(map[string]uintptr),
 	notificationIconPreparing: make(map[string]struct{}),
+	dashboardSettings:         defaultDashboardSettings(),
 }
 
 func getCurrentPriceText() string {

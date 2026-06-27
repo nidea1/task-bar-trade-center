@@ -16,6 +16,7 @@ func New(callbacks Callbacks) *App {
 		iconMetadata:              make(map[string]iconMetadataEntry),
 		notificationIconCache:     make(map[string]uintptr),
 		notificationIconPreparing: make(map[string]struct{}),
+		dashboardSettings:         defaultDashboardSettings(),
 	}
 	return activeApp
 }
@@ -68,6 +69,10 @@ func (app *App) GetDashboardFooterInfo() DashboardFooterInfo {
 	return GetDashboardFooterInfo()
 }
 
+func (app *App) GetDashboardSettings() DashboardSettings {
+	return GetDashboardSettings()
+}
+
 func (app *App) GetMinRarityNotify() string {
 	return GetMinRarityNotify()
 }
@@ -78,6 +83,10 @@ func (app *App) SetDisplayLanguage(preference string) bool {
 
 func (app *App) SetMinRarityNotify(grade string) bool {
 	return SetMinRarityNotify(grade)
+}
+
+func (app *App) SetDashboardSettings(settings DashboardSettings) DashboardSettings {
+	return SetDashboardSettings(settings)
 }
 
 func (app *App) SetMarketScope(currencyCode string, countryCode string) bool {
