@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-06-27
+
+### Fixed
+- Fixed typescript binding destination directory by changing `wailsjsdir` in `wails.json` to target `./frontend/wailsjs` directly instead of its parent directory.
+
 ## [0.9.2] - 2026-06-27
 
 ### Fixed

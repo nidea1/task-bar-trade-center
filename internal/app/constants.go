@@ -7,7 +7,7 @@ const (
 	AppProcessName           = "tbtc"
 	DashboardWindowClassName = AppProcessName + "DashboardWindow"
 	AppCreatorName           = "nidea1"
-	AppVersion               = "0.9.2"
+	AppVersion               = "0.9.3"
 	GameProcessName          = "TaskBarHero.exe"
 
 	EnablePriceHUD           = true
