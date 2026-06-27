@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-06-27
+
+### Fixed
+- Normalized the non-English locale files so all supported languages now include the latest refresh, time, and inventory-read strings with localized labels and tooltips.
+
 ## [0.10.0] - 2026-06-27
 
 ### Added
