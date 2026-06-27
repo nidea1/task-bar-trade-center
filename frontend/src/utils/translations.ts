@@ -71,15 +71,15 @@ export function bestSellReasonLabel(
     const fallback = (() => {
         switch (reason) {
             case "high_daily_sales":
-                return localizedFallback(currentLanguage, "Yuksek gunluk satis", "High daily sales");
+                return localizedFallback(currentLanguage, "Yüksek günlük satış", "High daily sales");
             case "narrow_spread":
-                return localizedFallback(currentLanguage, "Dar spread", "Narrow spread");
+                return localizedFallback(currentLanguage, "Dar makas", "Narrow spread");
             case "high_buy_orders":
-                return localizedFallback(currentLanguage, "Yuksek buy order", "High buy orders");
+                return localizedFallback(currentLanguage, "Çok sayıda alış emri", "High buy orders");
             case "high_confidence":
-                return localizedFallback(currentLanguage, "Yuksek guven", "High confidence");
+                return localizedFallback(currentLanguage, "Yüksek güvenilirlik", "High confidence");
             case "above_weekly_average":
-                return localizedFallback(currentLanguage, "Haftalik ortalama ustu", "Above weekly average");
+                return localizedFallback(currentLanguage, "Haftalık ortalamanın üstünde", "Above weekly average");
             default:
                 return formatTokenLabel(reason);
         }

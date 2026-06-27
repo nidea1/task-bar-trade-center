@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.7] - 2026-06-27
+
+### Fixed
+- Fixed missing and incorrect translations in the Best Items to Sell Now dashboard tab across all supported languages.
+
 ## [0.9.6] - 2026-06-27
 
 ### Fixed
