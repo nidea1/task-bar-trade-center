@@ -202,5 +202,19 @@
   "gear.SHIELD": "Kilpi",
   "gear.STAFF": "Sauva",
   "gear.SWORD": "Miekka",
-  "gear.TOME": "Kirja"
+  "gear.TOME": "Kirja",
+  "dashboard.footer_created_by": "tekijä: %s",
+  "dashboard.footer_label": "Tila",
+  "dashboard.footer_ready": "Valmis",
+  "dashboard.footer_syncing": "Synkronoidaan",
+  "dashboard.notify_source_box": "Laatikko",
+  "dashboard.notify_source_craft": "Valmistus",
+  "dashboard.notify_source_offering": "Uhraus",
+  "dashboard.notify_source_synthesis": "Synteesi",
+  "dashboard.notify_sources_all": "Kaikki",
+  "dashboard.notify_sources_label": "Lähteet",
+  "dashboard.notify_sources_none": "Päältä",
+  "dashboard.rarity_notify_label": "Ilmoita",
+  "dashboard.rarity_notify_tooltip": "Ilmoittaa vain kaupattavista esineistä, jotka ovat vähintään valitun harvinaisuuden tasoisia.",
+  "dashboard.search_items": "Etsi esineitä"
 }

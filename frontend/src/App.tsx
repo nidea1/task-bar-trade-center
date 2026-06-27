@@ -35,7 +35,12 @@ import {
     Minus,
     X,
     Coins as GoldIcon,
-    Bell
+    Bell,
+    ListChecks,
+    PackageOpen,
+    Hammer,
+    FlaskConical,
+    HandHeart
 } from 'lucide-react';
 
 import { HERO_CLASSES, appIcon } from './constants';
@@ -44,6 +49,7 @@ import {
     PriceMode,
     SortMode,
     MarketableItemsTab,
+    NotificationSource,
     DashboardSettings,
     DashboardState,
     DashboardFooterInfo
@@ -73,6 +79,10 @@ import MarketableItemsTabsPanel from './components/MarketableItemsTabsPanel';
 import MissingPricesPanel from './components/MissingPricesPanel';
 import DashboardFooter from './components/DashboardFooter';
 
+const notificationSourceOrder: NotificationSource[] = ["box", "craft", "synthesis", "offering"];
+const allNotificationSources = notificationSourceOrder.join(",");
+const noNotificationSources = "none";
+
 const defaultDashboardSettings: DashboardSettings = {
     theme_mode: "dark",
     price_mode: "suggested",
@@ -80,6 +90,7 @@ const defaultDashboardSettings: DashboardSettings = {
     equipment_filter: "all",
     sort_mode: "price_desc",
     marketable_items_tab: "all",
+    notify_sources: allNotificationSources,
 };
 
 type DashboardSettingsInput = {
@@ -89,7 +100,22 @@ type DashboardSettingsInput = {
     equipment_filter?: string;
     sort_mode?: string;
     marketable_items_tab?: string;
+    notify_sources?: string;
 };
+
+function normalizeNotifySources(value?: string | null): string {
+    if (!value || !value.trim()) return allNotificationSources;
+    const tokens = value.split(",").map((token) => token.trim().toLowerCase());
+    if (tokens.includes(noNotificationSources)) return noNotificationSources;
+    const enabled = notificationSourceOrder.filter((source) => tokens.includes(source));
+    return enabled.length > 0 ? enabled.join(",") : noNotificationSources;
+}
+
+function notifySourceSet(value: string): Set<NotificationSource> {
+    const normalized = normalizeNotifySources(value);
+    if (normalized === noNotificationSources) return new Set();
+    return new Set(normalized.split(",") as NotificationSource[]);
+}
 
 function normalizeDashboardSettings(settings?: DashboardSettingsInput | null): DashboardSettings {
     const sortMode = settings?.sort_mode;
@@ -105,6 +131,7 @@ function normalizeDashboardSettings(settings?: DashboardSettingsInput | null): D
             || sortMode === "rarity_desc"
         ) ? sortMode : defaultDashboardSettings.sort_mode,
         marketable_items_tab: settings?.marketable_items_tab === "best" ? "best" : defaultDashboardSettings.marketable_items_tab,
+        notify_sources: normalizeNotifySources(settings?.notify_sources),
     };
 }
 
@@ -127,10 +154,13 @@ function App() {
     const [equipmentFilter, setEquipmentFilter] = useState("all");
     const [sortMode, setSortMode] = useState<SortMode>("price_desc");
     const [marketableItemsTab, setMarketableItemsTab] = useState<MarketableItemsTab>("all");
+    const [notifySources, setNotifySources] = useState<string>(allNotificationSources);
+    const [notifySourceMenuOpen, setNotifySourceMenuOpen] = useState(false);
     const [itemSearch, setItemSearch] = useState("");
     const mountedRef = useRef(false);
     const loadInFlightRef = useRef(false);
     const dashboardSettingsLoadedRef = useRef(false);
+    const notifySourceMenuRef = useRef<HTMLDivElement>(null);
 
     const t = (key: string, fallback?: string) => {
         if (state?.translations && state.translations[key]) {
@@ -206,6 +236,7 @@ function App() {
                 setEquipmentFilter(normalized.equipment_filter);
                 setSortMode(normalized.sort_mode);
                 setMarketableItemsTab(normalized.marketable_items_tab);
+                setNotifySources(normalized.notify_sources);
             })
             .catch(() => {
                 // Dashboard preferences are non-critical; current defaults remain usable.
@@ -243,6 +274,17 @@ function App() {
     }, [themeMode]);
 
     useEffect(() => {
+        if (!notifySourceMenuOpen) return;
+        const handleClickOutside = (event: MouseEvent) => {
+            if (notifySourceMenuRef.current && !notifySourceMenuRef.current.contains(event.target as Node)) {
+                setNotifySourceMenuOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [notifySourceMenuOpen]);
+
+    useEffect(() => {
         if (!dashboardSettingsLoadedRef.current) return;
         SetDashboardSettings({
             theme_mode: themeMode,
@@ -251,10 +293,11 @@ function App() {
             equipment_filter: equipmentFilter,
             sort_mode: sortMode,
             marketable_items_tab: marketableItemsTab,
+            notify_sources: notifySources,
         }).catch(() => {
             // Local UI state can continue even if settings persistence fails.
         });
-    }, [themeMode, priceMode, rarityFilter, equipmentFilter, sortMode, marketableItemsTab]);
+    }, [themeMode, priceMode, rarityFilter, equipmentFilter, sortMode, marketableItemsTab, notifySources]);
 
     useEffect(() => {
         if (!state?.refresh?.refreshing && !refreshing && !forceRefreshing) {
@@ -325,6 +368,33 @@ function App() {
     );
     const selectedRarityNotifyLabel = t("rarity." + minRarityNotify, minRarityNotify) + "+";
     const rarityNotifyTitle = `${controlRarityNotifyLabel}: ${selectedRarityNotifyLabel}`;
+    const notifySourceOptions: Array<{ value: NotificationSource; label: string; icon: JSX.Element }> = [
+        { value: "box", label: t("dashboard.notify_source_box", localizedFallback(currentLanguage, "Sandık", "Box")), icon: <PackageOpen className="w-3.5 h-3.5" /> },
+        { value: "craft", label: t("dashboard.notify_source_craft", localizedFallback(currentLanguage, "Üretim", "Craft")), icon: <Hammer className="w-3.5 h-3.5" /> },
+        { value: "synthesis", label: t("dashboard.notify_source_synthesis", localizedFallback(currentLanguage, "Sentez", "Synthesis")), icon: <FlaskConical className="w-3.5 h-3.5" /> },
+        { value: "offering", label: t("dashboard.notify_source_offering", localizedFallback(currentLanguage, "Adak", "Offering")), icon: <HandHeart className="w-3.5 h-3.5" /> },
+    ];
+    const enabledNotifySources = notifySourceSet(notifySources);
+    const enabledNotifySourceLabels = notifySourceOptions
+        .filter((option) => enabledNotifySources.has(option.value))
+        .map((option) => option.label);
+    const notifySourcesLabel = t("dashboard.notify_sources_label", localizedFallback(currentLanguage, "Kaynaklar", "Sources"));
+    const notifySourcesSummary = enabledNotifySourceLabels.length === notificationSourceOrder.length
+        ? t("dashboard.notify_sources_all", localizedFallback(currentLanguage, "Tümü", "All"))
+        : enabledNotifySourceLabels.length === 0
+            ? t("dashboard.notify_sources_none", localizedFallback(currentLanguage, "Kapalı", "Off"))
+            : enabledNotifySourceLabels.join(", ");
+    const notifySourcesTitle = `${notifySourcesLabel}: ${notifySourcesSummary}`;
+    const toggleNotifySource = (source: NotificationSource) => {
+        const next = notifySourceSet(notifySources);
+        if (next.has(source)) {
+            next.delete(source);
+        } else {
+            next.add(source);
+        }
+        const normalized = notificationSourceOrder.filter((value) => next.has(value));
+        setNotifySources(normalized.length > 0 ? normalized.join(",") : noNotificationSources);
+    };
     const bestSellItems = state?.best_to_sell_now || [];
     const activeMarketableItemsTab: MarketableItemsTab = marketableItemsTab === "best" && bestSellItems.length === 0
         ? "all"
@@ -492,6 +562,49 @@ function App() {
                                     ariaLabel={`${rarityNotifyTitle}. ${controlRarityNotifyTooltip}`}
                                     iconOnly
                                 />
+
+                                <div
+                                    ref={notifySourceMenuRef}
+                                    className="dashboard-notify-source-menu themed-tooltip-host relative inline-block text-left"
+                                    data-tooltip={notifySourceMenuOpen ? undefined : notifySourcesTitle}
+                                >
+                                    <button
+                                        type="button"
+                                        onClick={() => setNotifySourceMenuOpen((open) => !open)}
+                                        className="dashboard-icon-dropdown-button game-button cursor-pointer flex items-center justify-center"
+                                        aria-label={notifySourcesTitle}
+                                        aria-haspopup="menu"
+                                        aria-expanded={notifySourceMenuOpen}
+                                    >
+                                        <ListChecks className="w-3.5 h-3.5" />
+                                    </button>
+                                    {notifySourceMenuOpen && (
+                                        <div
+                                            className="dashboard-notify-source-popover game-panel bg-[#0d0b12] border-2 border-[#463d30] shadow-2xl rounded"
+                                            role="menu"
+                                        >
+                                            {notifySourceOptions.map((option) => {
+                                                const enabled = enabledNotifySources.has(option.value);
+                                                return (
+                                                    <button
+                                                        key={option.value}
+                                                        type="button"
+                                                        role="menuitemcheckbox"
+                                                        aria-checked={enabled}
+                                                        onClick={() => toggleNotifySource(option.value)}
+                                                        className={`dashboard-notify-source-option ${enabled ? "is-enabled" : ""}`}
+                                                    >
+                                                        <span className="dashboard-notify-source-icon">{option.icon}</span>
+                                                        <span className="dashboard-notify-source-label">{option.label}</span>
+                                                        <span className="dashboard-notify-source-check">
+                                                            {enabled && <CheckCircle className="w-3.5 h-3.5" />}
+                                                        </span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
 
                                 <GameDropdown
                                     value={currentLanguage}

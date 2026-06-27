@@ -202,5 +202,19 @@
   "gear.SHIELD": "โล่",
   "gear.STAFF": "ไม้เท้า",
   "gear.SWORD": "ดาบ",
-  "gear.TOME": "ตำรา"
+  "gear.TOME": "ตำรา",
+  "dashboard.footer_created_by": "โดย %s",
+  "dashboard.footer_label": "สถานะ",
+  "dashboard.footer_ready": "พร้อม",
+  "dashboard.footer_syncing": "กำลังซิงค์",
+  "dashboard.notify_source_box": "กล่อง",
+  "dashboard.notify_source_craft": "คราฟต์",
+  "dashboard.notify_source_offering": "เซ่นไหว้",
+  "dashboard.notify_source_synthesis": "สังเคราะห์",
+  "dashboard.notify_sources_all": "ทั้งหมด",
+  "dashboard.notify_sources_label": "แหล่งที่มา",
+  "dashboard.notify_sources_none": "ปิด",
+  "dashboard.rarity_notify_label": "แจ้งเตือน",
+  "dashboard.rarity_notify_tooltip": "แจ้งเตือนเฉพาะไอเทมที่สามารถซื้อขายได้ที่ระดับความหายากเท่ากับหรือสูงกว่าที่เลือกไว้",
+  "dashboard.search_items": "ค้นหาไอเทม"
 }

@@ -202,5 +202,19 @@
   "gear.SHIELD": "盾牌",
   "gear.STAFF": "法杖",
   "gear.SWORD": "剑",
-  "gear.TOME": "典籍"
+  "gear.TOME": "典籍",
+  "dashboard.footer_created_by": "作者：%s",
+  "dashboard.footer_label": "状态",
+  "dashboard.footer_ready": "就绪",
+  "dashboard.footer_syncing": "同步中",
+  "dashboard.notify_source_box": "宝箱",
+  "dashboard.notify_source_craft": "制作",
+  "dashboard.notify_source_offering": "祭品",
+  "dashboard.notify_source_synthesis": "合成",
+  "dashboard.notify_sources_all": "全部",
+  "dashboard.notify_sources_label": "来源",
+  "dashboard.notify_sources_none": "关闭",
+  "dashboard.rarity_notify_label": "通知",
+  "dashboard.rarity_notify_tooltip": "仅在获得等于或高于所选稀有度的可交易物品时进行通知。",
+  "dashboard.search_items": "搜索物品"
 }

@@ -202,5 +202,19 @@
   "gear.SHIELD": "Shield",
   "gear.STAFF": "Staff",
   "gear.SWORD": "Sword",
-  "gear.TOME": "Tome"
+  "gear.TOME": "Tome",
+  "dashboard.footer_created_by": "by %s",
+  "dashboard.footer_label": "Status",
+  "dashboard.footer_ready": "Ready",
+  "dashboard.footer_syncing": "Syncing",
+  "dashboard.notify_source_box": "Box",
+  "dashboard.notify_source_craft": "Craft",
+  "dashboard.notify_source_offering": "Offering",
+  "dashboard.notify_source_synthesis": "Synthesis",
+  "dashboard.notify_sources_all": "All",
+  "dashboard.notify_sources_label": "Sources",
+  "dashboard.notify_sources_none": "Off",
+  "dashboard.rarity_notify_label": "Notify",
+  "dashboard.rarity_notify_tooltip": "Notifies only for marketable items at or above the selected rarity.",
+  "dashboard.search_items": "Search items"
 }

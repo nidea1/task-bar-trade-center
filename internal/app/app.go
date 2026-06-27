@@ -174,6 +174,7 @@ func configureGameProcess(pid uint32, processHandle uintptr, gameAssemblyBase ui
 	activeApp.tooltipYAOBResolver.Reset()
 	activeApp.tooltipHeightAOBResolver.Reset()
 	resetMarketableInventoryNotifications()
+	triggerSavePollNow = false
 }
 
 func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {

@@ -202,5 +202,19 @@
   "gear.SHIELD": "Escudo",
   "gear.STAFF": "Cajado",
   "gear.SWORD": "Espada",
-  "gear.TOME": "Tomo"
+  "gear.TOME": "Tomo",
+  "dashboard.footer_created_by": "por %s",
+  "dashboard.footer_label": "Estado",
+  "dashboard.footer_ready": "Pronto",
+  "dashboard.footer_syncing": "A sincronizar",
+  "dashboard.notify_source_box": "Cofre",
+  "dashboard.notify_source_craft": "Artesanato",
+  "dashboard.notify_source_offering": "Oferenda",
+  "dashboard.notify_source_synthesis": "Síntese",
+  "dashboard.notify_sources_all": "Tudo",
+  "dashboard.notify_sources_label": "Fontes",
+  "dashboard.notify_sources_none": "Desativado",
+  "dashboard.rarity_notify_label": "Notificar",
+  "dashboard.rarity_notify_tooltip": "Notifica apenas para itens comercializáveis de raridade igual ou superior à selecionada.",
+  "dashboard.search_items": "Procurar itens"
 }

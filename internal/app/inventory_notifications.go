@@ -58,8 +58,8 @@ func recordMarketableInventoryItems(snapshot playerdata.InventorySnapshot) []mar
 		if activeApp.marketableInventorySeeded {
 			notifiedBoxItemsMu.Lock()
 			tracker := recentlyNotifiedBoxItems[item.ItemID]
-			if tracker.count > 0 && time.Since(tracker.lastNotified) < 2*time.Minute {
-				logPrintf("[NOTIFY] Skipping duplicate notification for itemID=%d, UniqueID=%d (already notified %d time(s) via BoxOpenLog)\n", item.ItemID, item.UniqueID, tracker.count)
+			if tracker.count > 0 && time.Since(tracker.lastNotified) < directInventoryNotificationWindow {
+				logPrintf("[NOTIFY] Skipping duplicate notification for itemID=%d, UniqueID=%d (already notified %d time(s) via LogManager)\n", item.ItemID, item.UniqueID, tracker.count)
 				tracker.count--
 				recentlyNotifiedBoxItems[item.ItemID] = tracker
 				notifiedBoxItemsMu.Unlock()
@@ -253,16 +253,74 @@ func cachedNotificationIcon(iconPath string) uintptr {
 		activeApp.inventoryMu.Unlock()
 		return icon
 	}
+
+	// Check if the icon is currently being prepared in a background thread
+	preparing := false
+	if activeApp.notificationIconPreparing != nil {
+		_, preparing = activeApp.notificationIconPreparing[iconPath]
+	}
 	activeApp.inventoryMu.Unlock()
 
-	iconFile, ok := existingNotificationIconFile(iconPath)
+	if preparing {
+		// Wait for the background preparation goroutine to complete (up to 5 seconds)
+		start := time.Now()
+		for time.Since(start) < 5*time.Second {
+			time.Sleep(50 * time.Millisecond)
+			activeApp.inventoryMu.Lock()
+			_, preparing = activeApp.notificationIconPreparing[iconPath]
+			activeApp.inventoryMu.Unlock()
+			if !preparing {
+				break
+			}
+		}
+
+		// Re-check the cache in case the background thread succeeded
+		activeApp.inventoryMu.Lock()
+		if icon := activeApp.notificationIconCache[iconPath]; icon != 0 {
+			activeApp.inventoryMu.Unlock()
+			return icon
+		}
+		activeApp.inventoryMu.Unlock()
+	}
+
+	// Lock and mark as preparing to prevent concurrent duplicate prep/downloads
+	activeApp.inventoryMu.Lock()
+	if activeApp.notificationIconPreparing == nil {
+		activeApp.notificationIconPreparing = make(map[string]struct{})
+	}
+	if _, stillPreparing := activeApp.notificationIconPreparing[iconPath]; stillPreparing {
+		activeApp.inventoryMu.Unlock()
+		// Wait again briefly
+		start := time.Now()
+		for time.Since(start) < 5*time.Second {
+			time.Sleep(50 * time.Millisecond)
+			activeApp.inventoryMu.Lock()
+			_, stillPreparing = activeApp.notificationIconPreparing[iconPath]
+			activeApp.inventoryMu.Unlock()
+			if !stillPreparing {
+				break
+			}
+		}
+		activeApp.inventoryMu.Lock()
+		icon := activeApp.notificationIconCache[iconPath]
+		activeApp.inventoryMu.Unlock()
+		return icon
+	}
+	activeApp.notificationIconPreparing[iconPath] = struct{}{}
+	activeApp.inventoryMu.Unlock()
+
+	defer func() {
+		activeApp.inventoryMu.Lock()
+		delete(activeApp.notificationIconPreparing, iconPath)
+		activeApp.inventoryMu.Unlock()
+	}()
+
+	iconFile, ok := notificationIconFile(iconPath)
 	if !ok {
-		queueNotificationIconPrepare(iconPath)
 		return 0
 	}
 	icon := winapp.LoadIconFile(iconFile, getSystemMetric(SM_CXICON))
 	if icon == 0 {
-		queueNotificationIconPrepare(iconPath)
 		return 0
 	}
 

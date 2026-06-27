@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +26,7 @@ const (
 	inventoryNotificationActiveInterval = 2 * time.Second
 	inventoryNotificationIdleInterval   = 5 * time.Second
 	inventoryDashboardRebuildThrottle   = 1500 * time.Millisecond
+	directInventoryNotificationWindow   = 30 * time.Minute
 )
 
 func refreshInventoryDashboardState(reason string) {
@@ -97,7 +99,7 @@ func readInventoryDashboardState() (inventory.DashboardState, error) {
 	if err != nil {
 		return inventory.DashboardState{}, err
 	}
-	storeInventorySnapshotAndNotify(snapshot)
+	storeInventorySnapshot(snapshot)
 
 	scope := market.CurrentScope()
 	state := inventory.BuildDashboard(snapshot, inventoryItemCatalog(scope), cacheQuoteProvider{scope: scope}, inventory.DashboardOptions{
@@ -129,13 +131,10 @@ func readInventorySnapshot() (playerdata.InventorySnapshot, error) {
 	return snapshot, nil
 }
 
-func storeInventorySnapshotAndNotify(snapshot playerdata.InventorySnapshot) bool {
+func storeInventorySnapshot(snapshot playerdata.InventorySnapshot) {
 	activeApp.inventoryMu.Lock()
 	activeApp.lastSnapshot = &snapshot
 	activeApp.inventoryMu.Unlock()
-	newItems := recordMarketableInventoryItems(snapshot)
-	processNewMarketableInventoryItems(newItems)
-	return len(newItems) > 0
 }
 
 func currentInventoryResolver() *playerdata.Resolver {
@@ -292,13 +291,13 @@ func pollInventoryNotifications() bool {
 		logPrintf("[INVENTORY:poll] Snapshot changed. Previous items count: %d, current items count: %d\n", prevCount, len(snapshot.Items))
 	}
 
-	newItems := storeInventorySnapshotAndNotify(snapshot)
+	storeInventorySnapshot(snapshot)
 
 	if changed {
 		go refreshInventoryDashboardState("inventory-changed")
 	}
 
-	return newItems || changed
+	return changed
 }
 
 func inventorySnapshotChanged(a, b *playerdata.InventorySnapshot) bool {
@@ -641,6 +640,297 @@ func localReadListInfo(p *tbhmem.Process, listPtr uintptr, maxAllowed int) local
 	return localListInfo{ptr: listPtr, arrayPtr: arrayPtr, size: int(size32), max: int(max64), ok: true}
 }
 
+func inventoryInteractionResultSource(className string) (string, bool) {
+	switch className {
+	case "SynthesisResultLog", "SynthesisResult", "SynthesisLog", "Synthesis":
+		return notificationSourceSynthesis, true
+	case "CraftingResultLog", "CraftingResult", "CraftingLog", "Crafting":
+		return notificationSourceCraft, true
+	case "CraftResultLog", "CraftResult", "CubeResultLog", "CubeResult":
+		return notificationSourceCraft, true
+	case "OfferingResultLog", "OfferingResult", "OfferingLog", "Offering":
+		return notificationSourceOffering, true
+	}
+	lowerClassName := strings.ToLower(className)
+	switch {
+	case strings.Contains(lowerClassName, "synthesis"):
+		return notificationSourceSynthesis, true
+	case strings.Contains(lowerClassName, "craft"), strings.Contains(lowerClassName, "cube"):
+		return notificationSourceCraft, true
+	case strings.Contains(lowerClassName, "offering"):
+		return notificationSourceOffering, true
+	}
+	return "", false
+}
+
+func itemIDFromItemNameKey(value string) (int, bool) {
+	suffix, ok := strings.CutPrefix(value, "ItemName_")
+	if !ok || suffix == "" {
+		return 0, false
+	}
+	itemID, err := strconv.Atoi(suffix)
+	return itemID, err == nil && itemID > 0
+}
+
+func readLogItemPayload(p *tbhmem.Process, logDataPtr uintptr) (int, string, string, bool) {
+	for offset := uintptr(0x40); offset <= 0xA0; offset += 8 {
+		strPtr, ok := p.ReadUintptr(logDataPtr + offset)
+		if !ok || strPtr == 0 {
+			continue
+		}
+		value := readCSharpStringLocal(p, strPtr)
+		itemID, ok := itemIDFromItemNameKey(value)
+		if ok {
+			return itemID, value, fmt.Sprintf("str@0x%X", offset), true
+		}
+		if itemID, ok := knownMarketableItemID(p, logDataPtr+offset); ok {
+			return itemID, fmt.Sprintf("%d", itemID), fmt.Sprintf("i32@0x%X", offset), true
+		}
+		if itemID, value, path, ok := readNestedLogItemPayload(p, strPtr, fmt.Sprintf("ptr@0x%X", offset), 1); ok {
+			return itemID, value, path, true
+		}
+	}
+	return 0, "", "", false
+}
+
+func readNestedLogItemPayload(p *tbhmem.Process, objectPtr uintptr, basePath string, depth int) (int, string, string, bool) {
+	if depth < 0 || objectPtr == 0 || !tbhmem.PlausibleAddress(objectPtr) {
+		return 0, "", "", false
+	}
+	for offset := uintptr(0x10); offset <= 0xC0; offset += 8 {
+		fieldAddr := objectPtr + offset
+		strPtr, ok := p.ReadUintptr(fieldAddr)
+		if ok && strPtr != 0 {
+			value := readCSharpStringLocal(p, strPtr)
+			if itemID, ok := itemIDFromItemNameKey(value); ok {
+				return itemID, value, fmt.Sprintf("%s.str@0x%X", basePath, offset), true
+			}
+			if depth > 0 {
+				if itemID, value, path, ok := readNestedLogItemPayload(p, strPtr, fmt.Sprintf("%s.ptr@0x%X", basePath, offset), depth-1); ok {
+					return itemID, value, path, true
+				}
+			}
+		}
+	}
+	for offset := uintptr(0x10); offset <= 0xC0; offset += 4 {
+		if itemID, ok := knownMarketableItemID(p, objectPtr+offset); ok {
+			return itemID, fmt.Sprintf("%d", itemID), fmt.Sprintf("%s.i32@0x%X", basePath, offset), true
+		}
+	}
+	return 0, "", "", false
+}
+
+func knownMarketableItemID(p *tbhmem.Process, address uintptr) (int, bool) {
+	value, ok := p.ReadInt32(address)
+	if !ok || value <= 0 {
+		return 0, false
+	}
+	itemID := int(value)
+	activeApp.inventoryMu.Lock()
+	_, exists := activeApp.itemMap[itemID]
+	activeApp.inventoryMu.Unlock()
+	return itemID, exists
+}
+
+func logInventoryInteractionPayloadMiss(p *tbhmem.Process, logDataPtr uintptr, className string) {
+	candidates := make([]string, 0)
+	for offset := uintptr(0x40); offset <= 0xA0; offset += 8 {
+		if ptr, ok := p.ReadUintptr(logDataPtr + offset); ok && ptr != 0 && tbhmem.PlausibleAddress(ptr) {
+			candidates = append(candidates, fmt.Sprintf("ptr@0x%X=0x%X", offset, ptr))
+			if value := readCSharpStringLocal(p, ptr); value != "" {
+				candidates = append(candidates, fmt.Sprintf("str@0x%X=%q", offset, value))
+			}
+			candidates = append(candidates, nestedLogPayloadCandidates(p, ptr, fmt.Sprintf("ptr@0x%X", offset))...)
+			continue
+		}
+		if value, ok := p.ReadInt32(logDataPtr + offset); ok && value > 0 {
+			candidates = append(candidates, fmt.Sprintf("i32@0x%X=%d", offset, value))
+		}
+	}
+	if len(candidates) == 0 {
+		candidates = append(candidates, "none")
+	}
+	logPrintf("[NOTIFY] %s did not expose an ItemName_* payload. Candidates: %s\n", className, strings.Join(candidates, ", "))
+
+	lower := strings.ToLower(className)
+	if strings.Contains(lower, "synthesis") || strings.Contains(lower, "offering") {
+		logPrintf("[NOTIFY] Running deep recursive payload scan for %s...\n", className)
+		visited := make(map[uintptr]bool)
+		visitCount := 0
+		var deepScan func(addr uintptr, path string, depth int)
+		deepScan = func(addr uintptr, path string, depth int) {
+			if depth > 4 || addr == 0 || visited[addr] || !tbhmem.PlausibleAddress(addr) || visitCount > 1500 {
+				return
+			}
+			visited[addr] = true
+			visitCount++
+
+			for offset := uintptr(0); offset <= 0x150; offset += 4 {
+				val, ok := p.ReadInt32(addr + offset)
+				if ok && val >= 100000 && val <= 999999 {
+					activeApp.inventoryMu.Lock()
+					_, exists := activeApp.itemMap[int(val)]
+					_, existsAll := activeApp.allItemMap[int(val)]
+					activeApp.inventoryMu.Unlock()
+					if exists {
+						logPrintf("[NOTIFY:DEEP] FOUND marketable item ID %d (*) at %s.offset@0x%X\n", val, path, offset)
+					} else if existsAll {
+						logPrintf("[NOTIFY:DEEP] FOUND non-marketable item ID %d at %s.offset@0x%X\n", val, path, offset)
+					}
+				}
+			}
+
+			for offset := uintptr(0); offset <= 0x150; offset += 8 {
+				ptr, ok := p.ReadUintptr(addr + offset)
+				if ok && ptr != 0 && tbhmem.PlausibleAddress(ptr) {
+					cName := ""
+					if cPtr, ok2 := p.ReadUintptr(ptr); ok2 && cPtr != 0 && tbhmem.PlausibleAddress(cPtr) {
+						if nPtr, ok3 := p.ReadUintptr(cPtr + 0x10); ok3 && nPtr != 0 && tbhmem.PlausibleAddress(nPtr) {
+							cName = readStringLocal(p, nPtr)
+						}
+					}
+					
+					if cName == "String" {
+						if strVal := readCSharpStringLocal(p, ptr); strVal != "" {
+							if strings.Contains(strVal, "ItemName_") {
+								logPrintf("[NOTIFY:DEEP] FOUND localization string key %q (*) at %s.ptr@0x%X\n", strVal, path, offset)
+							} else {
+								logPrintf("[NOTIFY:DEEP] FOUND string value %q at %s.ptr@0x%X\n", strVal, path, offset)
+							}
+						}
+						continue
+					}
+
+					lowerClassName := strings.ToLower(cName)
+					shouldSkip := false
+					for _, skip := range []string{"hero", "monster", "unit", "dictionary", "comparer", "enumerable", "sorter", "list", "invokable"} {
+						if strings.Contains(lowerClassName, skip) {
+							if !strings.Contains(lowerClassName, "slot") && !strings.Contains(lowerClassName, "item") {
+								shouldSkip = true
+								break
+							}
+						}
+					}
+					if shouldSkip {
+						continue
+					}
+
+					pName := fmt.Sprintf("%s.ptr@0x%X", path, offset)
+					if cName != "" {
+						pName = fmt.Sprintf("%s(%s)", pName, cName)
+					}
+					deepScan(ptr, pName, depth+1)
+				}
+			}
+		}
+		deepScan(logDataPtr, className, 0)
+		logPrintf("[NOTIFY] Deep recursive payload scan finished. Visited %d nodes.\n", visitCount)
+	}
+}
+
+func nestedLogPayloadCandidates(p *tbhmem.Process, objectPtr uintptr, basePath string) []string {
+	candidates := make([]string, 0)
+	for offset := uintptr(0x10); offset <= 0xC0 && len(candidates) < 16; offset += 8 {
+		ptr, ok := p.ReadUintptr(objectPtr + offset)
+		if !ok || ptr == 0 || !tbhmem.PlausibleAddress(ptr) {
+			continue
+		}
+		if value := readCSharpStringLocal(p, ptr); value != "" {
+			candidates = append(candidates, fmt.Sprintf("%s.str@0x%X=%q", basePath, offset, value))
+		}
+	}
+	for offset := uintptr(0x10); offset <= 0xC0 && len(candidates) < 24; offset += 4 {
+		value, ok := p.ReadInt32(objectPtr + offset)
+		if !ok || value <= 0 || value > 10000000 {
+			continue
+		}
+		marker := ""
+		activeApp.inventoryMu.Lock()
+		if _, exists := activeApp.itemMap[int(value)]; exists {
+			marker = "*"
+		}
+		activeApp.inventoryMu.Unlock()
+		candidates = append(candidates, fmt.Sprintf("%s.i32@0x%X=%d%s", basePath, offset, value, marker))
+	}
+	return candidates
+}
+
+func recordDirectMarketableItemNotification(itemID int, source string) (marketableInventoryItem, bool) {
+	activeApp.inventoryMu.Lock()
+	config, exists := activeApp.itemMap[itemID]
+	activeApp.inventoryMu.Unlock()
+	if !exists {
+		logPrintf("[NOTIFY] Ignored %s item ID %d because it is not marketable\n", source, itemID)
+		return marketableInventoryItem{}, false
+	}
+
+	notifiedBoxItemsMu.Lock()
+	tracker := recentlyNotifiedBoxItems[itemID]
+	if time.Since(tracker.lastNotified) > directInventoryNotificationWindow {
+		tracker.count = 0
+	}
+	tracker.count++
+	tracker.lastNotified = time.Now()
+	recentlyNotifiedBoxItems[itemID] = tracker
+	for k, v := range recentlyNotifiedBoxItems {
+		if time.Since(v.lastNotified) > directInventoryNotificationWindow {
+			delete(recentlyNotifiedBoxItems, k)
+		}
+	}
+	notifiedBoxItemsMu.Unlock()
+
+	itemName := config.Name["en-US"]
+	if itemName == "" {
+		itemName = inventoryNotificationItemName(itemID)
+	}
+	logPrintf("[NOTIFY] Instant %s item detected: itemID=%d name=%s\n", source, itemID, itemName)
+	return marketableInventoryItem{itemID: itemID}, true
+}
+
+func appendLogManagerItemNotification(items []marketableInventoryItem, itemID int, source string) []marketableInventoryItem {
+	item, ok := recordDirectMarketableItemNotification(itemID, source)
+	if !ok {
+		return items
+	}
+	return append(items, item)
+}
+
+func resolveLogItemID(p *tbhmem.Process, logDataPtr uintptr, itemID int, className string) int {
+	lower := strings.ToLower(className)
+	if strings.Contains(lower, "craft") || strings.Contains(lower, "cube") || strings.Contains(lower, "offering") || strings.Contains(lower, "synthesis") || strings.Contains(lower, "box") {
+		if grade, ok := p.ReadInt32(logDataPtr + 0x48); ok && grade > 0 && grade <= 10 {
+			resolved := resolveGradedItemID(itemID, int(grade))
+			logPrintf("[NOTIFY] Resolved base item ID %d with grade %d to %d\n", itemID, grade, resolved)
+			return resolved
+		}
+	}
+	return itemID
+}
+
+func resolveGradedItemID(baseItemID int, grade int) int {
+	if grade <= 0 {
+		return baseItemID
+	}
+	if baseItemID < 300000 || baseItemID > 650000 {
+		return baseItemID
+	}
+	xx := baseItemID / 10000
+	middle := (baseItemID / 100) % 100
+	if middle != 0 {
+		return baseItemID
+	}
+	y := (baseItemID / 10) % 10
+	z := baseItemID % 10
+	return xx*10000 + grade*1000 + y*100 + z*10 + 1
+}
+
+
+
+var (
+	pendingLogIndex   = -1
+	pendingLogRetries = 0
+)
+
 func pollLogManagerNotifications() {
 	if !canReadInventorySnapshot() {
 		return
@@ -679,7 +969,7 @@ func pollLogManagerNotifications() {
 		logManagerInstance = lm
 		logPrintf("[NOTIFY] Resolved LogManager instance at 0x%X\n", logManagerInstance)
 
-		// Seed initial size so we don't notify old chest opens
+		// Seed initial size so we don't notify old LogManager entries.
 		logListPtr, _ := memory.ReadUintptr(logManagerInstance + 0x20)
 		if logListPtr != 0 {
 			if arrayPtr, ok := memory.ReadUintptr(logListPtr + 0x10); ok && arrayPtr != 0 {
@@ -732,51 +1022,66 @@ func pollLogManagerNotifications() {
 		}
 		className := readStringLocal(memory, namePtr)
 		if className == "BoxOpenLog" {
-			itemNameStrPtr, ok := memory.ReadUintptr(logDataPtr + 0x40)
-			if !ok || itemNameStrPtr == 0 {
-				continue
-			}
-			itemNameStr := readCSharpStringLocal(memory, itemNameStrPtr)
-			var itemID int
-			_, err := fmt.Sscanf(itemNameStr, "ItemName_%d", &itemID)
-			if err != nil || itemID == 0 {
-				continue
-			}
-
-			// Check if marketable
-			activeApp.inventoryMu.Lock()
-			config, exists := activeApp.itemMap[itemID]
-			activeApp.inventoryMu.Unlock()
-
-			if exists {
-				notifiedBoxItemsMu.Lock()
-				tracker := recentlyNotifiedBoxItems[itemID]
-				if time.Since(tracker.lastNotified) > 5*time.Minute {
-					tracker.count = 0
+			if notificationSourceEnabled(notificationSourceBox) {
+				itemID, _, _, ok := readLogItemPayload(memory, logDataPtr)
+				if ok {
+					itemID = resolveLogItemID(memory, logDataPtr, itemID, className)
+					newItems = appendLogManagerItemNotification(newItems, itemID, notificationSourceBox)
 				}
-				tracker.count++
-				tracker.lastNotified = time.Now()
-				recentlyNotifiedBoxItems[itemID] = tracker
-				// Cleanup old entries
-				for k, v := range recentlyNotifiedBoxItems {
-					if time.Since(v.lastNotified) > 5*time.Minute {
-						delete(recentlyNotifiedBoxItems, k)
-					}
-				}
-				notifiedBoxItemsMu.Unlock()
-
-				logPrintf("[NOTIFY] Instant BoxOpenLog item detected: itemID=%d name=%s\n", itemID, config.Name["en-US"])
-				newItems = append(newItems, marketableInventoryItem{
-					itemID: itemID,
-				})
 			}
 		} else if className == "StageClearLog" || className == "StageFailedLog" {
 			logPrintf("[NOTIFY] Stage end event detected (%s). Triggering inventory sync on next tick.\n", className)
 			triggerSavePollNow = true
-		}
-	}
+		} else if source, ok := inventoryInteractionResultSource(className); ok {
+			if notificationSourceEnabled(source) {
+				if source == notificationSourceSynthesis {
+					triggerSavePollNow = true
+					val, ok := memory.ReadInt32(logDataPtr + 0xB0)
+					isReady := ok && val > 0
 
-	lastLogCount = size
+					if isReady {
+						activeApp.inventoryMu.Lock()
+						_, isValidMarketable := activeApp.itemMap[int(val)]
+						activeApp.inventoryMu.Unlock()
+
+						if isValidMarketable {
+							logPrintf("[NOTIFY] Synthesis item ID detected at offset 0xB0: %d\n", val)
+							newItems = appendLogManagerItemNotification(newItems, int(val), source)
+						} else {
+							logPrintf("[NOTIFY] Ignored synthesized item ID %d because it is not marketable\n", val)
+						}
+						pendingLogIndex = -1
+						pendingLogRetries = 0
+					} else {
+						if pendingLogIndex != i {
+							pendingLogIndex = i
+							pendingLogRetries = 0
+						}
+						if pendingLogRetries < 3 {
+							pendingLogRetries++
+							logPrintf("[NOTIFY] Synthesis item ID not ready at offset 0xB0 yet. Retrying (%d/3) on next poll...\n", pendingLogRetries)
+							break
+						} else {
+							logPrintf("[NOTIFY] Synthesis item ID timeout. Logging payload miss details.\n")
+							logInventoryInteractionPayloadMiss(memory, logDataPtr, className)
+							pendingLogIndex = -1
+							pendingLogRetries = 0
+						}
+					}
+				} else {
+					itemID, itemValue, path, ok := readLogItemPayload(memory, logDataPtr)
+					if !ok {
+						logInventoryInteractionPayloadMiss(memory, logDataPtr, className)
+					} else {
+						logPrintf("[NOTIFY] %s payload item detected at %s: %s\n", className, path, itemValue)
+						itemID = resolveLogItemID(memory, logDataPtr, itemID, className)
+						newItems = appendLogManagerItemNotification(newItems, itemID, source)
+					}
+				}
+			}
+		}
+		lastLogCount = i + 1
+	}
 
 	if len(newItems) > 0 {
 		for index := range newItems {

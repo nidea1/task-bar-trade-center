@@ -202,5 +202,19 @@
   "gear.SHIELD": "Schild",
   "gear.STAFF": "Staf",
   "gear.SWORD": "Zwaard",
-  "gear.TOME": "Boek"
+  "gear.TOME": "Boek",
+  "dashboard.footer_created_by": "door %s",
+  "dashboard.footer_label": "Status",
+  "dashboard.footer_ready": "Gereed",
+  "dashboard.footer_syncing": "Synchroniseren",
+  "dashboard.notify_source_box": "Kist",
+  "dashboard.notify_source_craft": "Ambacht",
+  "dashboard.notify_source_offering": "Offer",
+  "dashboard.notify_source_synthesis": "Synthese",
+  "dashboard.notify_sources_all": "Alle",
+  "dashboard.notify_sources_label": "Bronnen",
+  "dashboard.notify_sources_none": "Uit",
+  "dashboard.rarity_notify_label": "Melden",
+  "dashboard.rarity_notify_tooltip": "Meldt alleen voor verhandelbare voorwerpen van of boven de geselecteerde zeldzaamheid.",
+  "dashboard.search_items": "Zoek voorwerpen"
 }

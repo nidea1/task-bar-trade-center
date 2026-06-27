@@ -202,5 +202,19 @@
   "gear.SHIELD": "방패",
   "gear.STAFF": "지팡이",
   "gear.SWORD": "검",
-  "gear.TOME": "고서"
+  "gear.TOME": "고서",
+  "dashboard.footer_created_by": "제작자: %s",
+  "dashboard.footer_label": "상태",
+  "dashboard.footer_ready": "준비 완료",
+  "dashboard.footer_syncing": "동기화 중",
+  "dashboard.notify_source_box": "상자",
+  "dashboard.notify_source_craft": "제작",
+  "dashboard.notify_source_offering": "공물",
+  "dashboard.notify_source_synthesis": "합성",
+  "dashboard.notify_sources_all": "모두",
+  "dashboard.notify_sources_label": "소스",
+  "dashboard.notify_sources_none": "꺼짐",
+  "dashboard.rarity_notify_label": "알림",
+  "dashboard.rarity_notify_tooltip": "선택한 등급 이상의 거래 가능한 아이템만 알림을 보냅니다.",
+  "dashboard.search_items": "아이템 검색"
 }

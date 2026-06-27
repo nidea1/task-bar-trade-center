@@ -202,5 +202,19 @@
   "gear.SHIELD": "Scudo",
   "gear.STAFF": "Bastone",
   "gear.SWORD": "Spada",
-  "gear.TOME": "Tomo"
+  "gear.TOME": "Tomo",
+  "dashboard.footer_created_by": "da %s",
+  "dashboard.footer_label": "Stato",
+  "dashboard.footer_ready": "Pronto",
+  "dashboard.footer_syncing": "Sincronizzazione",
+  "dashboard.notify_source_box": "Forziere",
+  "dashboard.notify_source_craft": "Artigianato",
+  "dashboard.notify_source_offering": "Offerta",
+  "dashboard.notify_source_synthesis": "Sintesi",
+  "dashboard.notify_sources_all": "Tutto",
+  "dashboard.notify_sources_label": "Origini",
+  "dashboard.notify_sources_none": "Disattivato",
+  "dashboard.rarity_notify_label": "Notifica",
+  "dashboard.rarity_notify_tooltip": "Notifica solo per gli oggetti commerciabili con rarità pari o superiore a quella selezionata.",
+  "dashboard.search_items": "Cerca oggetti"
 }

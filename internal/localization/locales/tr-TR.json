@@ -202,5 +202,19 @@
   "gear.SHIELD": "Kalkan",
   "gear.STAFF": "Değnek",
   "gear.SWORD": "Kılıç",
-  "gear.TOME": "Kitap"
+  "gear.TOME": "Kitap",
+  "dashboard.footer_created_by": "%s tarafından",
+  "dashboard.footer_label": "Durum",
+  "dashboard.footer_ready": "Hazır",
+  "dashboard.footer_syncing": "Senkronize ediliyor",
+  "dashboard.notify_source_box": "Sandık",
+  "dashboard.notify_source_craft": "Üretim",
+  "dashboard.notify_source_offering": "Adak",
+  "dashboard.notify_source_synthesis": "Sentez",
+  "dashboard.notify_sources_all": "Tümü",
+  "dashboard.notify_sources_label": "Kaynaklar",
+  "dashboard.notify_sources_none": "Kapalı",
+  "dashboard.rarity_notify_label": "Bildirim",
+  "dashboard.rarity_notify_tooltip": "Sadece seçilen nadirlik ve üzerindeki satılabilir eşyalar için bildirim gönderir.",
+  "dashboard.search_items": "Eşya ara"
 }

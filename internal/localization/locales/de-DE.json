@@ -202,5 +202,19 @@
   "gear.SHIELD": "Schild",
   "gear.STAFF": "Stab",
   "gear.SWORD": "Schwert",
-  "gear.TOME": "Foliant"
+  "gear.TOME": "Foliant",
+  "dashboard.footer_created_by": "von %s",
+  "dashboard.footer_label": "Status",
+  "dashboard.footer_ready": "Bereit",
+  "dashboard.footer_syncing": "Synchronisieren...",
+  "dashboard.notify_source_box": "Kiste",
+  "dashboard.notify_source_craft": "Herstellung",
+  "dashboard.notify_source_offering": "Opferung",
+  "dashboard.notify_source_synthesis": "Synthese",
+  "dashboard.notify_sources_all": "Alle",
+  "dashboard.notify_sources_label": "Quellen",
+  "dashboard.notify_sources_none": "Aus",
+  "dashboard.rarity_notify_label": "Benachrichtigen",
+  "dashboard.rarity_notify_tooltip": "Benachrichtigt nur bei marktfähigen Gegenständen ab der ausgewählten Seltenheit.",
+  "dashboard.search_items": "Gegenstände suchen"
 }

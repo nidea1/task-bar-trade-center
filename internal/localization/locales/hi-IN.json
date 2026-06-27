@@ -202,5 +202,19 @@
   "gear.SHIELD": "ढाल",
   "gear.STAFF": "दंड",
   "gear.SWORD": "तलवार",
-  "gear.TOME": "ग्रंथ"
+  "gear.TOME": "ग्रंथ",
+  "dashboard.footer_created_by": "%s द्वारा",
+  "dashboard.footer_label": "स्थिति",
+  "dashboard.footer_ready": "तैयार",
+  "dashboard.footer_syncing": "सिंक हो रहा है",
+  "dashboard.notify_source_box": "डिब्बा",
+  "dashboard.notify_source_craft": "शिल्प",
+  "dashboard.notify_source_offering": "प्रसाद",
+  "dashboard.notify_source_synthesis": "संश्लेषण",
+  "dashboard.notify_sources_all": "सभी",
+  "dashboard.notify_sources_label": "स्रोत",
+  "dashboard.notify_sources_none": "बंद",
+  "dashboard.rarity_notify_label": "सूचित करें",
+  "dashboard.rarity_notify_tooltip": "केवल चुनी गई दुर्लभता या उससे ऊपर की विपणन योग्य वस्तुओं के लिए सूचित करता है।",
+  "dashboard.search_items": "वस्तुएं खोजें"
 }

@@ -2,6 +2,7 @@ export type ThemeMode = "dark" | "light";
 export type PriceMode = "suggested" | "instant";
 export type SortMode = "price_desc" | "price_asc" | "name_asc" | "count_desc" | "rarity_desc";
 export type MarketableItemsTab = "best" | "all";
+export type NotificationSource = "box" | "craft" | "synthesis" | "offering";
 
 export interface DashboardSettings {
     theme_mode: ThemeMode;
@@ -10,6 +11,7 @@ export interface DashboardSettings {
     equipment_filter: string;
     sort_mode: SortMode;
     marketable_items_tab: MarketableItemsTab;
+    notify_sources: string;
 }
 
 export interface RarityMeta {

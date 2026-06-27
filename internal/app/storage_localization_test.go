@@ -62,6 +62,7 @@ func TestSettingsPersistDashboardSettings(t *testing.T) {
 		EquipmentFilter:    "weapon",
 		SortMode:           "rarity_desc",
 		MarketableItemsTab: "best",
+		NotifySources:      "box,offering",
 	}
 	setDashboardSettings(want)
 

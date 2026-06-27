@@ -202,5 +202,19 @@
   "gear.SHIELD": "Bouclier",
   "gear.STAFF": "Bâton",
   "gear.SWORD": "Épée",
-  "gear.TOME": "Tome"
+  "gear.TOME": "Tome",
+  "dashboard.footer_created_by": "par %s",
+  "dashboard.footer_label": "Statut",
+  "dashboard.footer_ready": "Prêt",
+  "dashboard.footer_syncing": "Synchronisation",
+  "dashboard.notify_source_box": "Coffre",
+  "dashboard.notify_source_craft": "Artisanat",
+  "dashboard.notify_source_offering": "Offrande",
+  "dashboard.notify_source_synthesis": "Synthèse",
+  "dashboard.notify_sources_all": "Tout",
+  "dashboard.notify_sources_label": "Sources",
+  "dashboard.notify_sources_none": "Désactivé",
+  "dashboard.rarity_notify_label": "Notification",
+  "dashboard.rarity_notify_tooltip": "Notifie uniquement pour les objets vendables de rareté supérieure ou égale à celle sélectionnée.",
+  "dashboard.search_items": "Rechercher des objets"
 }

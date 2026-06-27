@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.3] - 2026-06-28
+
+### Added
+- Added live item-synthesis (`CubeSynthesisLog`) detection. Read synthesis results directly from memory offset `0xB0` of log entries.
+- Added a timing retry buffer for synthesis logs to wait (up to 3 retries / 6 seconds) for server-side response item ID writes.
+- Added class filtering to the deep recursive memory searcher, excluding game state classes (Hero, Monster, etc.) and increasing the search budget to 1500 nodes for faster and reliable item ID discovery on payload misses.
+
+### Fixed
+- Resolved an issue in log notifications where items in box opens, crafting, and offering logs resolved to base template IDs instead of their graded IDs.
+- Fixed a bug where disabling notification types in settings caused logs to stop advancing (`lastLogCount` stuck), leading to backlog notification spam when re-enabled.
+
 ## [0.10.2] - 2026-06-27
 
 ### Fixed

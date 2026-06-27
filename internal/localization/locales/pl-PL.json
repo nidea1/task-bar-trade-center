@@ -202,5 +202,19 @@
   "gear.SHIELD": "Tarcza",
   "gear.STAFF": "Kostur",
   "gear.SWORD": "Miecz",
-  "gear.TOME": "Tom"
+  "gear.TOME": "Tom",
+  "dashboard.footer_created_by": "przez %s",
+  "dashboard.footer_label": "Status",
+  "dashboard.footer_ready": "Gotowy",
+  "dashboard.footer_syncing": "Synchronizowanie",
+  "dashboard.notify_source_box": "Skrzynia",
+  "dashboard.notify_source_craft": "Rzemiosło",
+  "dashboard.notify_source_offering": "Ofiara",
+  "dashboard.notify_source_synthesis": "Synteza",
+  "dashboard.notify_sources_all": "Wszystkie",
+  "dashboard.notify_sources_label": "Źródła",
+  "dashboard.notify_sources_none": "Wyłączone",
+  "dashboard.rarity_notify_label": "Powiadomienia",
+  "dashboard.rarity_notify_tooltip": "Powiadamia tylko o przedmiotach zdatnych do handlu o rzadkości równej lub wyższej od wybranej.",
+  "dashboard.search_items": "Szukaj przedmiotów"
 }

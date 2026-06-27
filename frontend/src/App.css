@@ -390,6 +390,60 @@
   flex-shrink: 0;
 }
 
+.dashboard-notify-source-menu {
+  flex-shrink: 0;
+}
+
+.dashboard-notify-source-popover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 60;
+  width: 190px;
+  overflow: hidden;
+}
+
+.dashboard-notify-source-option {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 18px;
+  align-items: center;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  gap: 8px;
+  color: #e1d5bf;
+  background: transparent;
+  border: 0;
+  border-left: 2px solid transparent;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.16s ease, background-color 0.16s ease, border-color 0.16s ease;
+}
+
+.dashboard-notify-source-option:hover,
+.dashboard-notify-source-option.is-enabled {
+  color: #ffbe2d;
+  background: #1e150d;
+  border-left-color: #ffbe2d;
+}
+
+.dashboard-notify-source-icon,
+.dashboard-notify-source-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: currentColor;
+}
+
+.dashboard-notify-source-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .dashboard-theme-icon {
   width: 14px;
   height: 14px;
@@ -1698,6 +1752,17 @@
 
 .theme-light .dashboard-dropdown-prefix {
   color: #6b7280;
+}
+
+.theme-light .dashboard-notify-source-option {
+  color: #1f2933;
+}
+
+.theme-light .dashboard-notify-source-option:hover,
+.theme-light .dashboard-notify-source-option.is-enabled {
+  color: #a15c07;
+  background: #f2eadf;
+  border-left-color: #a15c07;
 }
 
 .theme-light .metric-tooltip {

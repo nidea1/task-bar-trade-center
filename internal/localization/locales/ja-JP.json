@@ -202,5 +202,19 @@
   "gear.SHIELD": "盾",
   "gear.STAFF": "杖",
   "gear.SWORD": "剣",
-  "gear.TOME": "書"
+  "gear.TOME": "書",
+  "dashboard.footer_created_by": "作成者: %s",
+  "dashboard.footer_label": "ステータス",
+  "dashboard.footer_ready": "準備完了",
+  "dashboard.footer_syncing": "同期中",
+  "dashboard.notify_source_box": "ボックス",
+  "dashboard.notify_source_craft": "製作",
+  "dashboard.notify_source_offering": "奉納",
+  "dashboard.notify_source_synthesis": "合成",
+  "dashboard.notify_sources_all": "すべて",
+  "dashboard.notify_sources_label": "ソース",
+  "dashboard.notify_sources_none": "オフ",
+  "dashboard.rarity_notify_label": "通知",
+  "dashboard.rarity_notify_tooltip": "選択したレア度以上の取引可能なアイテムのみを通知します。",
+  "dashboard.search_items": "アイテムを検索"
 }

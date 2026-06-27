@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/nidea1/task-bar-trade-center/internal/inventory"
@@ -123,6 +124,23 @@ type DashboardSettings struct {
 	EquipmentFilter    string `json:"equipment_filter"`
 	SortMode           string `json:"sort_mode"`
 	MarketableItemsTab string `json:"marketable_items_tab"`
+	NotifySources      string `json:"notify_sources"`
+}
+
+const (
+	notificationSourceBox       = "box"
+	notificationSourceCraft     = "craft"
+	notificationSourceSynthesis = "synthesis"
+	notificationSourceOffering  = "offering"
+	notificationSourcesNone     = "none"
+	notificationSourcesAll      = "box,craft,synthesis,offering"
+)
+
+var notificationSourceOrder = []string{
+	notificationSourceBox,
+	notificationSourceCraft,
+	notificationSourceSynthesis,
+	notificationSourceOffering,
 }
 
 func defaultDashboardSettings() DashboardSettings {
@@ -133,6 +151,7 @@ func defaultDashboardSettings() DashboardSettings {
 		EquipmentFilter:    "all",
 		SortMode:           "price_desc",
 		MarketableItemsTab: "all",
+		NotifySources:      notificationSourcesAll,
 	}
 }
 
@@ -160,7 +179,50 @@ func normalizeDashboardSettings(settings DashboardSettings) DashboardSettings {
 	case "best", "all":
 		normalized.MarketableItemsTab = settings.MarketableItemsTab
 	}
+	normalized.NotifySources = normalizeNotificationSources(settings.NotifySources)
 	return normalized
+}
+
+func normalizeNotificationSources(sources string) string {
+	if strings.TrimSpace(sources) == "" {
+		return notificationSourcesAll
+	}
+	enabled := make(map[string]struct{})
+	for _, token := range strings.Split(sources, ",") {
+		token = strings.TrimSpace(strings.ToLower(token))
+		if token == notificationSourcesNone {
+			return notificationSourcesNone
+		}
+		for _, known := range notificationSourceOrder {
+			if token == known {
+				enabled[known] = struct{}{}
+				break
+			}
+		}
+	}
+	if len(enabled) == 0 {
+		return notificationSourcesNone
+	}
+	ordered := make([]string, 0, len(enabled))
+	for _, source := range notificationSourceOrder {
+		if _, ok := enabled[source]; ok {
+			ordered = append(ordered, source)
+		}
+	}
+	return strings.Join(ordered, ",")
+}
+
+func notificationSourceEnabled(source string) bool {
+	settings := currentDashboardSettings()
+	if settings.NotifySources == notificationSourcesNone {
+		return false
+	}
+	for _, token := range strings.Split(settings.NotifySources, ",") {
+		if strings.TrimSpace(token) == source {
+			return true
+		}
+	}
+	return false
 }
 
 func currentDashboardSettings() DashboardSettings {

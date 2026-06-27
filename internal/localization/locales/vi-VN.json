@@ -202,5 +202,19 @@
   "gear.SHIELD": "Khiên",
   "gear.STAFF": "Gậy",
   "gear.SWORD": "Kiếm",
-  "gear.TOME": "Sách cổ"
+  "gear.TOME": "Sách cổ",
+  "dashboard.footer_created_by": "bởi %s",
+  "dashboard.footer_label": "Trạng thái",
+  "dashboard.footer_ready": "Sẵn sàng",
+  "dashboard.footer_syncing": "Đang đồng bộ",
+  "dashboard.notify_source_box": "Hộp",
+  "dashboard.notify_source_craft": "Chế tạo",
+  "dashboard.notify_source_offering": "Dâng lễ",
+  "dashboard.notify_source_synthesis": "Tổng hợp",
+  "dashboard.notify_sources_all": "Tất cả",
+  "dashboard.notify_sources_label": "Nguồn",
+  "dashboard.notify_sources_none": "Tắt",
+  "dashboard.rarity_notify_label": "Thông báo",
+  "dashboard.rarity_notify_tooltip": "Chỉ thông báo cho các vật phẩm có thể mua bán ở mức quý hiếm được chọn hoặc cao hơn.",
+  "dashboard.search_items": "Tìm kiếm vật phẩm"
 }

@@ -202,5 +202,19 @@
   "gear.SHIELD": "Perisai",
   "gear.STAFF": "Tongkat",
   "gear.SWORD": "Pedang",
-  "gear.TOME": "Tome"
+  "gear.TOME": "Tome",
+  "dashboard.footer_created_by": "oleh %s",
+  "dashboard.footer_label": "Status",
+  "dashboard.footer_ready": "Siap",
+  "dashboard.footer_syncing": "Menyinkronkan",
+  "dashboard.notify_source_box": "Kotak",
+  "dashboard.notify_source_craft": "Pembuatan",
+  "dashboard.notify_source_offering": "Persembahan",
+  "dashboard.notify_source_synthesis": "Sintesis",
+  "dashboard.notify_sources_all": "Semua",
+  "dashboard.notify_sources_label": "Sumber",
+  "dashboard.notify_sources_none": "Nonaktif",
+  "dashboard.rarity_notify_label": "Notifikasi",
+  "dashboard.rarity_notify_tooltip": "Hanya memberi tahu untuk item yang dapat dipasarkan pada atau di atas kelangkaan yang dipilih.",
+  "dashboard.search_items": "Cari item"
 }
