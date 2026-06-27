@@ -92,6 +92,7 @@ If you are not familiar with coding, follow these simple steps to install the ap
 
 3. **Important Troubleshooting Tips:**
    - **Run as Administrator:** Since the application reads the game's memory space to locate tooltips and inventory items, Windows might block it. If the overlay/dashboard does not show up, right-click `tbtc.exe` and select **Run as administrator**.
+   - **WebView2 Runtime:** Since the dashboard UI is built with the Wails framework, it requires the **Microsoft Edge WebView2 Runtime** to render. It is built-in on Windows 11 and updated Windows 10. If the application fails to start or shows a blank screen, download and install it from [Microsoft's official page](https://developer.microsoft.com/microsoft-edge/webview2/).
    - **Antivirus Exclusion:** Due to process memory reading (`ReadProcessMemory`), some antivirus programs may flag it as a false-positive. The tool is fully safe. See [Antivirus & Security Warnings](#antivirus--security-warnings) below for details.
 
 ---
