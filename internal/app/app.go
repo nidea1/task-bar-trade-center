@@ -116,7 +116,7 @@ func attachGameAndWatchHoveredItems() {
 		activeApp.gameReady.Store(true)
 		setAppStatus(AppStatusReady)
 		go refreshInventoryDashboardState("game-attached")
-		go monitorInventoryDashboardState(pHandle)
+		go monitorInventoryNotifications(pHandle)
 		go preScanTooltipAOB()
 		watchHoveredItems(pHandle, gameAssemblyBase)
 		if handleGameClosed() {

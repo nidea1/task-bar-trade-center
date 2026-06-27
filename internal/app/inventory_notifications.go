@@ -72,6 +72,49 @@ func resetMarketableInventoryNotifications() {
 	activeApp.inventoryMu.Unlock()
 }
 
+func processNewMarketableInventoryItems(newItems []marketableInventoryItem) {
+	if len(newItems) == 0 {
+		return
+	}
+
+	cachedItems := make([]marketableInventoryItem, 0, len(newItems))
+	uncachedItems := make([]marketableInventoryItem, 0, len(newItems))
+
+	for _, item := range newItems {
+		if item.hasPrice {
+			cachedItems = append(cachedItems, item)
+		} else {
+			uncachedItems = append(uncachedItems, item)
+		}
+	}
+
+	if len(cachedItems) > 0 {
+		notifyMarketableInventoryItems(cachedItems)
+	}
+
+	if len(uncachedItems) > 0 {
+		go func(items []marketableInventoryItem) {
+			start := time.Now()
+			for time.Since(start) < 15*time.Second {
+				allResolved := true
+				for i := range items {
+					if !items[i].hasPrice {
+						fillMarketableInventoryItemDetails(&items[i])
+						if !items[i].hasPrice {
+							allResolved = false
+						}
+					}
+				}
+				if allResolved {
+					break
+				}
+				time.Sleep(1 * time.Second)
+			}
+			notifyMarketableInventoryItems(items)
+		}(uncachedItems)
+	}
+}
+
 func notifyMarketableInventoryItems(items []marketableInventoryItem) {
 	if len(items) == 0 {
 		return
@@ -83,16 +126,19 @@ func notifyMarketableInventoryItems(items []marketableInventoryItem) {
 			title = fmt.Sprintf("%s Acquired", item.name)
 		}
 		queueRawTrayNotificationWithIcon(
-			fmt.Sprintf("%s\n%s", title, tr("notification.marketable_item_acquired_body", item.name, item.rarity, item.price)),
+			fmt.Sprintf("%s\n%s", title, tr("notification.marketable_item_acquired_body", item.rarity, item.price)),
 			inventoryNotificationItemIcon(item.itemID),
 		)
 		return
 	}
-	queueRawTrayNotification(fmt.Sprintf(
-		"%s\n%s",
-		tr("notification.marketable_items_acquired"),
-		tr("notification.marketable_items_acquired_body", len(items), marketableInventoryItemSummary(items)),
-	))
+	queueRawTrayNotificationWithIcon(
+		fmt.Sprintf(
+			"%s\n%s",
+			tr("notification.marketable_items_acquired"),
+			tr("notification.marketable_items_acquired_body", len(items), marketableInventoryItemSummary(items)),
+		),
+		activeApp.appIconSmall,
+	)
 }
 
 func fillMarketableInventoryItemDetails(item *marketableInventoryItem) {

@@ -99,10 +99,104 @@ func TestNotifyMarketableInventoryItemsQueuesTrayNotification(t *testing.T) {
 	if receivedTitle != "Emerald Acquired" {
 		t.Fatalf("notification title = %q", receivedTitle)
 	}
-	if !strings.Contains(receivedBody, "Emerald") {
-		t.Fatalf("notification body = %q, want item name", receivedBody)
+	if strings.Contains(receivedBody, "Emerald") {
+		t.Fatalf("notification body = %q, should not contain item name (already in title)", receivedBody)
 	}
 	if !strings.Contains(receivedBody, "Rare") || !strings.Contains(receivedBody, "$12.50") {
 		t.Fatalf("notification body = %q, want rarity and price", receivedBody)
+	}
+}
+
+func TestProcessNewMarketableInventoryItems(t *testing.T) {
+	originalApp := activeApp
+	originalPublisher := publishTrayNotification
+	originalPreference := currentDisplayLanguagePreference()
+	originalScope := market.CurrentScope()
+
+	scope := market.CurrentScope()
+	ruby := catalog.ItemConfig{ID: 100, Name: map[string]string{"en-US": "Ruby"}, Grade: "COMMON", Marketable: true}
+	emerald := catalog.ItemConfig{ID: 200, Name: map[string]string{"en-US": "Emerald"}, Grade: "RARE", Marketable: true}
+
+	activeApp = &App{
+		appHWND: 1,
+		trayIconAdded: true,
+		allItemMap: map[int]catalog.ItemConfig{
+			100: ruby,
+			200: emerald,
+		},
+		itemMap: map[int]catalog.ItemConfig{
+			100: ruby,
+			200: emerald,
+		},
+		priceCache: map[string]market.MarketData{
+			market.CacheKey(scope, buildMarketHashName(ruby)): {
+				Analysis: market.MarketAnalysis{
+					UpdatedAt:      time.Now(),
+					PricePrefix:    "$",
+					SuggestedPrice: 5.0,
+					HasSuggested:   true,
+				},
+			},
+		},
+	}
+	applyDisplayLanguagePreference("en-US")
+
+	var notifications []string
+	publishTrayNotification = func(title string, message string, _ uintptr) {
+		notifications = append(notifications, title+": "+message)
+	}
+	clearPendingTrayNotifications()
+
+	t.Cleanup(func() {
+		activeApp = originalApp
+		publishTrayNotification = originalPublisher
+		applyDisplayLanguagePreference(originalPreference)
+		market.SetScope(originalScope.Currency.Code, originalScope.Region.CountryCode)
+		clearPendingTrayNotifications()
+	})
+
+	items := []marketableInventoryItem{
+		{itemID: 100, name: "Ruby", rarity: "Common", price: "$5.00", hasPrice: true},
+		{itemID: 200, name: "Emerald", rarity: "Rare", price: "Updating...", hasPrice: false},
+	}
+
+	processNewMarketableInventoryItems(items)
+	flushTrayNotifications()
+
+	// Ruby (cached) should notify immediately.
+	if len(notifications) != 1 {
+		t.Fatalf("notifications count immediately = %d, want 1 (only cached Ruby)", len(notifications))
+	}
+	if !strings.Contains(notifications[0], "Ruby") {
+		t.Fatalf("notification 0 = %q, want Ruby", notifications[0])
+	}
+
+	// Now simulate the price of Emerald getting resolved and cached.
+	activeApp.priceCacheMu.Lock()
+	activeApp.priceCache[market.CacheKey(scope, buildMarketHashName(emerald))] = market.MarketData{
+		Analysis: market.MarketAnalysis{
+			UpdatedAt:      time.Now(),
+			PricePrefix:    "$",
+			SuggestedPrice: 12.50,
+			HasSuggested:   true,
+		},
+	}
+	activeApp.priceCacheMu.Unlock()
+
+	// Wait up to 5 seconds for background polling to detect the price and notify.
+	start := time.Now()
+	for time.Since(start) < 5*time.Second {
+		flushTrayNotifications()
+		if len(notifications) >= 2 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	if len(notifications) != 2 {
+		t.Fatalf("notifications count after price resolution = %d, want 2", len(notifications))
+	}
+	if !strings.Contains(notifications[1], "Emerald") || !strings.Contains(notifications[1], "$12.50") {
+		t.Fatalf("notification 1 = %q, want Emerald notification with price $12.50", notifications[1])
 	}
 }

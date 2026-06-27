@@ -127,7 +127,7 @@ func storeInventorySnapshotAndNotify(snapshot playerdata.InventorySnapshot) {
 	activeApp.inventoryMu.Lock()
 	activeApp.lastSnapshot = &snapshot
 	activeApp.inventoryMu.Unlock()
-	notifyMarketableInventoryItems(recordMarketableInventoryItems(snapshot))
+	processNewMarketableInventoryItems(recordMarketableInventoryItems(snapshot))
 }
 
 func currentInventoryResolver() *playerdata.Resolver {
@@ -225,7 +225,7 @@ func openInventoryDashboard() {
 	callOpenDashboard()
 }
 
-func monitorInventoryDashboardState(processHandle uintptr) {
+func monitorInventoryNotifications(processHandle uintptr) {
 	ticker := time.NewTicker(inventoryDashboardMonitorInterval)
 	defer ticker.Stop()
 
@@ -233,8 +233,16 @@ func monitorInventoryDashboardState(processHandle uintptr) {
 		if processHandle == 0 || game.HasProcessExited(processHandle) || activeApp.gameProcessHandle != processHandle {
 			return
 		}
-		refreshInventoryDashboardState("inventory-monitor")
+		pollInventoryNotifications()
 	}
+}
+
+func pollInventoryNotifications() {
+	snapshot, err := readInventorySnapshot()
+	if err != nil {
+		return
+	}
+	storeInventorySnapshotAndNotify(snapshot)
 }
 
 func refreshInventoryPricesFromDashboard() {

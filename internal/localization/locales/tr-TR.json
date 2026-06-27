@@ -53,7 +53,7 @@
   "notification.configuration": "Yapılandırma — %s",
   "notification.marketable_item_acquired": "Satılabilir eşya elde edildi",
   "notification.item_acquired_title": "%s Elde Edildi",
-  "notification.marketable_item_acquired_body": "%s elde edildi\nNadirlik: %s\nFiyat: %s",
+  "notification.marketable_item_acquired_body": "Nadirlik: %s\nFiyat: %s",
   "notification.marketable_items_acquired": "Satılabilir eşyalar elde edildi",
   "notification.marketable_items_acquired_body": "%d yeni satılabilir eşya elde edildi\n%s",
   "notification.marketable_items_more": "+%d daha",

@@ -53,7 +53,7 @@
   "notification.configuration": "Configuration — %s",
   "notification.marketable_item_acquired": "Marketable item acquired",
   "notification.item_acquired_title": "%s Acquired",
-  "notification.marketable_item_acquired_body": "%s acquired\nRarity: %s\nPrice: %s",
+  "notification.marketable_item_acquired_body": "Rarity: %s\nPrice: %s",
   "notification.marketable_items_acquired": "Marketable items acquired",
   "notification.marketable_items_acquired_body": "%d new marketable items acquired\n%s",
   "notification.marketable_items_more": "+%d more",

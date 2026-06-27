@@ -28,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a "Best to Sell Now" dashboard panel displaying recommendations based on confidence, sales volume, buy orders, spread size, and weekly averages.
 - Added a scoring algorithm for marketable items (`sellNowScore`) that rates selling conditions out of 100 with localized reasons (e.g. narrow spread, high sales volume, above average).
 - Added Steam community market icon caching and `.ico` conversion (`pngToICO`), enabling Windows balloon notifications to display item-specific icons instead of generic icons.
+- Added async price resolution and retry loop (`processNewMarketableInventoryItems`) when a new marketable item is acquired, automatically retrying item price resolution in the background for up to 15 seconds before notifying.
+- Added unit tests for async price resolution and polling behavior under `internal/app/inventory_notifications_test.go`.
+- Added new screenshots demonstrating dashboard views: `assets/dashboard-all.png`, `assets/dashboard-bits.png`, and `assets/dashboard-syncing.png`.
 
 ### Changed
 - Structured the codebase into internal packages inside `internal/` (such as `internal/app`, `internal/catalog`, `internal/game`, `internal/il2cpp`, `internal/inventory`, `internal/localization`, `internal/market`, `internal/playerdata`, `internal/win32`, `internal/winapp`, `internal/updater`, `internal/tbhmem`, `internal/overlay`).
@@ -49,6 +52,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved PlayerSaveData resolution by preferring higher-gold candidates, briefly reusing fresh resolved objects, and reading sparse save-slot indexes when available.
 - Updated dashboard polling cadence and icon sizing/branding styles.
 - Modularized React frontend by refactoring `App.tsx` and extracting separate components, constants, types, and utility files into `frontend/src/components/`, `types/`, `utils/`, and `constants/`.
+- Reworked background inventory checking to only poll and process notifications via `pollInventoryNotifications()`, preventing heavy dashboard recalculation/rebuilding cycles during background monitoring.
+- Changed single-item tray notifications to exclude the item name in the body (since it is already in the title).
+- Changed tray notifications for multiple items to display the small application icon (`activeApp.appIconSmall`) as the tray icon.
+- Made the dashboard update callback execution asynchronous (`go fn(state)`) in `callbacks.go` to prevent blockages on caller threads.
 
 ### Removed
 - Removed the obsolete Windows-only `tools/playerdiag` diagnostic utility.

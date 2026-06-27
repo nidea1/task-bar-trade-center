@@ -46,6 +46,6 @@ func callDashboardUpdated(state inventory.DashboardState) {
 	fn := callbacks.value.DashboardUpdated
 	callbacks.RUnlock()
 	if fn != nil {
-		fn(state)
+		go fn(state)
 	}
 }
