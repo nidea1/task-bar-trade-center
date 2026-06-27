@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.6] - 2026-06-27
+
+### Fixed
+- Fixed missing application icon in Windows toast/balloon notifications when running in standalone mode by embedding `icon.ico` directly into the binary and dynamically extracting it to the local AppData folder.
+
 ## [0.9.3] - 2026-06-27
 
 ### Fixed
