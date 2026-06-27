@@ -1,132 +1,148 @@
 # <img src="./assets/icon.png" width="48" height="48" valign="middle" /> Task Bar Trade Center
 
-[![Patreon](https://img.shields.io/badge/Patreon-Donate-F96854?style=for-the-badge&logo=patreon&logoColor=white)](https://www.patreon.com/16264399/join)
+[![Patreon](https://img.shields.io/badge/patreon-donate-F96854?logo=patreon&style=flat&label=patreon&color=F96854)](https://www.patreon.com/16264399/join)
+[![Release](https://img.shields.io/github/v/release/nidea1/task-bar-trade-center?logo=github&label=release&color=orange)](../../releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/nidea1/task-bar-trade-center/total?logo=github&label=downloads&color=brightgreen)](../../releases)
+[![Stars](https://img.shields.io/github/stars/nidea1/task-bar-trade-center?logo=github&style=flat&label=stars&color=blue)](../../stargazers)
 
-Task Bar Trade Center is a Windows tray utility for TaskBarHero, created by nidea1. It watches the item under the in-game cursor, fetches Steam Community Market pricing, and draws a small price HUD near the game tooltip.
+Task Bar Trade Center is a modern Windows desktop companion and utility overlay for TaskBarHero, created by nidea1. It monitors the game in the background, tracks your player inventory directly from memory, schedules Steam Community Market pricing requests with built-in rate-limit protection, and displays a powerful real-time analytics dashboard along with a cursor-attached price overlay HUD.
 
-## Features
+---
 
-- Runs from the Windows notification area and makes the tray icon available before network startup work completes.
-- Left- or right-click the tray icon to open the action menu.
-- Waits in the background until `TaskBarHero.exe` is launched.
-- Shows the current monitoring state in the tray tooltip and reports runtime, configuration, and update transitions through tray notifications.
-- When TaskBarHero closes, asks whether Task Bar Trade Center should exit; choosing No returns to the waiting state.
-- Shows a compact market price overlay for marketable items (supports **Detail** and **Compact** modes).
-- Lets you select a Steam Market currency and compatible country/region from the tray menu.
-- Opens the active item's Steam Market listing with middle mouse button while the price overlay is visible.
-- Uses `assets/icon.png` as the Windows application and tray icon.
-- Embeds `items.json` into the executable, so release builds are single-file.
-- Persists user preferences and price cache between launches.
-- Uses the Windows display language by default and lets you choose English, German, French, Italian, Spanish, Dutch, Portuguese (Portugal/Brazil), Finnish, Japanese, Korean, Simplified Chinese, Hindi, Indonesian, Thai, Vietnamese, Polish, or Turkish.
-- Automatic log rotation (automatically prunes debug logs if they exceed 5MB).
-- Tray menu actions:
-  - `Refresh cached prices`
-  - `Clear cache`
-  - `Switch to Compact/Detail mode`
-  - `Currency` (with EUR country submenu)
-  - `Check for updates...`
-  - `Language`
-  - `Exit`
+## 🏗️ Architecture & How It Works
 
-## How to Download & Install
+The application operates on a hybrid architecture designed for minimal system impact and seamless Windows integration:
 
-If you are not familiar with GitHub or coding, you can download and run the application by following these simple steps:
+- **Frontend (Wails + React + TypeScript + Vite):** A modern, high-performance desktop UI that displays your real-time portfolio value, active item details, pricing sync status, and automated item sale recommendations.
+- **Backend (Go):** 
+  - **Memory Hook & Scanner:** Attaches to `TaskBarHero.exe` to read player inventory state and active item coordinates.
+  - **Steam SCM API Scheduler:** Safely queues price requests with adaptive rate-limiting, queuing, and backoffs to prevent Steam's HTTP 429 rate limit.
+  - **Windows Shell Integration:** Manages system tray icons, handles background log rotation (capped at 5MB), and registers low-level Win32 notifications.
 
-1. **Download the Program:**
-   - Go to the [Releases](https://github.com/nidea1/task-bar-trade-center/releases) page.
-   - Click on the latest release version at the top.
-   - Scroll down to the **Assets** section and click on `tbtc.exe` to download the executable file.
+---
 
-2. **Run the Application:**
-   - Move the downloaded `tbtc.exe` file to a folder of your choice (e.g., your Desktop or a dedicated folder).
-   - Double-click `tbtc.exe` to run it.
-   - The application runs quietly in your Windows **System Tray** (the system area in the bottom-right corner of your screen, next to the clock). Look for the trade center icon there!
+## ✨ Features
 
-3. **Important Troubleshooting Tips:**
-   - **Run as Administrator:** Since the application reads the game's memory space to dynamically locate tooltips and active item IDs, Windows might block it by default. If the price overlay does not show up in-game, right-click `tbtc.exe` and select **Run as administrator**.
-   - **Antivirus Exclusion:** Due to the memory reading behavior (`ReadProcessMemory`), some antivirus programs may flag it as a false-positive threat. This tool is completely safe (you can check the [Antivirus & Security Warnings](#antivirus--security-warnings) section below). If blocked, add an exclusion for `tbtc.exe` in your antivirus settings.
+- **📊 Real-Time Inventory Dashboard:**
+  - **Hotkey Toggle (F2):** Press `F2` system-wide at any time to instantly open or focus the dashboard.
+  - **Portfolio Valuation:** Tracks total value (Suggested Listing vs. Instant Sell) of your inventory, stash pages, equipped gear, and gold.
+  - **All Marketable Items:** A searchable list of all marketable items with locations, count, item grade/type, confidence metrics, and pricing.
+  - **Best to Sell Now:** Uses an algorithm to score and suggest which items are best to sell based on sales volume, spread, and market demand.
+  - **Sync & Queue Status:** Visually shows background API sync progress with ETA, backoff countdowns, and queue tracking.
+  - **Missing Prices Tracker:** Flags items that haven't been priced yet.
+- **👁️ Cursor-Attached Price Overlay HUD:**
+  - Automatically draws a compact pricing HUD near the game tooltip as you hover over items in-game.
+  - **Detail Mode:** Shows comprehensive statistics including suggested pricing, weekly averages, daily volume, trend percentages, spreads, buy/sell orders, and a deal assessment tag (e.g. "Undervalued", "Overvalued").
+  - **Compact Mode:** A minimal HUD focused on essential price metrics to minimize screen footprint.
+  - **Steam Listing Shortcut:** Press the middle mouse button while the overlay is visible to jump directly to the item's Steam Market page.
+- **🔔 Obtained Item Notifications:**
+  - Registers Windows tray notifications to immediately alert you when a marketable item is obtained or dropped, even when the dashboard window is closed.
+- **🌐 Localization:**
+  - Supports 17+ languages (English, German, French, Italian, Spanish, Dutch, Portuguese, Finnish, Japanese, Korean, Simplified Chinese, Hindi, Indonesian, Thai, Vietnamese, Polish, and Turkish).
+- **⚙️ Tray Shell Companion:**
+  - Compact menu to change languages, currency/country pairings, refresh or clear price cache, and check for updates.
 
-## UI Modes
+---
 
-The pricing HUD overlay can be toggled between two modes from the tray context menu:
+## 📸 Screenshots
 
-- **Detail Mode (Default):** Shows comprehensive statistics, including suggested pricing, weekly averages, daily volume, trend percentages, spreads, buy/sell orders, and a deal assessment tag (e.g. "Undervalued", "Overvalued").
-- **Compact Mode:** A minimal HUD layout focused purely on critical metrics (Suggested, Last Sold, Lowest Sell, Highest Buy, Weekly Average, Daily Sales) to minimize screen footprint.
+### 🖥️ Real-Time Inventory Dashboard
 
-## Market currency and region
+#### All Marketable Items View
+![Dashboard - All Marketable Items](./assets/dashboard-all.png)
 
-The tray menu displays the active Steam Market pair, for example `Currency & Region: EUR — Germany`. The `Currency` menu selects every non-EUR entry as a complete currency-country pair, such as `USD — United States`. EUR appears in that same menu as a submenu whose entries select its country. The default is `USD — United States`.
+#### Best Items to Sell & Analysis
+![Dashboard - Best to Sell](./assets/dashboard-bits.png)
 
-Supported currencies are USD, EUR, GBP, PHP, JPY, KRW, CNY, INR, IDR, THB, VND, BRL, PLN, CAD, and AUD. EUR supports Germany, France, Italy, Spain, Netherlands, Austria, Belgium, Portugal, Finland, and Ireland; every other supported currency uses its primary Steam Market country.
+#### Background Price Syncing Queue
+![Dashboard - Syncing & Queue](./assets/dashboard-syncing.png)
 
-Prices are requested directly from Steam with the selected `country` and `currency` parameters. The app does not convert prices with exchange rates. When Steam does not provide a selected-currency order book or sale history, the overlay keeps available local prices and labels the supplemental USD metrics as USD market data.
+---
 
-## Screenshots
+### 🎮 In-game Price Overlay HUD
 
-| Detail Mode HUD | Compact Mode HUD |
+| Detail Mode Overlay | Compact Mode Overlay |
 | :---: | :---: |
 | ![Detail Mode HUD](./assets/detailed.png) | ![Compact Mode HUD](./assets/compact.png) |
 
-### System Tray Menu
+---
 
-![System Tray Menu](./assets/tray-menu.png)
+### 🔔 System Tray & Notifications
 
-## Requirements
+| Obtained Item Notification | System Tray Menu |
+| :---: | :---: |
+| ![Item Notification](./assets/item-notif.png) | ![System Tray Menu](./assets/tray-menu.png) |
 
-- Windows amd64.
-- Go 1.26.3 or newer for local builds.
-- Permission to read the game process memory. If attach fails, run the app as Administrator.
+---
 
-## Development
+## 🚀 How to Download & Install
 
+If you are not familiar with coding, follow these simple steps to install the app:
+
+1. **Download the Program:**
+   - Go to the [Releases](https://github.com/nidea1/task-bar-trade-center/releases) page.
+   - Click on the latest release version.
+   - Under the **Assets** section, download `tbtc.exe`.
+
+2. **Run the Application:**
+   - Place the downloaded `tbtc.exe` in any folder of your choice.
+   - Double-click `tbtc.exe` to run it.
+   - The app starts minimized. Locate the trade center icon in your Windows **System Tray** (near the clock, bottom-right). Double-click or right-click it to interact!
+   - You can also press **`F2`** system-wide at any time to instantly open or focus the dashboard.
+
+3. **Important Troubleshooting Tips:**
+   - **Run as Administrator:** Since the application reads the game's memory space to locate tooltips and inventory items, Windows might block it. If the overlay/dashboard does not show up, right-click `tbtc.exe` and select **Run as administrator**.
+   - **Antivirus Exclusion:** Due to process memory reading (`ReadProcessMemory`), some antivirus programs may flag it as a false-positive. The tool is fully safe. See [Antivirus & Security Warnings](#antivirus--security-warnings) below for details.
+
+---
+
+## 🛠️ Development & Building
+
+Building this project requires:
+- **Go 1.26.3 or newer**
+- **Node.js (v18+) & npm**
+- **Wails CLI** (installed via `go install github.com/wailsapp/wails/v2/cmd/wails@latest`)
+
+### Local Development
+To run the development server with live reload and automatic memory layout tracking:
 ```powershell
-go test ./...
-go build -o .tmp/tbtc-dev.exe .
+wails dev
 ```
 
-## User data
+### Production Build
+To package the final single-file GUI executable without a console window:
+```powershell
+wails build -ldflags="-s -w -H=windowsgui"
+```
+The compiled executable will be placed in the `build/bin/` or `dist/` directory.
 
-Release builds write logs, settings, and cache under the user's local app data folder:
+---
+
+## 💾 User Data Paths
+
+Config files, logs, and pricing cache are stored under your local AppData folder:
 
 ```text
-%LOCALAPPDATA%\Task Bar Trade Center\config\settings.json      - Persists user preferences (e.g., overlay mode, market currency, country, and display language)
-%LOCALAPPDATA%\Task Bar Trade Center\config\game-layout-cache.json - Last valid game memory layout downloaded from GitHub
-%LOCALAPPDATA%\Task Bar Trade Center\logs\tbtc.log - Debug logs (automatically capped at 5MB)
-%LOCALAPPDATA%\Task Bar Trade Center\cache\price-cache.json    - Persisted price cache
+%LOCALAPPDATA%\Task Bar Trade Center\config\settings.json          - User preferences (language, currency, country, modes)
+%LOCALAPPDATA%\Task Bar Trade Center\config\game-layout-cache.json - Cached game memory layout downloaded from GitHub
+%LOCALAPPDATA%\Task Bar Trade Center\logs\tbtc.log                 - Debug logs (automatically rotated, capped at 5MB)
+%LOCALAPPDATA%\Task Bar Trade Center\cache\price-cache.json        - Persisted Steam SCM price cache
 ```
 
-If a user reports a bug, ask for the log file. The cache and refresh menu actions are disabled until the app attaches to `TaskBarHero.exe`.
+---
 
-## Game memory layout configuration
+## 🧠 Game Memory Layout Configuration
 
-Pointer chains and tooltip placement calibrations are published in [game-layout.json](https://raw.githubusercontent.com/nidea1/task-bar-trade-center/main/game-layout.json). On startup, the app uses the first valid source in this order:
+Pointer chains and tooltip offsets are dynamically loaded from [game-layout.json](https://raw.githubusercontent.com/nidea1/task-bar-trade-center/main/game-layout.json). On startup, the app loads layout data from:
+1. GitHub JSON file (with a 5-second timeout).
+2. Locally cached JSON copy.
+3. Fallback layout embedded within the executable.
 
-1. The GitHub JSON file (with a 5-second timeout).
-2. The locally cached valid JSON file.
-3. The layout embedded in the executable.
+If memory offsets fail continuously for 3 seconds while the HUD is active, the app hides the HUD and shows a warning. This ensures compatibility even when a game patch changes memory offsets without requiring an immediate app release.
 
-If the hovered-item memory pointer fails continuously for 3 seconds while the HUD is active, the app hides the HUD, updates its tray status, and shows a one-time message. This usually means a TaskBarHero update changed the memory layout. If only tooltip coordinate memory is unavailable, the HUD remains visible using cursor-based placement.
+---
 
-## Build
-
-Console build for debugging:
-
-```powershell
-go build -o .tmp/tbtc-dev.exe .
-```
-
-`dev.ps1` starts the development build with the repository's `game-layout.json` as its only game-layout source. It also restarts the app when that file changes, so local placement calibration changes do not require a GitHub update.
-
-Release-style GUI build:
-
-```powershell
-New-Item -ItemType Directory -Force -Path dist
-go build -trimpath -ldflags="-s -w -H=windowsgui" -o dist/tbtc.exe .
-```
-
-The workflow uploads the Windows `.exe` and a SHA-256 checksum file.
-
-## Antivirus & Security Warnings
+## 🛡️ Antivirus & Security Warnings
 
 Because this utility attaches to the `TaskBarHero.exe` process and reads its memory space (`ReadProcessMemory`) to dynamically locate tooltips and active item IDs, some security software may flag the executable as a heuristic or generic detection (false-positive). 
 
@@ -134,15 +150,17 @@ Because this utility attaches to the `TaskBarHero.exe` process and reads its mem
 - **VirusTotal Scan:** For transparency, you can view the official VirusTotal analysis of compiled releases here:
   - [VirusTotal Analysis (Release v0.1.0)](https://www.virustotal.com/gui/file/a02f86e36b00630c7cb1dc08a19cb747b08b0a5c63bf2e8f337f22702012e7c2/detection)
 
-If your antivirus flags this utility, you may need to add it to your exclusion list.
+---
 
-## Support & Donations
+## 💖 Support & Donations
 
-If you find this tool helpful and want to support its development, feel free to support me on Patreon!
+If you find this tool helpful, feel free to support its development on Patreon!
 
-[![Patreon](https://img.shields.io/badge/Patreon-Donate-F96854?style=for-the-badge&logo=patreon&logoColor=white)](https://www.patreon.com/16264399/join)
+[![Patreon](https://img.shields.io/badge/patreon-donate-F96854?logo=patreon&style=flat&label=patreon&color=F96854)](https://www.patreon.com/16264399/join)
 
-## Acknowledgements & Credits
+---
 
-- Special thanks to the creators of [Allyans3/steam-market-api-v2](https://github.com/Allyans3/steam-market-api-v2) and other Steam Community Market parser projects for referencing their API formats and JSON structures.
-- Huge thanks to the contributors of [TaskBarHero Wiki](https://taskbarhero.wiki/) for providing the database mapping structure for `items.json`.
+## 🤝 Acknowledgements & Credits
+
+- Special thanks to the creators of [Allyans3/steam-market-api-v2](https://github.com/Allyans3/steam-market-api-v2) for API reference models.
+- Thanks to the contributors of the [TaskBarHero Wiki](https://taskbarhero.wiki/) for providing the database structure for `items.json`.
