@@ -1,3 +1,4 @@
+```yaml
 name: Build and release
 
 on:
@@ -13,7 +14,10 @@ permissions:
 
 jobs:
   windows-amd64:
+    name: Windows AMD64
     runs-on: windows-latest
+    timeout-minutes: 30
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,51 +28,89 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Install Wails CLI
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
-
-      - name: Create dummy dist directory for Go embed
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path frontend/dist
-          "dummy" | Set-Content frontend/dist/dummy.txt
-
-      - name: Generate Wails Bindings
-        run: wails generate bindings
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install Frontend Dependencies
-        run: npm ci
-        working-directory: frontend
-
-      - name: Build Frontend
-        run: npm run build
-        working-directory: frontend
-
-      - name: Test
-        run: go test ./...
-
-      - name: Build Windows executable
+      - name: Install Wails CLI
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          go install github.com/akavel/rsrc@latest
-          rsrc -ico assets/icon.ico -o rsrc_windows_amd64.syso
-          go build -trimpath -ldflags="-s -w -H=windowsgui" -o dist/tbtc.exe .
-          $hash = Get-FileHash dist/tbtc.exe -Algorithm SHA256
-          "$($hash.Hash.ToLower())  tbtc.exe" | Set-Content dist/checksums.txt
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+          wails version
+
+      - name: Prepare Windows icon
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "assets/icon.ico")) {
+              throw "Windows icon could not be found: assets/icon.ico"
+          }
+
+          New-Item `
+            -ItemType Directory `
+            -Force `
+            -Path "build/windows" |
+            Out-Null
+
+          Copy-Item `
+            -Path "assets/icon.ico" `
+            -Destination "build/windows/icon.ico" `
+            -Force
+
+      - name: Build Windows application
+        shell: pwsh
+        run: |
+          wails build `
+            -platform windows/amd64 `
+            -trimpath `
+            -o tbtc.exe
+
+      - name: Test
+        shell: pwsh
+        run: go test ./...
+
+      - name: Prepare release artifacts
+        shell: pwsh
+        run: |
+          $sourceExecutable = "build/bin/tbtc.exe"
+          $targetExecutable = "dist/tbtc.exe"
+
+          if (-not (Test-Path $sourceExecutable)) {
+              throw "Wails executable could not be found: $sourceExecutable"
+          }
+
+          New-Item `
+            -ItemType Directory `
+            -Force `
+            -Path "dist" |
+            Out-Null
+
+          Copy-Item `
+            -Path $sourceExecutable `
+            -Destination $targetExecutable `
+            -Force
+
+          $hash = Get-FileHash `
+            -Path $targetExecutable `
+            -Algorithm SHA256
+
+          "$($hash.Hash.ToLowerInvariant())  tbtc.exe" |
+            Set-Content `
+              -Path "dist/checksums.txt" `
+              -Encoding ascii
+
+          Write-Host "Release artifacts:"
+          Get-ChildItem "dist" -File |
+            Format-Table Name, Length
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: tbtc-windows-amd64
           path: dist/*
+          if-no-files-found: error
 
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -76,35 +118,67 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
-          $version = "$env:GITHUB_REF_NAME".TrimStart('v')
+          $version = "$env:GITHUB_REF_NAME".TrimStart("v")
           $escapedVersion = [regex]::Escape($version)
-          $lines = Get-Content CHANGELOG.md
+          $lines = Get-Content "CHANGELOG.md"
           $inSection = $false
           $result = [System.Collections.Generic.List[string]]::new()
+
           foreach ($line in $lines) {
               if ($line -match "^##\s*\[?v?${escapedVersion}\]?") {
                   $inSection = $true
                   continue
               }
+
               if ($inSection) {
                   if ($line -match "^##\s+") {
                       break
                   }
+
                   $result.Add($line)
               }
           }
+
           $notes = ($result -join "`r`n").Trim()
+
           if ($notes) {
-              $notes | Set-Content release_notes.txt
-          } else {
-              "No release notes found in CHANGELOG.md for version $version" | Set-Content release_notes.txt
+              $notes |
+                Set-Content `
+                  -Path "release_notes.txt" `
+                  -Encoding utf8
           }
-          
-          # Delete existing release if it already exists to allow overwrite
-          gh release view "$env:GITHUB_REF_NAME" >$null 2>&1
+          else {
+              "No release notes found in CHANGELOG.md for version $version" |
+                Set-Content `
+                  -Path "release_notes.txt" `
+                  -Encoding utf8
+          }
+
+          gh release view "$env:GITHUB_REF_NAME" *> $null
+
           if ($LASTEXITCODE -eq 0) {
+              Write-Host "Existing release found. Deleting it..."
               gh release delete "$env:GITHUB_REF_NAME" --yes
+
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Existing GitHub release could not be deleted."
+              }
           }
-          
-          $assets = Get-ChildItem dist -File | ForEach-Object { $_.FullName }
-          gh release create "$env:GITHUB_REF_NAME" @assets --title "$env:GITHUB_REF_NAME" --notes-file release_notes.txt
+
+          $assets = Get-ChildItem "dist" -File |
+            ForEach-Object { $_.FullName }
+
+          if ($assets.Count -eq 0) {
+              throw "No release assets were found in the dist directory."
+          }
+
+          gh release create "$env:GITHUB_REF_NAME" `
+            @assets `
+            --verify-tag `
+            --title "$env:GITHUB_REF_NAME" `
+            --notes-file "release_notes.txt"
+
+          if ($LASTEXITCODE -ne 0) {
+              throw "GitHub release could not be created."
+          }
+```
