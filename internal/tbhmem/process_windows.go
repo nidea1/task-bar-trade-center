@@ -195,8 +195,7 @@ func (process *Process) ScanPattern(pattern []byte, maxResults int) ([]uintptr, 
 		var mbi memoryBasicInformation
 		ret, _, _ := procVirtualQueryEx.Call(process.Handle, address, uintptr(unsafe.Pointer(&mbi)), unsafe.Sizeof(mbi))
 		if ret == 0 {
-			address += 0x10000
-			continue
+			break
 		}
 		next := mbi.BaseAddress + mbi.RegionSize
 		if next <= address {

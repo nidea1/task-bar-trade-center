@@ -10,7 +10,7 @@ import (
 
 const (
 	stashSlotsPerPage  = 100
-	cachedObjectMaxAge = 2 * time.Second
+	cachedObjectMaxAge = 5 * time.Minute
 
 	playerCurrencies = 0x48
 	playerHeroes     = 0x50

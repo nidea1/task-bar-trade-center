@@ -46,22 +46,37 @@ func (queue *RefreshQueue) SetBaseDelay(delay time.Duration) {
 
 func (queue *RefreshQueue) Enqueue(ids []int) int {
 	queue.mu.Lock()
-	now := time.Now()
+	defer queue.mu.Unlock()
+
+	return queue.enqueueLocked(ids, false, time.Now())
+}
+
+func (queue *RefreshQueue) EnqueuePriority(ids []int) int {
+	queue.mu.Lock()
+	defer queue.mu.Unlock()
+
+	return queue.enqueueLocked(ids, true, time.Now())
+}
+
+func (queue *RefreshQueue) enqueueLocked(ids []int, priority bool, now time.Time) int {
 	if !queue.backoffUntil.IsZero() && now.Before(queue.backoffUntil) {
-		queue.mu.Unlock()
 		return 0
 	}
 	added := 0
-	for _, id := range ids {
-		if id <= 0 {
-			continue
+	if priority {
+		added = queue.enqueuePriorityLocked(ids)
+	} else {
+		for _, id := range ids {
+			if id <= 0 {
+				continue
+			}
+			if _, exists := queue.seen[id]; exists {
+				continue
+			}
+			queue.seen[id] = struct{}{}
+			queue.pending = append(queue.pending, id)
+			added++
 		}
-		if _, exists := queue.seen[id]; exists {
-			continue
-		}
-		queue.seen[id] = struct{}{}
-		queue.pending = append(queue.pending, id)
-		added++
 	}
 	queue.status.Queued = len(queue.pending)
 	if !queue.running && len(queue.pending) > 0 {
@@ -72,7 +87,54 @@ func (queue *RefreshQueue) Enqueue(ids []int) int {
 		queue.lastStartedAt = now
 		go queue.run()
 	}
-	queue.mu.Unlock()
+	return added
+}
+
+func (queue *RefreshQueue) enqueuePriorityLocked(ids []int) int {
+	protected := 0
+	if queue.running && len(queue.pending) > 0 {
+		protected = 1
+	}
+
+	added := 0
+	priorityIDs := make([]int, 0, len(ids))
+	prioritySeen := make(map[int]struct{}, len(ids))
+	for _, id := range ids {
+		if id <= 0 {
+			continue
+		}
+		if _, exists := prioritySeen[id]; exists {
+			continue
+		}
+
+		_, alreadySeen := queue.seen[id]
+		removed := false
+		for index := protected; index < len(queue.pending); index++ {
+			if queue.pending[index] != id {
+				continue
+			}
+			queue.pending = append(queue.pending[:index], queue.pending[index+1:]...)
+			removed = true
+			break
+		}
+		if alreadySeen && !removed {
+			continue
+		}
+		if !alreadySeen {
+			queue.seen[id] = struct{}{}
+			added++
+		}
+		prioritySeen[id] = struct{}{}
+		priorityIDs = append(priorityIDs, id)
+	}
+
+	if len(priorityIDs) > 0 {
+		next := make([]int, 0, len(queue.pending)+len(priorityIDs))
+		next = append(next, queue.pending[:protected]...)
+		next = append(next, priorityIDs...)
+		next = append(next, queue.pending[protected:]...)
+		queue.pending = next
+	}
 	return added
 }
 

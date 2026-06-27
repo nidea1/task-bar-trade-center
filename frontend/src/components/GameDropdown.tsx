@@ -11,6 +11,7 @@ interface GameDropdownProps {
     icon?: React.ReactNode;
     title?: string;
     ariaLabel?: string;
+    iconOnly?: boolean;
 }
 
 export function GameDropdown({
@@ -22,7 +23,8 @@ export function GameDropdown({
     selectedLabel,
     icon,
     title,
-    ariaLabel
+    ariaLabel,
+    iconOnly = false
 }: GameDropdownProps) {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -30,6 +32,13 @@ export function GameDropdown({
     const selectedOption = options.find(opt => opt.value === value);
     const displayLabel = selectedLabel || (selectedOption ? selectedOption.label : value);
     const displayTitle = title || (prefix ? `${prefix}: ${displayLabel}` : displayLabel);
+    const optionStyle = (option: DropdownOption): React.CSSProperties | undefined => {
+        if (!option.color) return undefined;
+        return {
+            color: option.color,
+            borderLeftColor: option.value === value ? option.color : "transparent"
+        };
+    };
 
     useEffect(() => {
         if (!isOpen) return;
@@ -52,16 +61,24 @@ export function GameDropdown({
                 type="button"
                 onClick={() => setIsOpen(!isOpen)}
                 aria-label={ariaLabel || displayTitle}
-                className="game-button px-3 py-1.5 text-xs font-bold cursor-pointer flex items-center justify-between gap-2.5 min-w-[120px] tracking-wide"
+                className={
+                    iconOnly
+                        ? "dashboard-icon-dropdown-button game-button cursor-pointer flex items-center justify-center"
+                        : "game-button px-3 py-1.5 text-xs font-bold cursor-pointer flex items-center justify-between gap-2.5 min-w-[120px] tracking-wide"
+                }
             >
-                <span className="dashboard-dropdown-content">
-                    {icon && <span className="dashboard-dropdown-icon">{icon}</span>}
-                    <span className="dashboard-dropdown-label">
-                        {prefix && <span className="dashboard-dropdown-prefix">{prefix}</span>}
-                        <span className="dashboard-dropdown-value">{displayLabel}</span>
+                {iconOnly ? (
+                    <span className="dashboard-dropdown-icon">{icon}</span>
+                ) : (
+                    <span className="dashboard-dropdown-content">
+                        {icon && <span className="dashboard-dropdown-icon">{icon}</span>}
+                        <span className="dashboard-dropdown-label">
+                            {prefix && <span className="dashboard-dropdown-prefix">{prefix}</span>}
+                            <span className="dashboard-dropdown-value">{displayLabel}</span>
+                        </span>
                     </span>
-                </span>
-                <span className="text-[8px] text-[#ffbe2d] shrink-0">▼</span>
+                )}
+                {!iconOnly && <span className="text-[8px] text-[#ffbe2d] shrink-0">▼</span>}
             </button>
 
             {isOpen && (
@@ -78,6 +95,7 @@ export function GameDropdown({
                                     onChange(opt.value);
                                     setIsOpen(false);
                                 }}
+                                style={optionStyle(opt)}
                                 className={`w-full text-left px-3 py-1.5 text-xs block transition-all relative ${
                                     opt.value === value
                                         ? "text-[#ffbe2d] font-bold bg-[#1e150d] border-l-2 border-[#ffbe2d]"

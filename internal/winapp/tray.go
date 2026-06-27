@@ -64,8 +64,9 @@ func SetNotifyIconVersion(nid *win32.NOTIFYICONDATAW) {
 	win32.ProcShellNotifyIcon.Call(4, uintptr(unsafe.Pointer(nid)))
 }
 
-func ModifyNotifyIcon(nid *win32.NOTIFYICONDATAW) {
-	win32.ProcShellNotifyIcon.Call(1, uintptr(unsafe.Pointer(nid)))
+func ModifyNotifyIcon(nid *win32.NOTIFYICONDATAW) bool {
+	ret, _, _ := win32.ProcShellNotifyIcon.Call(1, uintptr(unsafe.Pointer(nid)))
+	return ret != 0
 }
 
 func DeleteNotifyIcon(nid *win32.NOTIFYICONDATAW) {

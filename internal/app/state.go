@@ -22,6 +22,7 @@ type App struct {
 	appDataDir              string
 	logFilePath             string
 	priceCacheFilePath      string
+	iconMetadataFilePath    string
 	inventoryStateFilePath  string
 	settingsFilePath        string
 	gameLayoutCacheFilePath string
@@ -44,10 +45,11 @@ type App struct {
 	lastOverlayRect    win32.RECT
 	hasLastOverlayRect bool
 
-	appStatus           atomic.Int32
-	configurationStatus atomic.Int32
-	updateStatus        atomic.Int32
-	appInitialized      atomic.Bool
+	appStatus            atomic.Int32
+	configurationStatus  atomic.Int32
+	updateStatus         atomic.Int32
+	appInitialized       atomic.Bool
+	minRarityNotifyLevel atomic.Int32
 
 	// Game process info
 	gameProcessID     uint32
@@ -61,6 +63,16 @@ type App struct {
 	itemMap      map[int]catalog.ItemConfig
 	priceCache   map[string]market.MarketData
 	priceCacheMu sync.RWMutex
+
+	iconMetadata   map[string]iconMetadataEntry
+	iconMetadataMu sync.RWMutex
+
+	priceCacheWriteMu        sync.Mutex
+	priceCacheWriteTimer     *time.Timer
+	priceCacheWritePending   bool
+	iconMetadataWriteMu      sync.Mutex
+	iconMetadataWriteTimer   *time.Timer
+	iconMetadataWritePending bool
 
 	// Game layout resolution
 	gameLayoutMu             sync.RWMutex
@@ -83,22 +95,29 @@ type App struct {
 	currentPriceTextMutex sync.RWMutex
 
 	// Inventory integration
-	inventoryMu               sync.Mutex
-	inventoryDashboardBuildMu sync.Mutex
-	inventoryResolver         *playerdata.Resolver
-	lastSnapshot              *playerdata.InventorySnapshot
-	inventoryDashboardState   inventory.DashboardState
-	inventoryPriceQueue       *inventory.RefreshQueue
-	marketableInventorySeen   map[uint64]struct{}
-	marketableInventorySeeded bool
-	notificationIconCache     map[string]uintptr
-	priceCacheRefreshing      atomic.Bool
+	inventoryMu                    sync.Mutex
+	inventoryDashboardBuildMu      sync.Mutex
+	inventoryDashboardRebuildMu    sync.Mutex
+	inventoryDashboardRebuildTimer *time.Timer
+	pendingInventoryRebuildReason  string
+	inventoryResolver              *playerdata.Resolver
+	lastSnapshot                   *playerdata.InventorySnapshot
+	inventoryDashboardState        inventory.DashboardState
+	inventoryPriceQueue            *inventory.RefreshQueue
+	marketableInventorySeen        map[uint64]struct{}
+	marketableInventorySeeded      bool
+	notificationIconCache          map[string]uintptr
+	notificationIconPreparing      map[string]struct{}
+	priceCacheRefreshing           atomic.Bool
 }
 
 var activeApp = &App{
-	allItemMap: make(map[int]catalog.ItemConfig),
-	itemMap:    make(map[int]catalog.ItemConfig),
-	priceCache: make(map[string]market.MarketData),
+	allItemMap:                make(map[int]catalog.ItemConfig),
+	itemMap:                   make(map[int]catalog.ItemConfig),
+	priceCache:                make(map[string]market.MarketData),
+	iconMetadata:              make(map[string]iconMetadataEntry),
+	notificationIconCache:     make(map[string]uintptr),
+	notificationIconPreparing: make(map[string]struct{}),
 }
 
 func getCurrentPriceText() string {

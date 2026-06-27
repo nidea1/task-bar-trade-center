@@ -7,7 +7,7 @@ const (
 	AppProcessName           = "tbtc"
 	DashboardWindowClassName = AppProcessName + "DashboardWindow"
 	AppCreatorName           = "nidea1"
-	AppVersion               = "0.9.7"
+	AppVersion               = "0.10.0"
 	GameProcessName          = "TaskBarHero.exe"
 
 	EnablePriceHUD           = true
@@ -128,21 +128,22 @@ const (
 
 	TPM_RIGHTBUTTON = 0x00000002
 
-	TrayIconID               = 1
-	MenuRefreshPriceCache    = 1001
-	MenuClearPriceCache      = 1002
-	MenuExit                 = 1003
-	MenuToggleOverlayMode    = 1004
-	MenuCheckForUpdates      = 1005
-	MenuUpdateConfigs        = 1006
-	MenuRestartAdministrator = 1007
-	MenuInstallUpdate        = 1008
-	MenuOpenRelease          = 1009
-	MenuOpenInventory        = 1010
-	MenuRefreshInventory     = 1011
-	MenuCurrencyBase         = 1100
-	MenuRegionBase           = 1200
-	MenuLanguageBase         = 1300
+	TrayIconID                = 1
+	MenuRefreshPriceCache     = 1001
+	MenuClearPriceCache       = 1002
+	MenuExit                  = 1003
+	MenuToggleOverlayMode     = 1004
+	MenuCheckForUpdates       = 1005
+	MenuUpdateConfigs         = 1006
+	MenuRestartAdministrator  = 1007
+	MenuInstallUpdate         = 1008
+	MenuOpenRelease           = 1009
+	MenuOpenInventory         = 1010
+	MenuRefreshInventory      = 1011
+	MenuForceRefreshInventory = 1012
+	MenuCurrencyBase          = 1100
+	MenuRegionBase            = 1200
+	MenuLanguageBase          = 1300
 
 	OverlayModeDetail  = 0
 	OverlayModeCompact = 1

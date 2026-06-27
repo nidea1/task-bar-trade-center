@@ -137,6 +137,7 @@ func updateTrayIconTooltip() {
 
 func showTrayNotification(title, message string, icon uintptr) {
 	if activeApp.appHWND == 0 || !activeApp.trayIconAdded {
+		logPrintf("[NOTIFY] Cannot show tray notification. appHWND=%d trayIconAdded=%t. title=%q\n", activeApp.appHWND, activeApp.trayIconAdded, title)
 		return
 	}
 	nid := newNotifyIconData()
@@ -148,7 +149,11 @@ func showTrayNotification(title, message string, icon uintptr) {
 		nid.HBalloonIcon = icon
 		nid.DwInfoFlags = NIIF_USER | NIIF_LARGE_ICON
 	}
-	winapp.ModifyNotifyIcon(&nid)
+	if !winapp.ModifyNotifyIcon(&nid) {
+		logPrintf("[NOTIFY] Shell_NotifyIconW (NIM_MODIFY) failed to show balloon notification. title=%q\n", title)
+	} else {
+		logPrintf("[NOTIFY] Shell_NotifyIconW (NIM_MODIFY) succeeded for title=%q\n", title)
+	}
 }
 
 func trayTooltipText() string {
@@ -290,6 +295,8 @@ func handleTrayCommand(commandID uint32) {
 		openInventoryDashboard()
 	case MenuRefreshInventory:
 		refreshInventoryPricesFromDashboard()
+	case MenuForceRefreshInventory:
+		forceRefreshInventoryPricesFromDashboard()
 	case MenuToggleOverlayMode:
 		if activeApp.overlayMode.Load() == OverlayModeDetail {
 			activeApp.overlayMode.Store(OverlayModeCompact)

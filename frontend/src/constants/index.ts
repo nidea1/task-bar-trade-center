@@ -67,7 +67,7 @@ export const DEFAULT_RARITY_META: RarityMeta = {
 };
 
 export const RARITY_META: Record<string, RarityMeta> = {
-    COMMON: { rank: 0, color: "rgb(63, 63, 63)", labelKey: "rarity.COMMON" },
+    COMMON: { rank: 0, color: "rgb(132, 132, 132)", labelKey: "rarity.COMMON" },
     UNCOMMON: { rank: 1, color: "rgb(100, 171, 67)", labelKey: "rarity.UNCOMMON" },
     RARE: { rank: 2, color: "rgb(68, 127, 207)", labelKey: "rarity.RARE" },
     LEGENDARY: { rank: 3, color: "rgb(200, 109, 28)", labelKey: "rarity.LEGENDARY" },

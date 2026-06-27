@@ -77,8 +77,8 @@ func TestMissingOrStaleDashboardItemIDsIncludesMissingIcons(t *testing.T) {
 	}
 
 	ids := missingOrStaleDashboardItemIDs(state, time.Hour)
-	if len(ids) != 2 || ids[0] != 200 || ids[1] != 300 {
-		t.Fatalf("refresh ids = %+v, want [200 300]", ids)
+	if len(ids) != 3 || ids[0] != 100 || ids[1] != 200 || ids[2] != 300 {
+		t.Fatalf("refresh ids = %+v, want [100 200 300]", ids)
 	}
 }
 

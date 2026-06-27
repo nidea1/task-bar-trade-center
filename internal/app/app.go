@@ -43,8 +43,8 @@ func Stop() {
 
 func initializeApplication(startedAt time.Time) {
 	initAppStorage()
-	fmt.Printf("%s is starting...\n", AppName)
-	fmt.Printf("startup tray_ready=%s\n", time.Since(startedAt))
+	logPrintf("%s is starting...\n", AppName)
+	logPrintf("startup tray_ready=%s\n", time.Since(startedAt))
 	cleanOldVersion()
 	activeApp.gameReady.Store(false)
 
@@ -53,6 +53,7 @@ func initializeApplication(startedAt time.Time) {
 		return
 	}
 	loadPriceCacheFromDisk()
+	loadIconMetadataFromDisk()
 	loadSettingsFromDisk()
 	notifyApplicationStarted()
 	if err := loadLocalGameLayout(); err != nil {
@@ -60,12 +61,12 @@ func initializeApplication(startedAt time.Time) {
 		return
 	}
 
-	fmt.Printf("startup local_ready=%s\n", time.Since(startedAt))
+	logPrintf("startup local_ready=%s\n", time.Since(startedAt))
 	win32.ProcPostMessageW.Call(activeApp.appHWND, WM_APP_LOCAL_READY, 0, 0)
 }
 
 func failApplicationInitialization(err error) {
-	fmt.Printf("Application initialization failed: %v\n", err)
+	logPrintf("Application initialization failed: %v\n", err)
 	notifyApplicationStarted()
 	setConfigurationStatus(ConfigStatusRefreshFailed, err.Error())
 	setAppStatus(AppStatusInitializationFailed)
@@ -84,7 +85,7 @@ func startMonitoringAfterLocalInitialization() {
 	go checkUpdatesOnStartup()
 	go refreshGameLayoutInBackground()
 	go market.FetchExchangeRatesFromAPI()
-	fmt.Println("startup monitor_ready")
+	logPrintln("startup monitor_ready")
 }
 
 func shutdownApplication() {
@@ -130,21 +131,21 @@ func waitForGameProcess() uint32 {
 	for pid == 0 {
 		pid = game.FindProcessID(GameProcessName)
 		if pid == 0 {
-			fmt.Printf("Waiting for %s... Launch the game.\n", GameProcessName)
+			logPrintf("Waiting for %s... Launch the game.\n", GameProcessName)
 			time.Sleep(2 * time.Second)
 		}
 	}
-	fmt.Printf("Game process ID (PID) found: %d\n", pid)
+	logPrintf("Game process ID (PID) found: %d\n", pid)
 	return pid
 }
 
 func openGameProcess(pid uint32) (uintptr, bool) {
 	pHandle, _, _ := win32.ProcOpenProcess.Call(PROCESS_VM_READ|PROCESS_QUERY_INFORMATION|SYNCHRONIZE, 0, uintptr(pid))
 	if pHandle == 0 {
-		fmt.Println("Could not attach to game memory. Please run the command prompt as administrator.")
+		logPrintln("Could not attach to game memory. Please run the command prompt as administrator.")
 		return 0, false
 	}
-	fmt.Println("Successfully attached to game memory.")
+	logPrintln("Successfully attached to game memory.")
 	return pHandle, true
 }
 
@@ -156,11 +157,11 @@ func waitForGameAssembly(processHandle uintptr) (uintptr, bool) {
 		}
 		gameAssemblyBase = game.ModuleBaseAddress(processHandle, "GameAssembly.dll")
 		if gameAssemblyBase == 0 {
-			fmt.Println("Waiting for GameAssembly.dll to load into memory...")
+			logPrintln("Waiting for GameAssembly.dll to load into memory...")
 			time.Sleep(1 * time.Second)
 		}
 	}
-	fmt.Printf("GameAssembly.dll address verified: 0x%X\n", gameAssemblyBase)
+	logPrintf("GameAssembly.dll address verified: 0x%X\n", gameAssemblyBase)
 	return gameAssemblyBase, true
 }
 
@@ -194,7 +195,7 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 		if !ok {
 			recordPointerReadResult(game.PointerReadHoveredItem, false)
 			if !lastReadFailed {
-				fmt.Printf("Memory read failed. The AOB pattern or pointer/offset chain may be outdated.\n")
+				logPrintf("Memory read failed. The AOB pattern or pointer/offset chain may be outdated.\n")
 				lastReadFailed = true
 			}
 			activeApp.activeItemID.Store(0)
@@ -209,7 +210,7 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 		lastReadFailed = false
 		if currentItemID == 0 && rawValue > 0 && rawValue != lastUnknownRaw {
 			lastUnknownRaw = rawValue
-			fmt.Printf("Read raw tooltip value is not an item ID: %d\n", rawValue)
+			logPrintf("Read raw tooltip value is not an item ID: %d\n", rawValue)
 		}
 
 		if currentItemID != lastID {
@@ -223,8 +224,8 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 						name = config.Name["en-US"]
 					}
 					setCurrentItemName(name)
-					fmt.Printf("Mouse is over item: %s (ID: %d)\n", getCurrentItemName(), currentItemID)
-					fmt.Printf("Item ID read mode: %s\n", readMode)
+					logPrintf("Mouse is over item: %s (ID: %d)\n", getCurrentItemName(), currentItemID)
+					logPrintf("Item ID read mode: %s\n", readMode)
 					if EnablePriceHUD {
 						activeApp.showOverlay.Store(true)
 						setCurrentPriceText(tr("hud.loading"))
@@ -237,7 +238,7 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 						activeApp.showOverlay.Store(false)
 						redrawOverlay()
 					}
-					fmt.Printf("Read item ID is not in the marketable list: %d\n", currentItemID)
+					logPrintf("Read item ID is not in the marketable list: %d\n", currentItemID)
 				}
 			} else {
 				activeApp.activeItemID.Store(0)
@@ -374,7 +375,7 @@ func preScanTooltipAOB() {
 	layout := activeApp.activeGameLayout
 	activeApp.gameLayoutMu.RUnlock()
 
-	fmt.Println("Pre-scanning tooltip AOB signatures in the background...")
+	logPrintln("Pre-scanning tooltip AOB signatures in the background...")
 
 	// Pre-resolve X
 	activeApp.tooltipXAOBResolver.Resolve("x", pHandle, base, layout.TooltipXPointerBaseAOB, layout.TooltipXPointerOffsets)
@@ -383,5 +384,5 @@ func preScanTooltipAOB() {
 	// Pre-resolve Height
 	activeApp.tooltipHeightAOBResolver.Resolve("height", pHandle, base, layout.TooltipHeightPointerBaseAOB, layout.TooltipHeightPointerOffsets)
 
-	fmt.Println("Tooltip AOB background pre-scan completed.")
+	logPrintln("Tooltip AOB background pre-scan completed.")
 }

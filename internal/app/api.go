@@ -8,7 +8,7 @@ import (
 	"github.com/nidea1/task-bar-trade-center/internal/market"
 )
 
-const inventoryDashboardPollCacheMaxAge = 15 * time.Second
+const inventoryDashboardPollCacheMaxAge = 2 * time.Second
 
 func RunRestartAfterUpdateHelper() bool {
 	return runRestartAfterUpdateHelper()
@@ -24,11 +24,11 @@ func GetInventoryDashboard() (inventory.DashboardState, error) {
 	}
 
 	cached := currentInventoryDashboardState()
-	if canReadInventorySnapshot() {
-		go refreshInventoryDashboardState("dashboard-cache-miss")
-	}
 	if cached.UpdatedAt != "" {
 		return withCurrentDashboardRuntimeFields(cached), nil
+	}
+	if canReadInventorySnapshot() {
+		go refreshInventoryDashboardState("dashboard-cache-miss")
 	}
 	return currentInventoryDashboardShellState(), nil
 }
@@ -41,10 +41,25 @@ func RefreshInventoryPrices() (inventory.RefreshStatus, error) {
 	storeInventoryDashboardState(state)
 	queued := queueInventoryPriceRefresh(state)
 	if queued == 0 {
-		refreshInventoryDashboardState("price-refresh-noop")
+		publishInventoryDashboardState(state, "price-refresh-noop")
 		return currentInventoryRefreshStatus(), nil
 	}
-	refreshInventoryDashboardState("price-refresh-queued")
+	publishInventoryDashboardState(state, "price-refresh-queued")
+	return currentInventoryRefreshStatus(), nil
+}
+
+func ForceRefreshInventoryPrices() (inventory.RefreshStatus, error) {
+	state, err := readInventoryDashboardStateLocked()
+	if err != nil {
+		return currentInventoryRefreshStatus(), err
+	}
+	storeInventoryDashboardState(state)
+	queued := queueForceInventoryPriceRefresh(state)
+	if queued == 0 {
+		publishInventoryDashboardState(state, "force-price-refresh-noop")
+		return currentInventoryRefreshStatus(), nil
+	}
+	publishInventoryDashboardState(state, "force-price-refresh-queued")
 	return currentInventoryRefreshStatus(), nil
 }
 
@@ -188,4 +203,16 @@ func SetMarketScope(currencyCode string, countryCode string) bool {
 
 func GetTranslations() map[string]string {
 	return currentTranslations()
+}
+
+func GetMinRarityNotify() string {
+	return rarityGrade(int(activeApp.minRarityNotifyLevel.Load()))
+}
+
+func SetMinRarityNotify(grade string) bool {
+	level := rarityLevel(grade)
+	activeApp.minRarityNotifyLevel.Store(int32(level))
+	saveSettingsToDisk()
+	fmt.Printf("Minimum notification rarity changed via dashboard to %s.\n", grade)
+	return true
 }

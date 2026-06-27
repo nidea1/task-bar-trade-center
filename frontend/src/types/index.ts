@@ -98,4 +98,5 @@ export interface DashboardState {
 export interface DropdownOption {
     value: string;
     label: string;
+    color?: string;
 }

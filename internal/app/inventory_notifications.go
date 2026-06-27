@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha1"
 	"encoding/binary"
 	"encoding/hex"
@@ -28,6 +29,12 @@ type marketableInventoryItem struct {
 	hasPrice bool
 }
 
+var fetchUncachedItemPrice func(context.Context, int) error
+
+func init() {
+	fetchUncachedItemPrice = fetchInventoryMarketPrice
+}
+
 func recordMarketableInventoryItems(snapshot playerdata.InventorySnapshot) []marketableInventoryItem {
 	activeApp.inventoryMu.Lock()
 
@@ -37,14 +44,30 @@ func recordMarketableInventoryItems(snapshot playerdata.InventorySnapshot) []mar
 
 	newItems := make([]marketableInventoryItem, 0)
 	for _, item := range snapshot.Items {
-		if item.UniqueID == 0 || !item.Marketable {
+		if item.UniqueID == 0 {
 			continue
 		}
 		if _, seen := activeApp.marketableInventorySeen[item.UniqueID]; seen {
 			continue
 		}
 		activeApp.marketableInventorySeen[item.UniqueID] = struct{}{}
+		if !item.Marketable {
+			logPrintf("[NOTIFY] Ignored new item ID %d (UniqueID: %d) because it is not marketable\n", item.ItemID, item.UniqueID)
+			continue
+		}
 		if activeApp.marketableInventorySeeded {
+			notifiedBoxItemsMu.Lock()
+			tracker := recentlyNotifiedBoxItems[item.ItemID]
+			if tracker.count > 0 && time.Since(tracker.lastNotified) < 2*time.Minute {
+				logPrintf("[NOTIFY] Skipping duplicate notification for itemID=%d, UniqueID=%d (already notified %d time(s) via BoxOpenLog)\n", item.ItemID, item.UniqueID, tracker.count)
+				tracker.count--
+				recentlyNotifiedBoxItems[item.ItemID] = tracker
+				notifiedBoxItemsMu.Unlock()
+				continue
+			}
+			notifiedBoxItemsMu.Unlock()
+
+			logPrintf("[NOTIFY] Detected new marketable item: itemID=%d, UniqueID=%d\n", item.ItemID, item.UniqueID)
 			newItems = append(newItems, marketableInventoryItem{
 				itemID: item.ItemID,
 			})
@@ -53,6 +76,7 @@ func recordMarketableInventoryItems(snapshot playerdata.InventorySnapshot) []mar
 
 	if !activeApp.marketableInventorySeeded {
 		activeApp.marketableInventorySeeded = true
+		logPrintf("[NOTIFY] Seeding inventory notification tracker with %d item(s)\n", len(snapshot.Items))
 		activeApp.inventoryMu.Unlock()
 		return nil
 	}
@@ -61,7 +85,6 @@ func recordMarketableInventoryItems(snapshot playerdata.InventorySnapshot) []mar
 	for index := range newItems {
 		fillMarketableInventoryItemDetails(&newItems[index])
 	}
-	queueMarketableInventoryPriceRefresh(newItems)
 	return newItems
 }
 
@@ -73,17 +96,32 @@ func resetMarketableInventoryNotifications() {
 }
 
 func processNewMarketableInventoryItems(newItems []marketableInventoryItem) {
-	if len(newItems) == 0 {
+	// Filter based on rarity setting
+	filtered := make([]marketableInventoryItem, 0, len(newItems))
+	for _, item := range newItems {
+		if shouldNotifyItem(item.itemID) {
+			filtered = append(filtered, item)
+		} else {
+			logPrintf("[NOTIFY] Item ID %d skipped by rarity notification filter.\n", item.itemID)
+		}
+	}
+
+	if len(filtered) == 0 {
 		return
 	}
+	newItems = filtered
+
+	logPrintf("[NOTIFY] Processing %d new marketable item(s)\n", len(newItems))
 
 	cachedItems := make([]marketableInventoryItem, 0, len(newItems))
 	uncachedItems := make([]marketableInventoryItem, 0, len(newItems))
 
 	for _, item := range newItems {
 		if item.hasPrice {
+			logPrintf("[NOTIFY] Item %s (ID: %d) has cached price: %s. Notifying immediately.\n", item.name, item.itemID, item.price)
 			cachedItems = append(cachedItems, item)
 		} else {
+			logPrintf("[NOTIFY] Item %s (ID: %d) has no cached price. Spawning async fetch.\n", item.name, item.itemID)
 			uncachedItems = append(uncachedItems, item)
 		}
 	}
@@ -94,21 +132,18 @@ func processNewMarketableInventoryItems(newItems []marketableInventoryItem) {
 
 	if len(uncachedItems) > 0 {
 		go func(items []marketableInventoryItem) {
-			start := time.Now()
-			for time.Since(start) < 15*time.Second {
-				allResolved := true
-				for i := range items {
-					if !items[i].hasPrice {
-						fillMarketableInventoryItemDetails(&items[i])
-						if !items[i].hasPrice {
-							allResolved = false
-						}
-					}
-				}
-				if allResolved {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			logPrintf("[NOTIFY] Starting async price fetch for %d item(s)\n", len(items))
+			for i := range items {
+				if ctx.Err() != nil {
+					logPrintf("[NOTIFY] Price fetch context error for item ID %d: %v\n", items[i].itemID, ctx.Err())
 					break
 				}
-				time.Sleep(1 * time.Second)
+				logPrintf("[NOTIFY] Fetching price for item ID %d...\n", items[i].itemID)
+				fetchUncachedItemPrice(ctx, items[i].itemID)
+				fillMarketableInventoryItemDetails(&items[i])
+				logPrintf("[NOTIFY] Fetch completed for item ID %d. price=%s hasPrice=%t\n", items[i].itemID, items[i].price, items[i].hasPrice)
 			}
 			notifyMarketableInventoryItems(items)
 		}(uncachedItems)
@@ -119,6 +154,7 @@ func notifyMarketableInventoryItems(items []marketableInventoryItem) {
 	if len(items) == 0 {
 		return
 	}
+	logPrintf("[NOTIFY] Queuing tray notification for %d item(s)\n", len(items))
 	if len(items) == 1 {
 		item := items[0]
 		title := tr("notification.item_acquired_title", item.name)
@@ -196,8 +232,12 @@ func inventoryNotificationItemIcon(itemID int) uintptr {
 	if !ok {
 		return 0
 	}
+	marketHashName := buildMarketHashName(config)
+	if iconPath, ok := marketIconPath(marketHashName); ok {
+		return cachedNotificationIcon(iconPath)
+	}
 	scope := market.CurrentScope()
-	data, exists := marketCacheEntry(scope, buildMarketHashName(config))
+	data, exists := marketCacheEntry(scope, marketHashName)
 	if !exists || data.Analysis.IconURL == "" {
 		return 0
 	}
@@ -215,12 +255,14 @@ func cachedNotificationIcon(iconPath string) uintptr {
 	}
 	activeApp.inventoryMu.Unlock()
 
-	iconFile, ok := notificationIconFile(iconPath)
+	iconFile, ok := existingNotificationIconFile(iconPath)
 	if !ok {
+		queueNotificationIconPrepare(iconPath)
 		return 0
 	}
 	icon := winapp.LoadIconFile(iconFile, getSystemMetric(SM_CXICON))
 	if icon == 0 {
+		queueNotificationIconPrepare(iconPath)
 		return 0
 	}
 
@@ -233,17 +275,78 @@ func cachedNotificationIcon(iconPath string) uintptr {
 	return icon
 }
 
-func notificationIconFile(iconPath string) (string, bool) {
+func queueNotificationIconPrepare(iconPath string) {
+	if iconPath == "" {
+		return
+	}
+	activeApp.inventoryMu.Lock()
+	if activeApp.notificationIconPreparing == nil {
+		activeApp.notificationIconPreparing = make(map[string]struct{})
+	}
+	if _, preparing := activeApp.notificationIconPreparing[iconPath]; preparing {
+		activeApp.inventoryMu.Unlock()
+		return
+	}
+	activeApp.notificationIconPreparing[iconPath] = struct{}{}
+	activeApp.inventoryMu.Unlock()
+
+	go func() {
+		defer func() {
+			activeApp.inventoryMu.Lock()
+			delete(activeApp.notificationIconPreparing, iconPath)
+			activeApp.inventoryMu.Unlock()
+		}()
+
+		iconFile, ok := notificationIconFile(iconPath)
+		if !ok {
+			return
+		}
+		icon := winapp.LoadIconFile(iconFile, getSystemMetric(SM_CXICON))
+		if icon == 0 {
+			return
+		}
+		activeApp.inventoryMu.Lock()
+		if activeApp.notificationIconCache == nil {
+			activeApp.notificationIconCache = make(map[string]uintptr)
+		}
+		activeApp.notificationIconCache[iconPath] = icon
+		activeApp.inventoryMu.Unlock()
+	}()
+}
+
+func notificationIconCachePath(iconPath string) (string, bool) {
+	if iconPath == "" {
+		return "", false
+	}
 	cacheDir := activeApp.appDataDir
 	if cacheDir == "" {
 		cacheDir = os.TempDir()
 	}
 	iconDir := filepath.Join(cacheDir, "cache", "notification-icons")
 	sum := sha1.Sum([]byte(iconPath))
-	iconFile := filepath.Join(iconDir, hex.EncodeToString(sum[:])+".ico")
+	return filepath.Join(iconDir, hex.EncodeToString(sum[:])+".ico"), true
+}
+
+func existingNotificationIconFile(iconPath string) (string, bool) {
+	iconFile, ok := notificationIconCachePath(iconPath)
+	if !ok {
+		return "", false
+	}
 	if _, err := os.Stat(iconFile); err == nil {
 		return iconFile, true
 	}
+	return "", false
+}
+
+func notificationIconFile(iconPath string) (string, bool) {
+	iconFile, ok := notificationIconCachePath(iconPath)
+	if !ok {
+		return "", false
+	}
+	if _, err := os.Stat(iconFile); err == nil {
+		return iconFile, true
+	}
+	iconDir := filepath.Dir(iconFile)
 	if err := os.MkdirAll(iconDir, 0700); err != nil {
 		return "", false
 	}
@@ -325,7 +428,7 @@ func queueMarketableInventoryPriceRefresh(items []marketableInventoryItem) {
 		}
 	}
 	if len(ids) > 0 {
-		currentInventoryPriceQueue().Enqueue(ids)
+		currentInventoryPriceQueue().EnqueuePriority(ids)
 	}
 }
 
@@ -343,4 +446,13 @@ func marketableInventoryItemSummary(items []marketableInventoryItem) string {
 		lines = append(lines, tr("notification.marketable_items_more", remaining))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func shouldNotifyItem(itemID int) bool {
+	config, ok := activeApp.allItemMap[itemID]
+	if !ok {
+		return true
+	}
+	minLevel := activeApp.minRarityNotifyLevel.Load()
+	return int32(rarityLevel(config.Grade)) >= minLevel
 }

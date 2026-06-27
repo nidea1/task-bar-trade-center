@@ -40,6 +40,7 @@ func showTrayMenu() {
 	}
 	appendTrayMenuItem(menu, inventoryFlags, MenuOpenInventory, tr("menu.open_inventory"))
 	appendTrayMenuItem(menu, inventoryFlags, MenuRefreshInventory, tr("menu.refresh_inventory"))
+	appendTrayMenuItem(menu, inventoryFlags, MenuForceRefreshInventory, tr("menu.force_refresh_inventory"))
 	overlayModeText := tr("menu.compact")
 	if activeApp.overlayMode.Load() == OverlayModeCompact {
 		overlayModeText = tr("menu.detail")

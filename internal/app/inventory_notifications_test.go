@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -110,6 +111,7 @@ func TestNotifyMarketableInventoryItemsQueuesTrayNotification(t *testing.T) {
 func TestProcessNewMarketableInventoryItems(t *testing.T) {
 	originalApp := activeApp
 	originalPublisher := publishTrayNotification
+	originalFetcher := fetchUncachedItemPrice
 	originalPreference := currentDisplayLanguagePreference()
 	originalScope := market.CurrentScope()
 
@@ -118,7 +120,7 @@ func TestProcessNewMarketableInventoryItems(t *testing.T) {
 	emerald := catalog.ItemConfig{ID: 200, Name: map[string]string{"en-US": "Emerald"}, Grade: "RARE", Marketable: true}
 
 	activeApp = &App{
-		appHWND: 1,
+		appHWND:       1,
 		trayIconAdded: true,
 		allItemMap: map[int]catalog.ItemConfig{
 			100: ruby,
@@ -145,11 +147,29 @@ func TestProcessNewMarketableInventoryItems(t *testing.T) {
 	publishTrayNotification = func(title string, message string, _ uintptr) {
 		notifications = append(notifications, title+": "+message)
 	}
+
+	// Mock fetchUncachedItemPrice to simulate a successful API fetch that caches the price.
+	fetchUncachedItemPrice = func(_ context.Context, itemID int) error {
+		if itemID == 200 {
+			activeApp.priceCacheMu.Lock()
+			activeApp.priceCache[market.CacheKey(scope, buildMarketHashName(emerald))] = market.MarketData{
+				Analysis: market.MarketAnalysis{
+					UpdatedAt:      time.Now(),
+					PricePrefix:    "$",
+					SuggestedPrice: 12.50,
+					HasSuggested:   true,
+				},
+			}
+			activeApp.priceCacheMu.Unlock()
+		}
+		return nil
+	}
 	clearPendingTrayNotifications()
 
 	t.Cleanup(func() {
 		activeApp = originalApp
 		publishTrayNotification = originalPublisher
+		fetchUncachedItemPrice = originalFetcher
 		applyDisplayLanguagePreference(originalPreference)
 		market.SetScope(originalScope.Currency.Code, originalScope.Region.CountryCode)
 		clearPendingTrayNotifications()
@@ -171,19 +191,7 @@ func TestProcessNewMarketableInventoryItems(t *testing.T) {
 		t.Fatalf("notification 0 = %q, want Ruby", notifications[0])
 	}
 
-	// Now simulate the price of Emerald getting resolved and cached.
-	activeApp.priceCacheMu.Lock()
-	activeApp.priceCache[market.CacheKey(scope, buildMarketHashName(emerald))] = market.MarketData{
-		Analysis: market.MarketAnalysis{
-			UpdatedAt:      time.Now(),
-			PricePrefix:    "$",
-			SuggestedPrice: 12.50,
-			HasSuggested:   true,
-		},
-	}
-	activeApp.priceCacheMu.Unlock()
-
-	// Wait up to 5 seconds for background polling to detect the price and notify.
+	// Wait for the background goroutine to fetch and notify Emerald.
 	start := time.Now()
 	for time.Since(start) < 5*time.Second {
 		flushTrayNotifications()
@@ -198,5 +206,68 @@ func TestProcessNewMarketableInventoryItems(t *testing.T) {
 	}
 	if !strings.Contains(notifications[1], "Emerald") || !strings.Contains(notifications[1], "$12.50") {
 		t.Fatalf("notification 1 = %q, want Emerald notification with price $12.50", notifications[1])
+	}
+}
+
+func TestNotificationRarityFilter(t *testing.T) {
+	originalApp := activeApp
+	originalPreference := currentDisplayLanguagePreference()
+	originalScope := market.CurrentScope()
+	applyDisplayLanguagePreference("en-US")
+	market.SetScope(market.DefaultScope().Currency.Code, market.DefaultScope().Region.CountryCode)
+
+	ruby := catalog.ItemConfig{ID: 100, Name: map[string]string{"en-US": "Ruby"}, Grade: "COMMON", Marketable: true}
+	emerald := catalog.ItemConfig{ID: 200, Name: map[string]string{"en-US": "Emerald"}, Grade: "RARE", Marketable: true}
+	legendaryItem := catalog.ItemConfig{ID: 300, Name: map[string]string{"en-US": "Crown"}, Grade: "LEGENDARY", Marketable: true}
+
+	activeApp = &App{
+		allItemMap: map[int]catalog.ItemConfig{
+			100: ruby,
+			200: emerald,
+			300: legendaryItem,
+		},
+		itemMap: map[int]catalog.ItemConfig{
+			100: ruby,
+			200: emerald,
+			300: legendaryItem,
+		},
+	}
+	t.Cleanup(func() {
+		activeApp = originalApp
+		applyDisplayLanguagePreference(originalPreference)
+		market.SetScope(originalScope.Currency.Code, originalScope.Region.CountryCode)
+	})
+
+	// 1. Filter set to COMMON (level 0) - should notify everything
+	activeApp.minRarityNotifyLevel.Store(int32(rarityLevel("COMMON")))
+	if !shouldNotifyItem(100) {
+		t.Error("COMMON item should notify when filter is COMMON")
+	}
+	if !shouldNotifyItem(200) {
+		t.Error("RARE item should notify when filter is COMMON")
+	}
+
+	// 2. Filter set to RARE (level 2) - should NOT notify COMMON, but should notify RARE & LEGENDARY
+	activeApp.minRarityNotifyLevel.Store(int32(rarityLevel("RARE")))
+	if shouldNotifyItem(100) {
+		t.Error("COMMON item should not notify when filter is RARE")
+	}
+	if !shouldNotifyItem(200) {
+		t.Error("RARE item should notify when filter is RARE")
+	}
+	if !shouldNotifyItem(300) {
+		t.Error("LEGENDARY item should notify when filter is RARE")
+	}
+
+	// 3. Filter set to LEGENDARY (level 3) - should NOT notify COMMON/RARE, but should notify LEGENDARY
+	activeApp.minRarityNotifyLevel.Store(int32(rarityLevel("LEGENDARY")))
+	if shouldNotifyItem(100) {
+		t.Error("COMMON item should not notify when filter is LEGENDARY")
+	}
+	if shouldNotifyItem(200) {
+		t.Error("RARE item should not notify when filter is LEGENDARY")
+	}
+	if !shouldNotifyItem(300) {
+		t.Error("LEGENDARY item should notify when filter is LEGENDARY")
 	}
 }

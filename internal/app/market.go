@@ -3,7 +3,6 @@ package app
 import (
 	"github.com/nidea1/task-bar-trade-center/internal/catalog"
 
-	"fmt"
 	"sort"
 	"time"
 
@@ -38,22 +37,27 @@ func fetchPriceAndUpdateWithScope(config catalog.ItemConfig, useCache bool, scop
 	if err != nil {
 		if analysis, ok := market.StaleAnalysis(existingCache, hasExistingCache); ok {
 			logMarketPrice(config, scope, marketHashName, analysis, "stale-cache")
-			fmt.Printf("[MARKET:error] Steam market analysis failed, using stale cache: %v\n", err)
+			logPrintf("[MARKET:error] Steam market analysis failed, using stale cache: %v\n", err)
 			updatePriceOverlay(config.ID, scope, analysis)
 			return
 		}
 
 		analysis := market.UnavailableAnalysis(marketHashName, now, scope.Currency)
 		logMarketPrice(config, scope, marketHashName, analysis, "error")
-		fmt.Printf("[MARKET:error] Steam market analysis failed: %v\n", err)
+		logPrintf("[MARKET:error] Steam market analysis failed: %v\n", err)
 		updatePriceOverlay(config.ID, scope, analysis)
 		return
 	}
+	fetchedIconURL := data.Analysis.IconURL
+	if fetchedIconURL != "" {
+		recordMarketIcon(marketHashName, fetchedIconURL, now)
+	}
 	data = retainCachedIconURL(data, existingCache, hasExistingCache)
+	data = retainIconMetadataURL(data, marketHashName)
 
 	activeApp.priceCacheMu.Lock()
 	activeApp.priceCache[cacheKey] = data
-	writePriceCacheFileLocked()
+	schedulePriceCacheWriteLocked()
 	activeApp.priceCacheMu.Unlock()
 
 	source := "steam"
@@ -78,6 +82,16 @@ func marketCacheEntry(scope market.MarketScope, marketHashName string) (market.M
 func retainCachedIconURL(data market.MarketData, existing market.MarketData, exists bool) market.MarketData {
 	if data.Analysis.IconURL == "" && exists && existing.Analysis.IconURL != "" {
 		data.Analysis.IconURL = existing.Analysis.IconURL
+	}
+	return data
+}
+
+func retainIconMetadataURL(data market.MarketData, marketHashName string) market.MarketData {
+	if data.Analysis.IconURL != "" {
+		return data
+	}
+	if iconPath, ok := marketIconPath(marketHashName); ok {
+		data.Analysis.IconURL = iconPath
 	}
 	return data
 }
@@ -107,7 +121,7 @@ func priceOverviewURL(marketHashName string, scope market.MarketScope) string {
 }
 
 func logMarketPrice(config catalog.ItemConfig, scope market.MarketScope, marketHashName string, analysis market.MarketAnalysis, source string) {
-	fmt.Printf("[MARKET:%s] [%s] %s (ID: %d, grade: %s, type: %s) | %s => suggested=%s\n", source, market.FormatScope(scope), config.Name["en-US"], config.ID, config.Grade, config.Type, marketHashName, market.FormatAnalysisPrice(analysis.SuggestedPrice, analysis.HasSuggested, analysis))
+	logPrintf("[MARKET:%s] [%s] %s (ID: %d, grade: %s, type: %s) | %s => suggested=%s\n", source, market.FormatScope(scope), config.Name["en-US"], config.ID, config.Grade, config.Type, marketHashName, market.FormatAnalysisPrice(analysis.SuggestedPrice, analysis.HasSuggested, analysis))
 }
 
 func updatePriceOverlay(itemID int, scope market.MarketScope, analysis market.MarketAnalysis) {
@@ -168,16 +182,17 @@ func refreshCachedPricesInBackground() int {
 
 	go func() {
 		defer func() {
+			flushCacheWritesNow()
 			activeApp.priceCacheRefreshing.Store(false)
 			requestTrayTooltipUpdate()
 		}()
 
-		fmt.Printf("Refreshing cached prices: %d item(s).\n", len(configs))
+		logPrintf("Refreshing cached prices: %d item(s).\n", len(configs))
 		for index, config := range configs {
-			fmt.Printf("Refreshing cached price %d/%d: %s\n", index+1, len(configs), config.Name["en-US"])
+			logPrintf("Refreshing cached price %d/%d: %s\n", index+1, len(configs), config.Name["en-US"])
 			fetchPriceAndUpdateWithScope(config, false, scope)
 		}
-		fmt.Printf("Cached price refresh completed: %d item(s).\n", len(configs))
+		logPrintf("Cached price refresh completed: %d item(s).\n", len(configs))
 	}()
 
 	return len(configs)

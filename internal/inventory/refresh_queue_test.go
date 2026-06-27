@@ -3,6 +3,7 @@ package inventory
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 )
@@ -92,6 +93,49 @@ func TestRefreshQueueEnqueueResetsCompletedForNewRun(t *testing.T) {
 
 	if status.Completed != 0 {
 		t.Fatalf("completed at new run start = %d, want 0", status.Completed)
+	}
+}
+
+func TestRefreshQueuePriorityMovesPendingAfterActive(t *testing.T) {
+	started := make(chan int, 4)
+	releaseFirst := make(chan struct{})
+	var mu sync.Mutex
+	var fetched []int
+
+	queue := NewRefreshQueue(func(_ context.Context, id int) error {
+		started <- id
+		if id == 1 {
+			<-releaseFirst
+		}
+		mu.Lock()
+		fetched = append(fetched, id)
+		mu.Unlock()
+		return nil
+	}, nil)
+	queue.baseDelay = 0
+
+	if added := queue.Enqueue([]int{1, 2, 3}); added != 3 {
+		t.Fatalf("initial added = %d, want 3", added)
+	}
+	if got := <-started; got != 1 {
+		t.Fatalf("first started = %d, want 1", got)
+	}
+	if added := queue.EnqueuePriority([]int{3, 4}); added != 1 {
+		t.Fatalf("priority added = %d, want 1 new id", added)
+	}
+	close(releaseFirst)
+	waitForQueue(t, queue)
+
+	mu.Lock()
+	defer mu.Unlock()
+	want := []int{1, 3, 4, 2}
+	if len(fetched) != len(want) {
+		t.Fatalf("fetched = %+v, want %+v", fetched, want)
+	}
+	for i := range want {
+		if fetched[i] != want[i] {
+			t.Fatalf("fetched = %+v, want %+v", fetched, want)
+		}
 	}
 }
 

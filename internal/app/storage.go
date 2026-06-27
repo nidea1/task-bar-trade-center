@@ -11,6 +11,7 @@ import (
 )
 
 func initAppStorage() {
+	saveOriginalStdout()
 	paths, file, err := filestore.Init(AppName, AppProcessName, AppVersion, AppCreatorName)
 	if err != nil {
 		fmt.Printf("Application storage could not be initialized: %v\n", err)
@@ -20,13 +21,18 @@ func initAppStorage() {
 	activeApp.appDataDir = paths.AppDataDir
 	activeApp.logFilePath = paths.LogFilePath
 	activeApp.priceCacheFilePath = paths.PriceCacheFilePath
+	activeApp.iconMetadataFilePath = paths.IconMetadataFilePath
 	activeApp.inventoryStateFilePath = paths.InventoryStateFilePath
 	activeApp.settingsFilePath = paths.SettingsFilePath
 	activeApp.gameLayoutCacheFilePath = paths.GameLayoutCacheFilePath
 	activeApp.appLogFile = file
+
+	initLogger(file)
 }
 
 func closeAppStorage() {
+	flushInventoryDashboardRebuildNow()
+	flushCacheWritesNow()
 	filestore.Close(activeApp.appLogFile, AppName)
 	activeApp.appLogFile = nil
 }
@@ -108,6 +114,61 @@ type AppSettings struct {
 	MarketCurrencyCode string `json:"market_currency"`
 	MarketCountry      string `json:"market_country"`
 	DisplayLanguage    string `json:"display_language"`
+	MinRarityNotify    string `json:"min_rarity_notify"`
+}
+
+func rarityLevel(grade string) int {
+	switch grade {
+	case "COMMON":
+		return 0
+	case "UNCOMMON":
+		return 1
+	case "RARE":
+		return 2
+	case "LEGENDARY":
+		return 3
+	case "IMMORTAL":
+		return 4
+	case "ARCANA":
+		return 5
+	case "BEYOND":
+		return 6
+	case "CELESTIAL":
+		return 7
+	case "DIVINE":
+		return 8
+	case "COSMIC":
+		return 9
+	default:
+		return 0
+	}
+}
+
+func rarityGrade(level int) string {
+	switch level {
+	case 0:
+		return "COMMON"
+	case 1:
+		return "UNCOMMON"
+	case 2:
+		return "RARE"
+	case 3:
+		return "LEGENDARY"
+	case 4:
+		return "IMMORTAL"
+	case 5:
+		return "ARCANA"
+	case 6:
+		return "BEYOND"
+	case 7:
+		return "CELESTIAL"
+	case 8:
+		return "DIVINE"
+	case 9:
+		return "COSMIC"
+	default:
+		return "COMMON"
+	}
 }
 
 func loadSettingsFromDisk() {
@@ -130,7 +191,14 @@ func loadSettingsFromDisk() {
 	scope := market.ScopeFromSettings(settings.MarketCurrencyCode, settings.MarketCountry)
 	market.SetScope(scope.Currency.Code, scope.Region.CountryCode)
 	applyDisplayLanguagePreference(settings.DisplayLanguage)
-	fmt.Printf("Settings loaded from disk: overlayMode=%d market=%s language=%s\n", settings.OverlayModeSetting, market.FormatScope(scope), currentDisplayLanguage())
+
+	minRarity := settings.MinRarityNotify
+	if minRarity == "" {
+		minRarity = "COMMON"
+	}
+	activeApp.minRarityNotifyLevel.Store(int32(rarityLevel(minRarity)))
+
+	fmt.Printf("Settings loaded from disk: overlayMode=%d market=%s language=%s minRarity=%s\n", settings.OverlayModeSetting, market.FormatScope(scope), currentDisplayLanguage(), minRarity)
 }
 
 func saveSettingsToDisk() {
@@ -144,6 +212,7 @@ func saveSettingsToDisk() {
 		MarketCurrencyCode: scope.Currency.Code,
 		MarketCountry:      scope.Region.CountryCode,
 		DisplayLanguage:    currentDisplayLanguagePreference(),
+		MinRarityNotify:    rarityGrade(int(activeApp.minRarityNotifyLevel.Load())),
 	}
 
 	if err := filestore.WriteJSON(activeApp.settingsFilePath, settings); err != nil {

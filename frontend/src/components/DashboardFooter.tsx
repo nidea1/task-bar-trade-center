@@ -8,13 +8,15 @@ interface DashboardFooterProps {
     isRefreshing: boolean;
     currentLanguage: string;
     t: (key: string, fallback: string) => string;
+    syncTimeText?: string;
 }
 
 export function DashboardFooter({
     info,
     isRefreshing,
     currentLanguage,
-    t
+    t,
+    syncTimeText
 }: DashboardFooterProps) {
     const appShortName = info?.app_short_name || "TBTC";
     const creatorName = info?.creator_name || "nidea1";
@@ -22,7 +24,7 @@ export function DashboardFooter({
     const updateText = info?.update_text || t("update.unknown", "Not checked yet");
     const refreshText = isRefreshing
         ? t("dashboard.footer_syncing", localizedFallback(currentLanguage, "Senkronize ediliyor", "Syncing"))
-        : t("dashboard.footer_ready", localizedFallback(currentLanguage, "Hazir", "Ready"));
+        : t("dashboard.footer_ready", localizedFallback(currentLanguage, "Hazır", "Ready"));
 
     return (
         <footer
@@ -35,7 +37,7 @@ export function DashboardFooter({
             </div>
 
             <div className="dashboard-footer-promo">
-                <span>{t("dashboard.footer_created_by", localizedFallback(currentLanguage, "%s tarafindan", "by %s")).replace("%s", creatorName)}</span>
+                <span>{t("dashboard.footer_created_by", localizedFallback(currentLanguage, "%s tarafından", "by %s")).replace("%s", creatorName)}</span>
                 {version && <span className="dashboard-footer-version">v{version}</span>}
             </div>
 
@@ -45,6 +47,12 @@ export function DashboardFooter({
             </div>
 
             <div className="dashboard-footer-rule" aria-hidden="true" />
+
+            {syncTimeText && (
+                <div className="dashboard-footer-synctime">
+                    <span>{syncTimeText}</span>
+                </div>
+            )}
 
             <div className="dashboard-footer-sync themed-tooltip-host" data-tooltip={refreshText}>
                 <span className={`dashboard-footer-state ${isRefreshing ? "is-refreshing" : ""}`} aria-hidden="true" />

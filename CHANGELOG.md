@@ -6,6 +6,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-06-27
+
+### Added
+- Added live chest-open item detection through the game's `LogManager`, resolving `BoxOpenLog` entries and decoding `ItemName_<ItemID>` strings for immediate marketable-item notifications before the save file updates.
+- Added event-driven inventory snapshot synchronization: the app now seeds inventory once when TaskBarHero attaches, then syncs after `StageClearLog` or `StageFailedLog` events instead of running periodic background inventory polling.
+- Added counter-based notification deduplication between instant `BoxOpenLog` notifications and the later inventory snapshot scan, preventing duplicate alerts when the same chest item is observed through both paths.
+- Added a persisted minimum rarity notification filter (`min_rarity_notify`) with backend rarity levels and a dashboard bell dropdown for selecting the minimum marketable item grade to notify.
+- Added automatic smart inventory price refresh after stage-end inventory syncs, queueing missing, stale, or stale-icon marketable items through the rate-limited refresh queue.
+- Added force-refresh inventory price actions for the dashboard and tray menu, allowing all marketable inventory items to be repriced regardless of cache freshness.
+- Added global Steam market icon metadata caching and debounced cache writes so item icons can be reused across market scopes and cache writes are batched.
+- Added regression coverage for rarity notification filtering, force refresh queueing, icon metadata reuse, and refresh queue priority behavior.
+
+### Changed
+- Reworked dashboard price refresh controls into separate Smart Refresh and Force Refresh actions with localized labels and tooltips.
+- Changed the notification rarity selector to an icon-only bell control next to the theme toggle, with rarity-colored dropdown options and improved Common rarity contrast.
+- Moved inventory sync timing out of the dashboard header and into the footer as `Last Sync` / `Son Senkronizasyon` time text.
+- Changed inventory dashboard reads to return cached dashboard state without starting background snapshot refreshes, preserving the event-driven inventory polling model.
+- Changed the inventory price refresh queue to use a 3-second base delay while keeping Steam rate-limit backoff protection.
+- Improved notification icon preparation by asynchronously caching `.ico` files and falling back to global icon metadata when price cache entries are missing icon URLs.
+
+### Fixed
+- Fixed duplicate marketable-item notifications when instant chest-open detection and the later inventory save snapshot report the same item.
+- Fixed dark dropdown readability for Common rarity options by using a lighter neutral rarity color.
+
 ## [0.9.7] - 2026-06-27
 
 ### Fixed

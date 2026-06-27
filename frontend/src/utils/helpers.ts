@@ -74,7 +74,8 @@ export function formatRelativeTime(
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return t("time.just_now", "just now");
     const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
-    if (seconds < 60) return t("time.just_now", "just now");
+    if (seconds < 5) return t("time.just_now", "just now");
+    if (seconds < 60) return t("time.seconds_ago", "%ds ago").replace("%d", String(seconds));
     const minutes = Math.floor(seconds / 60);
     if (minutes < 60) return t("time.minutes_ago", "%dm ago").replace("%d", String(minutes));
     const hours = Math.floor(minutes / 60);
@@ -137,7 +138,7 @@ export function rarityTokenOptions(
     return Array.from(new Set(values.filter(Boolean)))
         .sort((a, b) => rarityRank(a) - rarityRank(b) || formatTokenLabel(a).localeCompare(formatTokenLabel(b)))
         .map((value) => {
-            return { value, label: translateRarity(value, t, currentLanguage) };
+            return { value, label: translateRarity(value, t, currentLanguage), color: rarityMeta(value).color };
         });
 }
 

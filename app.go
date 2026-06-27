@@ -76,6 +76,13 @@ func (a *App) RefreshInventoryPrices() (inventory.RefreshStatus, error) {
 	return inventory.RefreshStatus{}, nil
 }
 
+func (a *App) ForceRefreshInventoryPrices() (inventory.RefreshStatus, error) {
+	if appCore := a.coreApp(); appCore != nil {
+		return appCore.ForceRefreshInventoryPrices()
+	}
+	return inventory.RefreshStatus{}, nil
+}
+
 func (a *App) OpenMarketListing(itemID int) error {
 	if appCore := a.coreApp(); appCore != nil {
 		return appCore.OpenMarketListing(itemID)
@@ -125,9 +132,23 @@ func (a *App) GetDashboardFooterInfo() (core.DashboardFooterInfo, error) {
 	return core.DashboardFooterInfo{}, nil
 }
 
+func (a *App) GetMinRarityNotify() (string, error) {
+	if appCore := a.coreApp(); appCore != nil {
+		return appCore.GetMinRarityNotify(), nil
+	}
+	return "COMMON", nil
+}
+
 func (a *App) SetDisplayLanguage(preference string) (bool, error) {
 	if appCore := a.coreApp(); appCore != nil {
 		return appCore.SetDisplayLanguage(preference), nil
+	}
+	return false, nil
+}
+
+func (a *App) SetMinRarityNotify(grade string) (bool, error) {
+	if appCore := a.coreApp(); appCore != nil {
+		return appCore.SetMinRarityNotify(grade), nil
 	}
 	return false, nil
 }

@@ -285,6 +285,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 0.75rem;
   width: 100%;
   min-width: 0;
@@ -297,6 +298,11 @@
 .dashboard-refresh-button {
   min-width: 152px;
   flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.dashboard-force-refresh-button {
+  min-width: 146px;
 }
 
 .dashboard-control .game-button {
@@ -363,6 +369,17 @@
   height: 30px;
   min-width: 32px;
   padding: 0;
+  flex-shrink: 0;
+}
+
+.dashboard-icon-dropdown-button {
+  width: 32px;
+  height: 30px;
+  min-width: 32px;
+  padding: 0;
+}
+
+.dashboard-notify-toggle {
   flex-shrink: 0;
 }
 
@@ -532,7 +549,7 @@
   z-index: 2;
   min-height: 36px;
   display: grid;
-  grid-template-columns: auto auto auto minmax(32px, 1fr) auto;
+  grid-template-columns: auto auto auto minmax(32px, 1fr) auto auto;
   align-items: center;
   gap: 0.75rem;
   padding: 0.35rem 1rem;
@@ -551,6 +568,33 @@
   right: 0;
   height: 1px;
   background: linear-gradient(90deg, transparent 0%, #7e5326 20%, #e3a943 50%, #7e5326 80%, transparent 100%);
+}
+
+.dashboard-footer .themed-tooltip-host[data-tooltip]::before,
+.dashboard-footer .themed-tooltip-host[data-tooltip]::after {
+  top: auto;
+  transform: translate(-50%, -4px);
+}
+
+.dashboard-footer .themed-tooltip-host[data-tooltip]::before {
+  bottom: calc(100% + 8px);
+}
+
+.dashboard-footer .themed-tooltip-host[data-tooltip]::after {
+  bottom: calc(100% + 3px);
+  border-top: 0;
+  border-left: 0;
+  border-right: 1px solid #463d30;
+  border-bottom: 1px solid #463d30;
+  transform: translate(-50%, -4px) rotate(45deg);
+}
+
+.dashboard-footer .themed-tooltip-host[data-tooltip]:hover::before {
+  transform: translate(-50%, 0);
+}
+
+.dashboard-footer .themed-tooltip-host[data-tooltip]:hover::after {
+  transform: translate(-50%, 0) rotate(45deg);
 }
 
 .dashboard-footer-brand,
@@ -584,7 +628,8 @@
 }
 
 .dashboard-footer-promo,
-.dashboard-footer-update {
+.dashboard-footer-update,
+.dashboard-footer-synctime {
   gap: 0.4rem;
   color: #9a896f;
   font-size: 10px;
@@ -711,6 +756,12 @@
   }
 
   .dashboard-theme-toggle {
+    width: 30px;
+    height: 29px;
+    min-width: 30px;
+  }
+
+  .dashboard-icon-dropdown-button {
     width: 30px;
     height: 29px;
     min-width: 30px;
@@ -1675,6 +1726,13 @@
   background: #ffffff;
   border-left-color: #cbd5df;
   border-top-color: #cbd5df;
+}
+
+.theme-light .dashboard-footer .themed-tooltip-host[data-tooltip]::after {
+  border-left-color: transparent;
+  border-top-color: transparent;
+  border-right-color: #cbd5df;
+  border-bottom-color: #cbd5df;
 }
 
 .theme-light .dashboard-logo-frame {

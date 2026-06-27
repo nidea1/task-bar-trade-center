@@ -14,6 +14,7 @@ type Paths struct {
 	AppDataDir              string
 	LogFilePath             string
 	PriceCacheFilePath      string
+	IconMetadataFilePath    string
 	InventoryStateFilePath  string
 	SettingsFilePath        string
 	GameLayoutCacheFilePath string
@@ -39,6 +40,7 @@ func Init(appName, processName, version, creator string) (Paths, *os.File, error
 
 	paths.LogFilePath = filepath.Join(logDir, processName+".log")
 	paths.PriceCacheFilePath = filepath.Join(cacheDir, "price-cache.json")
+	paths.IconMetadataFilePath = filepath.Join(cacheDir, "icon-metadata-cache.json")
 	paths.InventoryStateFilePath = filepath.Join(cacheDir, "inventory-dashboard-state.json")
 	paths.SettingsFilePath = filepath.Join(configDir, "settings.json")
 	paths.GameLayoutCacheFilePath = filepath.Join(configDir, "game-layout-cache.json")
@@ -62,6 +64,7 @@ func Init(appName, processName, version, creator string) (Paths, *os.File, error
 	fmt.Printf("Created by: %s\n", creator)
 	fmt.Printf("Log file: %s\n", paths.LogFilePath)
 	fmt.Printf("Price cache file: %s\n", paths.PriceCacheFilePath)
+	fmt.Printf("Icon metadata cache file: %s\n", paths.IconMetadataFilePath)
 	fmt.Printf("Inventory dashboard state file: %s\n", paths.InventoryStateFilePath)
 	fmt.Printf("Game layout cache file: %s\n", paths.GameLayoutCacheFilePath)
 	fmt.Printf("Runtime: go=%s os=%s arch=%s pid=%d\n", runtime.Version(), runtime.GOOS, runtime.GOARCH, os.Getpid())

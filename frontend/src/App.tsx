@@ -3,6 +3,7 @@ import './App.css';
 import {
     GetInventoryDashboard,
     RefreshInventoryPrices,
+    ForceRefreshInventoryPrices,
     GetDisplayLanguages,
     GetMarketRegions,
     GetCurrentLanguage,
@@ -10,6 +11,8 @@ import {
     SetDisplayLanguage,
     SetMarketScope,
     GetDashboardFooterInfo,
+    GetMinRarityNotify,
+    SetMinRarityNotify,
 } from "../wailsjs/go/main/App";
 import {
     WindowMinimise,
@@ -29,7 +32,8 @@ import {
     Tag,
     Minus,
     X,
-    Coins as GoldIcon
+    Coins as GoldIcon,
+    Bell
 } from 'lucide-react';
 
 import { HERO_CLASSES, appIcon } from './constants';
@@ -45,10 +49,10 @@ import {
     readStoredThemeMode,
     formatPrice,
     rarityTokenOptions,
+    rarityMeta,
     itemCategoryOptions,
     filterAndSortItems,
     equipmentFilterValue,
-    formatRelativeTime,
     formatPricingUpdateText,
     formatPricingEtaText,
     languageDisplayCode
@@ -70,12 +74,15 @@ function App() {
     const [state, setState] = useState<DashboardState | null>(null);
     const [error, setError] = useState<string>("");
     const [refreshing, setRefreshing] = useState(false);
+    const [forceRefreshing, setForceRefreshing] = useState(false);
+    const [activeRefreshKind, setActiveRefreshKind] = useState<"smart" | "force" | null>(null);
 
     const [languages, setLanguages] = useState<{ code: string; name: string }[]>([]);
     const [regions, setRegions] = useState<{ country_code: string; name: string; currency_code: string }[]>([]);
     const [currentLanguage, setCurrentLanguage] = useState<string>("en-US");
     const [currentMarketScope, setCurrentMarketScope] = useState<{ currency_code: string; country_code: string } | null>(null);
     const [footerInfo, setFooterInfo] = useState<DashboardFooterInfo | null>(null);
+    const [minRarityNotify, setMinRarityNotifyState] = useState<string>("COMMON");
     const [themeMode, setThemeMode] = useState<ThemeMode>(() => readStoredThemeMode());
     const [priceMode, setPriceMode] = useState<PriceMode>("suggested");
     const [rarityFilter, setRarityFilter] = useState("all");
@@ -127,7 +134,7 @@ function App() {
     useEffect(() => {
         mountedRef.current = true;
         load();
-        const timer = window.setInterval(load, 10000);
+        const timer = window.setInterval(load, 3000);
         loadFooterInfo();
         const footerTimer = window.setInterval(loadFooterInfo, 15000);
 
@@ -142,6 +149,9 @@ function App() {
         });
         GetCurrentMarketScope().then((scope: { currency_code: string; country_code: string } | null) => {
             if (mountedRef.current) setCurrentMarketScope(scope);
+        });
+        GetMinRarityNotify().then((grade: string) => {
+            if (mountedRef.current) setMinRarityNotifyState(grade);
         });
 
         const unsubscribe = EventsOn("inventory-dashboard-updated", (nextState: unknown) => {
@@ -169,6 +179,30 @@ function App() {
         document.documentElement.dataset.theme = themeMode;
         window.localStorage.setItem("dashboard-theme", themeMode);
     }, [themeMode]);
+
+    useEffect(() => {
+        if (!state?.refresh?.refreshing && !refreshing && !forceRefreshing) {
+            setActiveRefreshKind(null);
+        }
+    }, [state?.refresh?.refreshing, refreshing, forceRefreshing]);
+
+    const handleMinRarityNotifyChange = (grade: string) => {
+        setMinRarityNotifyState(grade);
+        SetMinRarityNotify(grade);
+    };
+
+    const rarityGrades = [
+        "COMMON",
+        "UNCOMMON",
+        "RARE",
+        "LEGENDARY",
+        "IMMORTAL",
+        "ARCANA",
+        "BEYOND",
+        "CELESTIAL",
+        "DIVINE",
+        "COSMIC"
+    ];
 
     const totals = state?.totals;
     const allItems = state?.items || [];
@@ -204,18 +238,69 @@ function App() {
         : t("dashboard.price_sell_short", localizedFallback(currentLanguage, "Satış", "Sell"));
     const marketDisplayName = state?.market_scope || "STEAM MARKET OVERLAY";
     const searchPlaceholder = t("dashboard.search_items", localizedFallback(currentLanguage, "Eşya ara", "Search items"));
+    const controlRarityNotifyLabel = t("dashboard.rarity_notify_label", localizedFallback(currentLanguage, "Bildirim", "Notify"));
+    const controlRarityNotifyTooltip = t(
+        "dashboard.rarity_notify_tooltip",
+        localizedFallback(
+            currentLanguage,
+            "Sadece seçilen nadirlik ve üzerindeki satılabilir eşyalar için bildirim gönderir.",
+            "Notifies only for marketable items at or above the selected rarity."
+        )
+    );
+    const selectedRarityNotifyLabel = t("rarity." + minRarityNotify, minRarityNotify) + "+";
+    const rarityNotifyTitle = `${controlRarityNotifyLabel}: ${selectedRarityNotifyLabel}`;
     const bestSellItems = state?.best_to_sell_now || [];
     const activeMarketableItemsTab: MarketableItemsTab = marketableItemsTab === "best" && bestSellItems.length === 0
         ? "all"
         : marketableItemsTab;
-    const staleText = useMemo(() => {
-        if (!state?.updated_at) return t("dashboard.waiting_state", "Waiting for inventory state...");
-        return t("dashboard.updated_relative", "Updated %s").replace("%s", formatRelativeTime(state.updated_at, t));
-    }, [state?.updated_at, state?.translations]);
+    const syncTimeText = useMemo(() => {
+        const inventoryReadAt = state?.snapshot_read_at || state?.updated_at;
+        if (!inventoryReadAt) return "";
+        try {
+            const d = new Date(inventoryReadAt);
+            if (isNaN(d.getTime())) return "";
+            const pad = (n: number) => n.toString().padStart(2, '0');
+            const hours = pad(d.getHours());
+            const minutes = pad(d.getMinutes());
+            const seconds = pad(d.getSeconds());
+            const timeStr = `${hours}:${minutes}:${seconds}`;
+            const prefix = localizedFallback(currentLanguage, "Son Senkronizasyon", "Last Sync");
+            return `${prefix}: ${timeStr}`;
+        } catch {
+            return "";
+        }
+    }, [state?.snapshot_read_at, state?.updated_at, currentLanguage]);
 
-    const refreshPrices = () => {
-        setRefreshing(true);
-        RefreshInventoryPrices()
+    const smartRefreshLabel = t(
+        "dashboard.smart_refresh_prices",
+        localizedFallback(currentLanguage, "Eksik/Eski Fiyatlar", "Smart Refresh")
+    );
+    const smartRefreshTooltip = t(
+        "dashboard.smart_refresh_tooltip",
+        localizedFallback(
+            currentLanguage,
+            "Sadece eksik, eski veya icon bilgisi haftalık eski olan fiyatları yeniler.",
+            "Refreshes only missing, stale, or weekly stale icon/price entries."
+        )
+    );
+    const forceRefreshLabel = t("dashboard.force_refresh_prices", "Force Refresh");
+    const forceRefreshTooltip = t(
+        "dashboard.force_refresh_tooltip",
+        localizedFallback(
+            currentLanguage,
+            "Cache durumuna bakmadan tüm satılabilir eşyaları yeniden fiyatlandırır.",
+            "Refetches every marketable item regardless of cache freshness."
+        )
+    );
+    const refreshPrices = (force = false) => {
+        setActiveRefreshKind(force ? "force" : "smart");
+        if (force) {
+            setForceRefreshing(true);
+        } else {
+            setRefreshing(true);
+        }
+        const refresh = force ? ForceRefreshInventoryPrices : RefreshInventoryPrices;
+        refresh()
             .then(load)
             .catch((err: unknown) => {
                 if (mountedRef.current) {
@@ -224,7 +309,11 @@ function App() {
             })
             .finally(() => {
                 if (mountedRef.current) {
-                    setRefreshing(false);
+                    if (force) {
+                        setForceRefreshing(false);
+                    } else {
+                        setRefreshing(false);
+                    }
                 }
             });
     };
@@ -245,11 +334,15 @@ function App() {
         });
     };
 
-    const isCurrentlyRefreshing = state?.refresh?.refreshing || refreshing;
+    const refreshQueueRunning = !!state?.refresh?.refreshing;
+    const displayedRefreshKind = activeRefreshKind || "smart";
+    const isCurrentlyRefreshing = refreshQueueRunning || refreshing || forceRefreshing;
+    const normalRefreshBusy = refreshing || (refreshQueueRunning && displayedRefreshKind === "smart");
+    const forceRefreshBusy = forceRefreshing || (refreshQueueRunning && displayedRefreshKind === "force");
     const isWaitingForInventory = !state?.updated_at;
 
     return (
-        <main className={`dashboard-shell theme-${themeMode} h-screen bg-[#030304] text-[#e1d5bf] flex flex-col select-none overflow-hidden`}>
+        <main lang={currentLanguage.split('-')[0].toLowerCase()} className={`dashboard-shell theme-${themeMode} h-screen bg-[#030304] text-[#e1d5bf] flex flex-col select-none overflow-hidden`}>
             {/* ═══ Window Drag Bar (Borderless Window Header) ═══ */}
             <div className="w-full flex items-center justify-between px-4 py-2 window-drag-bar drag-area shrink-0">
                 <div className="flex items-center gap-2">
@@ -310,6 +403,21 @@ function App() {
                                 </button>
 
                                 <GameDropdown
+                                    value={minRarityNotify}
+                                    options={rarityGrades.map((grade) => ({
+                                        value: grade,
+                                        label: t("rarity." + grade, grade) + "+",
+                                        color: rarityMeta(grade).color
+                                    }))}
+                                    onChange={handleMinRarityNotifyChange}
+                                    className="dashboard-notify-toggle"
+                                    icon={<Bell className="w-3.5 h-3.5" />}
+                                    title={rarityNotifyTitle}
+                                    ariaLabel={`${rarityNotifyTitle}. ${controlRarityNotifyTooltip}`}
+                                    iconOnly
+                                />
+
+                                <GameDropdown
                                     value={currentLanguage}
                                     options={languages.map((lang) => ({ value: lang.code, label: lang.name }))}
                                     onChange={handleLanguageChange}
@@ -350,19 +458,29 @@ function App() {
                                     icon={<Tag className="w-3.5 h-3.5" />}
                                     title={`${controlPriceLabel}: ${fullPriceLabel}`}
                                 />
+
                             </div>
 
                             <div className="dashboard-refresh-row">
-                                <span className="dashboard-updated text-[11px] text-[#9a896f] font-mono">
-                                    {staleText}
-                                </span>
                                 <button
                                     disabled={isCurrentlyRefreshing}
-                                    onClick={refreshPrices}
-                                    className="dashboard-refresh-button game-button flex items-center justify-center gap-2 px-4 py-1.5 font-medium text-xs uppercase cursor-pointer"
+                                    onClick={() => refreshPrices(false)}
+                                    className="dashboard-refresh-button themed-tooltip-host game-button flex items-center justify-center gap-2 px-4 py-1.5 font-medium text-xs uppercase cursor-pointer"
+                                    data-tooltip={smartRefreshTooltip}
+                                    aria-label={smartRefreshTooltip}
                                 >
-                                    <RefreshCw className={`w-3.5 h-3.5 ${isCurrentlyRefreshing ? 'animate-spin' : ''}`} />
-                                    {isCurrentlyRefreshing ? t("dashboard.refreshing", "Refreshing...") : t("dashboard.refresh_prices", "Refresh Prices")}
+                                    <RefreshCw className={`w-3.5 h-3.5 ${normalRefreshBusy ? 'animate-spin' : ''}`} />
+                                    {normalRefreshBusy ? t("dashboard.refreshing", "Refreshing...") : smartRefreshLabel}
+                                </button>
+                                <button
+                                    disabled={isCurrentlyRefreshing}
+                                    onClick={() => refreshPrices(true)}
+                                    className="dashboard-refresh-button dashboard-force-refresh-button themed-tooltip-host game-button flex items-center justify-center gap-2 px-4 py-1.5 font-medium text-xs uppercase cursor-pointer"
+                                    data-tooltip={forceRefreshTooltip}
+                                    aria-label={forceRefreshTooltip}
+                                >
+                                    <RefreshCw className={`w-3.5 h-3.5 ${forceRefreshBusy ? 'animate-spin' : ''}`} />
+                                    {forceRefreshBusy ? t("dashboard.refreshing", "Refreshing...") : forceRefreshLabel}
                                 </button>
                             </div>
                         </div>
@@ -545,6 +663,7 @@ function App() {
                 isRefreshing={isCurrentlyRefreshing}
                 currentLanguage={currentLanguage}
                 t={t}
+                syncTimeText={syncTimeText}
             />
         </main>
     );

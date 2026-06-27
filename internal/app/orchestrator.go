@@ -9,11 +9,13 @@ import (
 func New(callbacks Callbacks) *App {
 	SetCallbacks(callbacks)
 	activeApp = &App{
-		callbacks:             callbacks,
-		allItemMap:            make(map[int]catalog.ItemConfig),
-		itemMap:               make(map[int]catalog.ItemConfig),
-		priceCache:            make(map[string]market.MarketData),
-		notificationIconCache: make(map[string]uintptr),
+		callbacks:                 callbacks,
+		allItemMap:                make(map[int]catalog.ItemConfig),
+		itemMap:                   make(map[int]catalog.ItemConfig),
+		priceCache:                make(map[string]market.MarketData),
+		iconMetadata:              make(map[string]iconMetadataEntry),
+		notificationIconCache:     make(map[string]uintptr),
+		notificationIconPreparing: make(map[string]struct{}),
 	}
 	return activeApp
 }
@@ -32,6 +34,10 @@ func (app *App) GetInventoryDashboard() (inventory.DashboardState, error) {
 
 func (app *App) RefreshInventoryPrices() (inventory.RefreshStatus, error) {
 	return RefreshInventoryPrices()
+}
+
+func (app *App) ForceRefreshInventoryPrices() (inventory.RefreshStatus, error) {
+	return ForceRefreshInventoryPrices()
 }
 
 func (app *App) OpenMarketListing(itemID int) error {
@@ -62,8 +68,16 @@ func (app *App) GetDashboardFooterInfo() DashboardFooterInfo {
 	return GetDashboardFooterInfo()
 }
 
+func (app *App) GetMinRarityNotify() string {
+	return GetMinRarityNotify()
+}
+
 func (app *App) SetDisplayLanguage(preference string) bool {
 	return SetDisplayLanguage(preference)
+}
+
+func (app *App) SetMinRarityNotify(grade string) bool {
+	return SetMinRarityNotify(grade)
 }
 
 func (app *App) SetMarketScope(currencyCode string, countryCode string) bool {
