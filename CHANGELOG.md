@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-06-27
+
 ### Added
 - Migrated the application to the Wails framework, replacing the legacy window overlay/rendering system with a React, Vite, and TypeScript frontend.
 - Created a game-themed dashboard UI (located in `frontend/`) featuring RPG aesthetic design, custom fonts, animations, and layouts.
