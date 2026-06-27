@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-06-27
+
+### Fixed
+- Fixed Go build embed issues in CI/CD pipeline by adding a step that creates a dummy `frontend/dist` directory before executing `wails generate bindings`.
+
 ## [0.9.1] - 2026-06-27
 
 ### Fixed
