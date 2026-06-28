@@ -12,6 +12,8 @@ export interface DashboardSettings {
     sort_mode: SortMode;
     marketable_items_tab: MarketableItemsTab;
     notify_sources: string;
+    hotkey_modifiers: number;
+    hotkey_vk: number;
 }
 
 export interface RarityMeta {
@@ -104,6 +106,13 @@ export interface DashboardState {
         last_error?: string;
     };
     translations?: Record<string, string>;
+    trade_slots?: TradeShipSlot[];
+}
+
+export interface TradeShipSlot {
+    index: number;
+    state: number;
+    cooldown_until: string;
 }
 
 export interface DropdownOption {

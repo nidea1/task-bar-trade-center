@@ -353,3 +353,83 @@ func writeCandidateSaveData(memory fakeMemory, object uintptr, base uintptr, fir
 	writeSlot(memory, stashArray, 0, base+0x6000, uint64(firstItemID)*10)
 	writeCurrency(memory, currencyArray, 0, base+0x7000, goldKey, gold)
 }
+
+func TestResolverReadsTradeSlots(t *testing.T) {
+	nameAddr := uintptr(0x200000)
+	classPtr := uintptr(0x300000)
+	object := uintptr(0x400000)
+	mem := fakeMemory{
+		ptrs:     make(map[uintptr]uintptr),
+		ints:     make(map[uintptr]int32),
+		uints:    make(map[uintptr]uint64),
+		patterns: make(map[string][]uintptr),
+	}
+
+	mem.patterns["PlayerSaveData\x00"] = []uintptr{nameAddr}
+	mem.patterns[pointerPattern(nameAddr)] = []uintptr{classPtr + il2cpp.ClassNameOffset}
+	mem.patterns[pointerPattern(classPtr)] = []uintptr{object}
+	mem.ptrs[classPtr+il2cpp.ClassNameOffset] = nameAddr
+	mem.ptrs[classPtr+il2cpp.ClassElementClassOffset] = classPtr
+	mem.ptrs[classPtr+il2cpp.ClassCastClassOffset] = classPtr
+
+	itemsList, itemsArray := uintptr(0x500000), uintptr(0x510000)
+	stashList, stashArray := uintptr(0x520000), uintptr(0x530000)
+	tradeList, tradeArray := uintptr(0x580000), uintptr(0x590000)
+	mem.ptrs[object+playerItems] = itemsList
+	mem.ptrs[object+playerStash] = stashList
+	mem.ptrs[object+playerTradeSlots] = tradeList
+	writeList(mem, itemsList, itemsArray, 3)
+	writeList(mem, stashList, stashArray, 1)
+	writeList(mem, tradeList, tradeArray, 2)
+
+	writeItem(mem, itemsArray, 0, 100, 1000)
+	writeItem(mem, itemsArray, 1, 200, 2000)
+	writeItem(mem, itemsArray, 2, 300, 3000)
+	writeSlot(mem, stashArray, 0, 0x610000, 1000)
+
+	// Write mock trade slots:
+	// Slot 1: index 0, state 1, cooldownRaw = 503987864624647652
+	slot0Obj := uintptr(0x650000)
+	mem.ptrs[tradeArray+il2cpp.ArrayDataOffset+0] = slot0Obj
+	mem.ints[slot0Obj+0x10] = 0 // index
+	// actualTicks = cooldownRaw + 135194695325352348 = 639182559950000000
+	// 639182559950000000 is June 28, 2026 15:06:35 UTC
+	mem.uints[slot0Obj+0x18] = 503987864624647652 // cooldownUntil raw ticks
+	mem.ints[slot0Obj+0x20] = 1                  // state (active)
+
+	// Slot 2: index 1, state 0, cooldownRaw = 0
+	slot1Obj := uintptr(0x660000)
+	mem.ptrs[tradeArray+il2cpp.ArrayDataOffset+8] = slot1Obj
+	mem.ints[slot1Obj+0x10] = 1 // index
+	mem.uints[slot1Obj+0x18] = 0
+	mem.ints[slot1Obj+0x20] = 0 // state (inactive)
+
+	resolver := NewResolver(map[int]ItemMetadata{
+		100: {Marketable: true},
+		200: {Marketable: false},
+		300: {Marketable: true},
+	})
+	snapshot, ok := resolver.ReadSnapshot(mem, time.Unix(1700000000, 0))
+	if !ok {
+		t.Fatal("expected snapshot")
+	}
+
+	if len(snapshot.TradeSlots) != 2 {
+		t.Fatalf("len(TradeSlots) = %d, want 2", len(snapshot.TradeSlots))
+	}
+
+	slot0 := snapshot.TradeSlots[0]
+	if slot0.Index != 0 || slot0.State != 1 {
+		t.Fatalf("slot0 = %+v, want index 0 state 1", slot0)
+	}
+	expectedTime := time.Date(2026, 6, 28, 15, 6, 35, 0, time.UTC)
+	if !slot0.CooldownUntil.Equal(expectedTime) {
+		t.Fatalf("slot0.CooldownUntil = %v, want %v", slot0.CooldownUntil, expectedTime)
+	}
+
+	slot1 := snapshot.TradeSlots[1]
+	if slot1.Index != 1 || slot1.State != 0 || !slot1.CooldownUntil.IsZero() {
+		t.Fatalf("slot1 = %+v, want index 1 state 0 cooldown zero", slot1)
+	}
+}
+

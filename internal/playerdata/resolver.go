@@ -16,6 +16,7 @@ const (
 	playerHeroes     = 0x50
 	playerInventory  = 0x78
 	playerStash      = 0x80
+	playerTradeSlots = 0x88
 	playerItems      = 0xA0
 
 	currencyKey      = 0x10
@@ -196,7 +197,12 @@ func (resolver *Resolver) readObject(memory Memory, object uintptr, now time.Tim
 		gold, _ = readGold(memory, currencies)
 	}
 
-	return InventorySnapshot{ReadAt: now, Gold: gold, StashPageCount: stashPageCount, Items: owned}, true
+	var tradeSlots []TradeShipSlot
+	if trade := readListInfo(memory, readPtr(memory, object+playerTradeSlots), 100); trade.ok {
+		tradeSlots = resolver.readTradeSlots(memory, trade)
+	}
+
+	return InventorySnapshot{ReadAt: now, Gold: gold, StashPageCount: stashPageCount, Items: owned, TradeSlots: tradeSlots}, true
 }
 
 func pageCountForSlotCount(slotCount int) int {

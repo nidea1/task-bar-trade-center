@@ -6,6 +6,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Added a customizable hotkey feature to let users reassign the system-wide shortcut key for toggling the dashboard (previously fixed to F2).
+- Added a pulsing keyboard capturer UI inside settings to record custom key combos (e.g. `Ctrl + F2`, `Alt + Shift + K`) while ignoring standalone modifiers.
+- Added Go Wails bindings `DisableDashboardHotkey` and `EnableDashboardHotkey` using Windows message dispatching (`WM_APP_HOTKEY_DISABLE`/`WM_APP_HOTKEY_ENABLE`) to temporarily unregister active hotkeys during UI keyboard capturing so key presses are not swallowed by the OS.
+- Added `ts_type:"string"` tags to `time.Time` fields in Go structs to resolve Wails binding generation warnings.
+- Completed all dashboard settings and hotkey control translations across all 18 supported language locale files.
+- Added Steam Trade Ship memory reading to parse active voyage slots and remaining cooldowns.
+- Added a background cooldown monitor that sends Windows system tray notifications when a Trade Ship voyage finishes.
+- Added Trade Ship notification translations for all 18 supported languages.
+- Added detailed Steam API rate limit (`429 Too Many Requests`) logging to the refresh queue, capturing the specific item ID, market hash name, endpoint, status, remaining queue, `Retry-After` header, and backoff timestamp.
+
+### Changed
+- Redesigned the dashboard header layout by shifting all configurations (Theme, Language, Currency, Price Mode, Rarity Threshold, and Notification sources) into a clean, unified Settings Popover menu to prevent layout wrapping or overflow at smaller screen scales.
+- Refactored the Theme selection and Rarity Notification selection to use consistent dropdown menus (`GameDropdown`) and removed redundant prefix labels inside the dropdown buttons to streamline the visual layout.
+- Integrated async notification price fetches with the main refresh queue's backoff state to skip outbound Steam requests when a rate limit is active.
+- Updated Steam API client to abort request chains immediately upon encountering a `429` status code.
+
 ## [0.10.3] - 2026-06-28
 
 ### Added

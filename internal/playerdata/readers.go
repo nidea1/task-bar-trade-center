@@ -1,6 +1,8 @@
 package playerdata
 
 import (
+	"time"
+
 	"github.com/nidea1/task-bar-trade-center/internal/il2cpp"
 	"github.com/nidea1/task-bar-trade-center/internal/tbhmem"
 )
@@ -206,3 +208,51 @@ func readGold(memory Memory, currencies listInfo) (uint64, bool) {
 	}
 	return 0, false
 }
+
+func (resolver *Resolver) readTradeSlots(memory Memory, list listInfo) []TradeShipSlot {
+	limit := list.size
+	if limit > 100 {
+		limit = 100
+	}
+	slots := make([]TradeShipSlot, 0, limit)
+	for i := 0; i < limit; i++ {
+		slotPtr, ok := memory.ReadUintptr(list.arrayPtr + il2cpp.ArrayDataOffset + uintptr(i*8))
+		if !ok || slotPtr == 0 || !tbhmem.PlausibleAddress(slotPtr) {
+			continue
+		}
+		indexVal, ok := memory.ReadInt32(slotPtr + 0x10) // slotIndex
+		if !ok {
+			continue
+		}
+		cooldownRaw, ok := memory.ReadUint64(slotPtr + 0x18) // cooldownUntil (ticks)
+		if !ok {
+			continue
+		}
+		stateVal, ok := memory.ReadInt32(slotPtr + 0x20) // state
+		if !ok {
+			continue
+		}
+
+		var cooldownUntil time.Time
+		if cooldownRaw > 0 {
+			// Convert ticks with custom epoch offset
+			const constantOffset = 135194695325352348
+			const ticksPerSecond = 10000000
+			const ticksAtUnixEpoch = 621355968000000000
+
+			actualTicks := cooldownRaw + constantOffset
+			if actualTicks >= ticksAtUnixEpoch {
+				unixSecs := int64(actualTicks-ticksAtUnixEpoch) / ticksPerSecond
+				cooldownUntil = time.Unix(unixSecs, 0).UTC()
+			}
+		}
+
+		slots = append(slots, TradeShipSlot{
+			Index:         int(indexVal),
+			State:         int(stateVal),
+			CooldownUntil: cooldownUntil,
+		})
+	}
+	return slots
+}
+

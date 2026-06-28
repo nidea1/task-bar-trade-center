@@ -234,6 +234,11 @@ func openInventoryDashboard() {
 	callOpenDashboard()
 }
 
+var (
+	notifiedTradeSlots   = make(map[int]time.Time)
+	notifiedTradeSlotsMu sync.Mutex
+)
+
 func monitorInventoryNotifications(processHandle uintptr) {
 	const logPollInterval = 2 * time.Second
 
@@ -254,6 +259,49 @@ func monitorInventoryNotifications(processHandle uintptr) {
 			pollInventoryNotifications()
 			refreshInventoryPricesFromDashboard()
 			triggerSavePollNow = false
+		}
+
+		// 3. Trade Ship cooldown check (non-blocking, memory-only)
+		checkTradeSlotCooldowns()
+	}
+}
+
+func checkTradeSlotCooldowns() {
+	activeApp.inventoryMu.Lock()
+	snapshot := activeApp.lastSnapshot
+	activeApp.inventoryMu.Unlock()
+
+	if snapshot == nil {
+		return
+	}
+
+	now := time.Now()
+	for _, slot := range snapshot.TradeSlots {
+		if slot.State != 1 || slot.CooldownUntil.IsZero() {
+			continue
+		}
+
+		if now.After(slot.CooldownUntil) {
+			notifiedTradeSlotsMu.Lock()
+			lastNotified, exists := notifiedTradeSlots[slot.Index]
+			alreadyNotified := exists && lastNotified.Equal(slot.CooldownUntil)
+			if !alreadyNotified {
+				notifiedTradeSlots[slot.Index] = slot.CooldownUntil
+				notifiedTradeSlotsMu.Unlock()
+
+				// Trigger notification
+				title := tr("notification.trade_ship_title")
+				body := tr("notification.trade_ship_body", slot.Index+1)
+				if title == "" || title == "notification.trade_ship_title" {
+					title = "Steam Trade Ship"
+				}
+				if body == "" || body == "notification.trade_ship_body" {
+					body = fmt.Sprintf("Slot %d Voyage Completed!", slot.Index+1)
+				}
+				queueRawTrayNotification(fmt.Sprintf("%s\n%s", title, body))
+			} else {
+				notifiedTradeSlotsMu.Unlock()
+			}
 		}
 	}
 }
@@ -324,6 +372,16 @@ func inventorySnapshotChanged(a, b *playerdata.InventorySnapshot) bool {
 			match.EquippedHeroKey != item.EquippedHeroKey ||
 			match.SlotIndex != item.SlotIndex ||
 			match.Marketable != item.Marketable {
+			return true
+		}
+	}
+	if len(a.TradeSlots) != len(b.TradeSlots) {
+		return true
+	}
+	for i := range a.TradeSlots {
+		if a.TradeSlots[i].Index != b.TradeSlots[i].Index ||
+			a.TradeSlots[i].State != b.TradeSlots[i].State ||
+			!a.TradeSlots[i].CooldownUntil.Equal(b.TradeSlots[i].CooldownUntil) {
 			return true
 		}
 	}
@@ -414,6 +472,32 @@ func currentInventoryPriceQueue() *inventory.RefreshQueue {
 	defer activeApp.inventoryMu.Unlock()
 	if activeApp.inventoryPriceQueue == nil {
 		activeApp.inventoryPriceQueue = inventory.NewRefreshQueue(fetchInventoryMarketPrice, isSteamRateLimitError)
+		activeApp.inventoryPriceQueue.OnBackoff = func(itemID int, err error, queueRemaining int, backoffUntil time.Time) {
+			var marketHashName string
+			config, exists := activeApp.itemMap[itemID]
+			if exists {
+				marketHashName = buildMarketHashName(config)
+			}
+
+			endpoint := "unknown"
+			retryAfter := ""
+			status := 429
+			if se, ok := err.(*market.SteamError); ok {
+				endpoint = se.Endpoint
+				retryAfter = se.RetryAfter
+				status = se.StatusCode
+			}
+
+			logPrintf("[MARKET] request failed:\nitem_id=%d\nmarket_hash_name=%q\nendpoint=%s\nstatus=%d\nqueue_remaining=%d\nretry_after=%q\nbackoff_until=%s\n",
+				itemID,
+				marketHashName,
+				endpoint,
+				status,
+				queueRemaining,
+				retryAfter,
+				backoffUntil.Format(time.RFC3339),
+			)
+		}
 	}
 	return activeApp.inventoryPriceQueue
 }
@@ -453,6 +537,9 @@ func fetchInventoryMarketPrice(_ context.Context, itemID int) error {
 func isSteamRateLimitError(err error) bool {
 	if err == nil {
 		return false
+	}
+	if se, ok := err.(*market.SteamError); ok {
+		return se.StatusCode == 429
 	}
 	message := strings.ToLower(err.Error())
 	return strings.Contains(message, "429") || strings.Contains(message, "too many")

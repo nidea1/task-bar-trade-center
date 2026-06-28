@@ -63,6 +63,8 @@ func TestSettingsPersistDashboardSettings(t *testing.T) {
 		SortMode:           "rarity_desc",
 		MarketableItemsTab: "best",
 		NotifySources:      "box,offering",
+		HotkeyModifiers:    0,
+		HotkeyVK:           VK_F2,
 	}
 	setDashboardSettings(want)
 

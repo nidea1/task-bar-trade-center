@@ -25,6 +25,7 @@ type RefreshQueue struct {
 	backoffUntil   time.Time
 	lastStartedAt  time.Time
 	lastFinishedAt time.Time
+	OnBackoff      func(itemID int, err error, queueRemaining int, backoffUntil time.Time)
 }
 
 func NewRefreshQueue(fetch FetchFunc, rateLimited RateLimitFunc) *RefreshQueue {
@@ -170,7 +171,7 @@ func (queue *RefreshQueue) run() {
 		}
 		if err := queue.fetch(context.Background(), id); err != nil {
 			if queue.rateLimited != nil && queue.rateLimited(err) {
-				queue.enterBackoff(err.Error())
+				queue.enterBackoff(id, err)
 				return
 			}
 			queue.finish(err.Error())
@@ -216,7 +217,7 @@ func (queue *RefreshQueue) finish(lastError string) {
 	queue.lastFinishedAt = time.Now()
 }
 
-func (queue *RefreshQueue) enterBackoff(message string) {
+func (queue *RefreshQueue) enterBackoff(id int, err error) {
 	queue.mu.Lock()
 	defer queue.mu.Unlock()
 	delay := queue.backoffs[len(queue.backoffs)-1]
@@ -228,8 +229,16 @@ func (queue *RefreshQueue) enterBackoff(message string) {
 	queue.status.Refreshing = false
 	queue.backoffUntil = time.Now().Add(delay)
 	queue.status.Queued = len(queue.pending)
-	queue.status.LastError = message
+	queue.status.LastError = err.Error()
 	queue.lastFinishedAt = time.Now()
+
+	if queue.OnBackoff != nil {
+		backoffUntil := queue.backoffUntil
+		queueRemaining := len(queue.pending)
+		queue.mu.Unlock()
+		queue.OnBackoff(id, err, queueRemaining, backoffUntil)
+		queue.mu.Lock()
+	}
 }
 
 func (queue *RefreshQueue) delay() time.Duration {
@@ -247,4 +256,22 @@ func estimatedRemainingDuration(elapsed time.Duration, completed int, queued int
 		return 0
 	}
 	return time.Duration(float64(elapsed) / float64(completed) * float64(queued))
+}
+
+func (queue *RefreshQueue) BackoffUntil() time.Time {
+	if queue == nil {
+		return time.Time{}
+	}
+	queue.mu.Lock()
+	defer queue.mu.Unlock()
+	return queue.backoffUntil
+}
+
+func (queue *RefreshQueue) TriggerBackoff(itemID int, err error) {
+	if queue == nil {
+		return
+	}
+	if queue.rateLimited != nil && queue.rateLimited(err) {
+		queue.enterBackoff(itemID, err)
+	}
 }

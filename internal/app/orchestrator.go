@@ -4,6 +4,7 @@ import (
 	"github.com/nidea1/task-bar-trade-center/internal/catalog"
 	"github.com/nidea1/task-bar-trade-center/internal/inventory"
 	"github.com/nidea1/task-bar-trade-center/internal/market"
+	"github.com/nidea1/task-bar-trade-center/internal/win32"
 )
 
 func New(callbacks Callbacks) *App {
@@ -95,4 +96,16 @@ func (app *App) SetMarketScope(currencyCode string, countryCode string) bool {
 
 func (app *App) GetTranslations() map[string]string {
 	return GetTranslations()
+}
+
+func (app *App) DisableDashboardHotkey() {
+	if activeApp.appHWND != 0 {
+		win32.ProcPostMessageW.Call(activeApp.appHWND, WM_APP_HOTKEY_DISABLE, 0, 0)
+	}
+}
+
+func (app *App) EnableDashboardHotkey() {
+	if activeApp.appHWND != 0 {
+		win32.ProcPostMessageW.Call(activeApp.appHWND, WM_APP_HOTKEY_ENABLE, 0, 0)
+	}
 }

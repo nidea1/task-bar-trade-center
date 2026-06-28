@@ -11,11 +11,20 @@ import (
 )
 
 func registerDashboardHotkey() {
-	if !winapp.RegisterHotkey(activeApp.appHWND, DashboardHotkeyID, 0, VK_F2) {
-		fmt.Println("Inventory dashboard hotkey could not be registered.")
+	activeApp.dashboardSettingsMu.RLock()
+	modifiers := activeApp.dashboardSettings.HotkeyModifiers
+	vk := activeApp.dashboardSettings.HotkeyVK
+	activeApp.dashboardSettingsMu.RUnlock()
+
+	if vk == 0 {
+		vk = VK_F2
+	}
+
+	if !winapp.RegisterHotkey(activeApp.appHWND, DashboardHotkeyID, uintptr(modifiers), uintptr(vk)) {
+		fmt.Printf("Inventory dashboard hotkey could not be registered: Modifiers=%d VK=%d\n", modifiers, vk)
 		return
 	}
-	fmt.Println("Inventory dashboard hotkey registered: F2.")
+	fmt.Printf("Inventory dashboard hotkey registered: Modifiers=%d VK=%d\n", modifiers, vk)
 }
 
 func unregisterDashboardHotkey() {

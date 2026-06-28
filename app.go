@@ -181,6 +181,20 @@ func (a *App) GetTranslations() (map[string]string, error) {
 	return nil, nil
 }
 
+func (a *App) DisableDashboardHotkey() error {
+	if appCore := a.coreApp(); appCore != nil {
+		appCore.DisableDashboardHotkey()
+	}
+	return nil
+}
+
+func (a *App) EnableDashboardHotkey() error {
+	if appCore := a.coreApp(); appCore != nil {
+		appCore.EnableDashboardHotkey()
+	}
+	return nil
+}
+
 func (a *App) context() (context.Context, bool) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()

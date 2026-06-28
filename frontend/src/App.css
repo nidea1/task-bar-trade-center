@@ -379,6 +379,23 @@
   flex-shrink: 0;
 }
 
+.dashboard-hotkey-toggle {
+  height: 30px;
+  min-width: 80px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease-in-out;
+}
+
+.dashboard-hotkey-toggle.is-listening {
+  color: #ffbe2d !important;
+  border-color: #ffbe2d !important;
+  background-color: rgba(255, 190, 45, 0.1) !important;
+  box-shadow: 0 0 8px rgba(255, 190, 45, 0.3) !important;
+}
+
 .dashboard-icon-dropdown-button {
   width: 32px;
   height: 30px;
@@ -2116,3 +2133,50 @@
 .theme-light .inventory-search input::placeholder {
   color: #64748b;
 }
+
+/* Settings Popover and Controls Styles */
+.dashboard-settings-popover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 70;
+  width: 320px;
+  background: rgba(12, 10, 15, 0.96) !important;
+  backdrop-filter: blur(16px);
+  border: 2px solid #54493b !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.85) !important;
+  border-radius: 4px;
+  overflow: visible !important; /* Allow dropdown list container to extend outside panel */
+}
+
+/* Give all row-controls in the settings popup a uniform width and border style */
+.dashboard-settings-popover .dashboard-control,
+.dashboard-settings-popover .dashboard-notify-toggle,
+.dashboard-settings-popover .dashboard-hotkey-toggle,
+.dashboard-settings-popover .dashboard-theme-toggle {
+  flex-shrink: 0;
+  width: 170px !important;
+  min-width: 170px !important;
+}
+
+.dashboard-settings-toggle {
+  flex-shrink: 0;
+}
+
+.dashboard-settings-toggle.is-active {
+  background-color: rgba(255, 190, 45, 0.1) !important;
+  border-color: #ffbe2d !important;
+  color: #ffbe2d !important;
+  box-shadow: 0 0 8px rgba(255, 190, 45, 0.2) !important;
+}
+
+/* Decreasing z-indices for rows to ensure opened dropdown menus overlap lower rows */
+.dashboard-settings-row {
+  position: relative;
+}
+.dashboard-settings-row:nth-of-type(1) { z-index: 10; }
+.dashboard-settings-row:nth-of-type(2) { z-index: 9; }
+.dashboard-settings-row:nth-of-type(3) { z-index: 8; }
+.dashboard-settings-row:nth-of-type(4) { z-index: 7; }
+.dashboard-settings-row:nth-of-type(5) { z-index: 6; }
+.dashboard-settings-row:nth-of-type(6) { z-index: 5; }

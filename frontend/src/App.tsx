@@ -15,6 +15,8 @@ import {
     GetMinRarityNotify,
     SetDashboardSettings,
     SetMinRarityNotify,
+    DisableDashboardHotkey,
+    EnableDashboardHotkey,
 } from "../wailsjs/go/main/App";
 import {
     WindowMinimise,
@@ -40,7 +42,9 @@ import {
     PackageOpen,
     Hammer,
     FlaskConical,
-    HandHeart
+    HandHeart,
+    Keyboard,
+    Settings
 } from 'lucide-react';
 
 import { HERO_CLASSES, appIcon } from './constants';
@@ -91,6 +95,8 @@ const defaultDashboardSettings: DashboardSettings = {
     sort_mode: "price_desc",
     marketable_items_tab: "all",
     notify_sources: allNotificationSources,
+    hotkey_modifiers: 0,
+    hotkey_vk: 0x71,
 };
 
 type DashboardSettingsInput = {
@@ -101,6 +107,8 @@ type DashboardSettingsInput = {
     sort_mode?: string;
     marketable_items_tab?: string;
     notify_sources?: string;
+    hotkey_modifiers?: number;
+    hotkey_vk?: number;
 };
 
 function normalizeNotifySources(value?: string | null): string {
@@ -115,6 +123,43 @@ function notifySourceSet(value: string): Set<NotificationSource> {
     const normalized = normalizeNotifySources(value);
     if (normalized === noNotificationSources) return new Set();
     return new Set(normalized.split(",") as NotificationSource[]);
+}
+
+function getVKName(vk: number): string {
+    if (vk >= 0x70 && vk <= 0x87) {
+        return "F" + (vk - 0x70 + 1);
+    }
+    if (vk >= 0x30 && vk <= 0x39) {
+        return String.fromCharCode(vk);
+    }
+    if (vk >= 0x41 && vk <= 0x5A) {
+        return String.fromCharCode(vk);
+    }
+    switch (vk) {
+        case 0x20: return "Space";
+        case 0x09: return "Tab";
+        case 0x1B: return "Esc";
+        case 0x0D: return "Enter";
+        case 0x08: return "Backspace";
+        case 0x2E: return "Delete";
+        case 0x2D: return "Insert";
+        case 0x24: return "Home";
+        case 0x23: return "End";
+        case 0x21: return "PgUp";
+        case 0x22: return "PgDn";
+        default: return "Key 0x" + vk.toString(16).toUpperCase();
+    }
+}
+
+function formatHotkey(modifiers: number, vk: number): string {
+    const parts: string[] = [];
+    if (modifiers & 2) parts.push("Ctrl");
+    if (modifiers & 1) parts.push("Alt");
+    if (modifiers & 4) parts.push("Shift");
+    if (modifiers & 8) parts.push("Win");
+    
+    parts.push(getVKName(vk));
+    return parts.join(" + ");
 }
 
 function normalizeDashboardSettings(settings?: DashboardSettingsInput | null): DashboardSettings {
@@ -132,6 +177,8 @@ function normalizeDashboardSettings(settings?: DashboardSettingsInput | null): D
         ) ? sortMode : defaultDashboardSettings.sort_mode,
         marketable_items_tab: settings?.marketable_items_tab === "best" ? "best" : defaultDashboardSettings.marketable_items_tab,
         notify_sources: normalizeNotifySources(settings?.notify_sources),
+        hotkey_modifiers: settings?.hotkey_modifiers ?? 0,
+        hotkey_vk: settings?.hotkey_vk ?? 0x71,
     };
 }
 
@@ -157,6 +204,11 @@ function App() {
     const [notifySources, setNotifySources] = useState<string>(allNotificationSources);
     const [notifySourceMenuOpen, setNotifySourceMenuOpen] = useState(false);
     const [itemSearch, setItemSearch] = useState("");
+    const [hotkeyModifiers, setHotkeyModifiers] = useState<number>(0);
+    const [hotkeyVK, setHotkeyVK] = useState<number>(0x71); // default F2
+    const [isListeningHotkey, setIsListeningHotkey] = useState<boolean>(false);
+    const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
+    const settingsMenuRef = useRef<HTMLDivElement>(null);
     const mountedRef = useRef(false);
     const loadInFlightRef = useRef(false);
     const dashboardSettingsLoadedRef = useRef(false);
@@ -237,6 +289,8 @@ function App() {
                 setSortMode(normalized.sort_mode);
                 setMarketableItemsTab(normalized.marketable_items_tab);
                 setNotifySources(normalized.notify_sources);
+                setHotkeyModifiers(normalized.hotkey_modifiers);
+                setHotkeyVK(normalized.hotkey_vk);
             })
             .catch(() => {
                 // Dashboard preferences are non-critical; current defaults remain usable.
@@ -285,6 +339,25 @@ function App() {
     }, [notifySourceMenuOpen]);
 
     useEffect(() => {
+        if (!settingsMenuOpen) return;
+        const handleClickOutside = (event: MouseEvent) => {
+            if (settingsMenuRef.current && !settingsMenuRef.current.contains(event.target as Node)) {
+                if (isListeningHotkey) return;
+                setSettingsMenuOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [settingsMenuOpen, isListeningHotkey]);
+
+    useEffect(() => {
+        if (!settingsMenuOpen && isListeningHotkey) {
+            setIsListeningHotkey(false);
+            EnableDashboardHotkey().catch(() => {});
+        }
+    }, [settingsMenuOpen, isListeningHotkey]);
+
+    useEffect(() => {
         if (!dashboardSettingsLoadedRef.current) return;
         SetDashboardSettings({
             theme_mode: themeMode,
@@ -294,10 +367,49 @@ function App() {
             sort_mode: sortMode,
             marketable_items_tab: marketableItemsTab,
             notify_sources: notifySources,
+            hotkey_modifiers: hotkeyModifiers,
+            hotkey_vk: hotkeyVK,
         }).catch(() => {
             // Local UI state can continue even if settings persistence fails.
         });
-    }, [themeMode, priceMode, rarityFilter, equipmentFilter, sortMode, marketableItemsTab, notifySources]);
+    }, [themeMode, priceMode, rarityFilter, equipmentFilter, sortMode, marketableItemsTab, notifySources, hotkeyModifiers, hotkeyVK]);
+
+    useEffect(() => {
+        if (!isListeningHotkey) return;
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const standaloneModifiers = [16, 17, 18, 91, 92, 93, 224];
+            if (standaloneModifiers.includes(e.keyCode)) {
+                return;
+            }
+
+            if (e.keyCode === 27 && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey) {
+                setIsListeningHotkey(false);
+                EnableDashboardHotkey().catch(() => {});
+                return;
+            }
+
+            let modifiers = 0;
+            if (e.altKey) modifiers |= 1;
+            if (e.ctrlKey) modifiers |= 2;
+            if (e.shiftKey) modifiers |= 4;
+            if (e.metaKey) modifiers |= 8;
+
+            const vk = e.keyCode;
+
+            setHotkeyModifiers(modifiers);
+            setHotkeyVK(vk);
+            setIsListeningHotkey(false);
+        };
+
+        window.addEventListener("keydown", handleKeyDown, true);
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown, true);
+        };
+    }, [isListeningHotkey]);
 
     useEffect(() => {
         if (!state?.refresh?.refreshing && !refreshing && !forceRefreshing) {
@@ -308,6 +420,22 @@ function App() {
     const handleMinRarityNotifyChange = (grade: string) => {
         setMinRarityNotifyState(grade);
         SetMinRarityNotify(grade);
+    };
+
+    const handleClose = () => {
+        if (isListeningHotkey) {
+            setIsListeningHotkey(false);
+            EnableDashboardHotkey().catch(() => {});
+        }
+        WindowHide();
+    };
+
+    const handleMinimize = () => {
+        if (isListeningHotkey) {
+            setIsListeningHotkey(false);
+            EnableDashboardHotkey().catch(() => {});
+        }
+        WindowMinimise();
     };
 
     const rarityGrades = [
@@ -497,7 +625,7 @@ function App() {
                 </div>
                 <div className="flex items-center gap-1.5 no-drag">
                     <button
-                        onClick={WindowMinimise}
+                        onClick={handleMinimize}
                         className="themed-tooltip-host p-1 hover:bg-[#1a1410] rounded text-[#9a896f] hover:text-[#ffbe2d] transition-colors cursor-pointer"
                         aria-label="Minimize"
                         data-tooltip="Minimize"
@@ -505,7 +633,7 @@ function App() {
                         <Minus className="w-3.5 h-3.5" />
                     </button>
                     <button
-                        onClick={WindowHide}
+                        onClick={handleClose}
                         className="themed-tooltip-host p-1 hover:bg-[#601b18] hover:text-white rounded text-[#9a896f] transition-colors cursor-pointer"
                         aria-label="Close"
                         data-tooltip="Close"
@@ -537,124 +665,11 @@ function App() {
                         </div>
 
                         <div className="dashboard-controls no-drag">
-                            <div className="dashboard-selector-row">
-                                <button
-                                    type="button"
-                                    onClick={() => setThemeMode(themeMode === "dark" ? "light" : "dark")}
-                                    className="dashboard-theme-toggle themed-tooltip-host game-button flex items-center justify-center"
-                                    aria-label={`${controlThemeLabel}: ${themeLabel}`}
-                                    data-tooltip={`${controlThemeLabel}: ${themeLabel}`}
-                                >
-                                    {themeMode === "dark" ? <Moon className="dashboard-theme-icon" /> : <Sun className="dashboard-theme-icon" />}
-                                </button>
-
-                                <GameDropdown
-                                    value={minRarityNotify}
-                                    options={rarityGrades.map((grade) => ({
-                                        value: grade,
-                                        label: t("rarity." + grade, grade) + "+",
-                                        color: rarityMeta(grade).color
-                                    }))}
-                                    onChange={handleMinRarityNotifyChange}
-                                    className="dashboard-notify-toggle"
-                                    icon={<Bell className="w-3.5 h-3.5" />}
-                                    title={rarityNotifyTitle}
-                                    ariaLabel={`${rarityNotifyTitle}. ${controlRarityNotifyTooltip}`}
-                                    iconOnly
-                                />
-
-                                <div
-                                    ref={notifySourceMenuRef}
-                                    className="dashboard-notify-source-menu themed-tooltip-host relative inline-block text-left"
-                                    data-tooltip={notifySourceMenuOpen ? undefined : notifySourcesTitle}
-                                >
-                                    <button
-                                        type="button"
-                                        onClick={() => setNotifySourceMenuOpen((open) => !open)}
-                                        className="dashboard-icon-dropdown-button game-button cursor-pointer flex items-center justify-center"
-                                        aria-label={notifySourcesTitle}
-                                        aria-haspopup="menu"
-                                        aria-expanded={notifySourceMenuOpen}
-                                    >
-                                        <ListChecks className="w-3.5 h-3.5" />
-                                    </button>
-                                    {notifySourceMenuOpen && (
-                                        <div
-                                            className="dashboard-notify-source-popover game-panel bg-[#0d0b12] border-2 border-[#463d30] shadow-2xl rounded"
-                                            role="menu"
-                                        >
-                                            {notifySourceOptions.map((option) => {
-                                                const enabled = enabledNotifySources.has(option.value);
-                                                return (
-                                                    <button
-                                                        key={option.value}
-                                                        type="button"
-                                                        role="menuitemcheckbox"
-                                                        aria-checked={enabled}
-                                                        onClick={() => toggleNotifySource(option.value)}
-                                                        className={`dashboard-notify-source-option ${enabled ? "is-enabled" : ""}`}
-                                                    >
-                                                        <span className="dashboard-notify-source-icon">{option.icon}</span>
-                                                        <span className="dashboard-notify-source-label">{option.label}</span>
-                                                        <span className="dashboard-notify-source-check">
-                                                            {enabled && <CheckCircle className="w-3.5 h-3.5" />}
-                                                        </span>
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
-                                </div>
-
-                                <GameDropdown
-                                    value={currentLanguage}
-                                    options={languages.map((lang) => ({ value: lang.code, label: lang.name }))}
-                                    onChange={handleLanguageChange}
-                                    className="dashboard-control dashboard-control-language"
-                                    prefix={controlLanguageLabel}
-                                    selectedLabel={selectedLanguageCode}
-                                    icon={<Languages className="w-3.5 h-3.5" />}
-                                    title={`${controlLanguageLabel}: ${selectedLanguageName}`}
-                                />
-
-                                <GameDropdown
-                                    value={currentMarketScope ? `${currentMarketScope.currency_code}:${currentMarketScope.country_code}` : ""}
-                                    options={regions.map((reg) => ({
-                                        value: `${reg.currency_code}:${reg.country_code}`,
-                                        label: `${reg.currency_code} - ${reg.name}`
-                                    }))}
-                                    onChange={(val) => {
-                                        const [currency, country] = val.split(":");
-                                        handleRegionChange(currency, country);
-                                    }}
-                                    className="dashboard-control dashboard-control-region"
-                                    prefix={controlCurrencyLabel}
-                                    selectedLabel={currentMarketScope?.currency_code || controlCurrencyLabel}
-                                    icon={<GoldIcon className="w-3.5 h-3.5" />}
-                                    title={marketDisplayName}
-                                />
-
-                                <GameDropdown
-                                    value={priceMode}
-                                    options={[
-                                        { value: "suggested", label: t("dashboard.price_lowest_sell", "Lowest Sell") },
-                                        { value: "instant", label: t("dashboard.price_highest_buy", "Highest Buy") },
-                                    ]}
-                                    onChange={(val) => setPriceMode(val as PriceMode)}
-                                    className="dashboard-control dashboard-control-price"
-                                    prefix={controlPriceLabel}
-                                    selectedLabel={compactPriceLabel}
-                                    icon={<Tag className="w-3.5 h-3.5" />}
-                                    title={`${controlPriceLabel}: ${fullPriceLabel}`}
-                                />
-
-                            </div>
-
-                            <div className="dashboard-refresh-row">
+                            <div className="dashboard-selector-row flex items-center gap-2 relative">
                                 <button
                                     disabled={isCurrentlyRefreshing}
                                     onClick={() => refreshPrices(false)}
-                                    className="dashboard-refresh-button themed-tooltip-host game-button flex items-center justify-center gap-2 px-4 py-1.5 font-medium text-xs uppercase cursor-pointer"
+                                    className="dashboard-refresh-button themed-tooltip-host game-button flex items-center justify-center gap-2 px-4 py-1.5 font-medium text-xs uppercase cursor-pointer shrink-0"
                                     data-tooltip={smartRefreshTooltip}
                                     aria-label={smartRefreshTooltip}
                                 >
@@ -664,13 +679,172 @@ function App() {
                                 <button
                                     disabled={isCurrentlyRefreshing}
                                     onClick={() => refreshPrices(true)}
-                                    className="dashboard-refresh-button dashboard-force-refresh-button themed-tooltip-host game-button flex items-center justify-center gap-2 px-4 py-1.5 font-medium text-xs uppercase cursor-pointer"
+                                    className="dashboard-refresh-button dashboard-force-refresh-button themed-tooltip-host game-button flex items-center justify-center gap-2 px-4 py-1.5 font-medium text-xs uppercase cursor-pointer shrink-0"
                                     data-tooltip={forceRefreshTooltip}
                                     aria-label={forceRefreshTooltip}
                                 >
                                     <RefreshCw className={`w-3.5 h-3.5 ${forceRefreshBusy ? 'animate-spin' : ''}`} />
                                     {forceRefreshBusy ? t("dashboard.refreshing", "Refreshing...") : forceRefreshLabel}
                                 </button>
+
+                                <div className="relative inline-block text-left" ref={settingsMenuRef}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSettingsMenuOpen((open) => !open)}
+                                        className={`dashboard-settings-toggle themed-tooltip-host game-button flex items-center justify-center w-8 h-[30px] p-0 cursor-pointer ${settingsMenuOpen ? 'is-active' : ''}`}
+                                        aria-label={t("dashboard.control_settings", "Settings")}
+                                        data-tooltip={t("dashboard.control_settings", "Settings")}
+                                    >
+                                        <Settings className="w-4 h-4" />
+                                    </button>
+
+                                    {settingsMenuOpen && (
+                                        <div
+                                            className="dashboard-settings-popover game-panel bg-[#0c0a0f]/98 border-2 border-[#54493b] shadow-2xl rounded p-4 space-y-4 no-drag"
+                                            role="menu"
+                                        >
+                                            <h3 className="text-xs font-bold uppercase tracking-wider gold-text border-b border-[#463d30]/60 pb-2 mb-3">
+                                                {t("dashboard.settings_title", "Settings")}
+                                            </h3>
+                                            
+                                            <div className="space-y-3">
+                                                {/* Hotkey */}
+                                                <div className="dashboard-settings-row flex items-center justify-between gap-4">
+                                                    <span className="text-[11px] font-bold text-[#e1d5bf]">{t("dashboard.control_hotkey", "Hotkey")}:</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setIsListeningHotkey(true);
+                                                            DisableDashboardHotkey().catch(() => {});
+                                                        }}
+                                                        className={`dashboard-hotkey-toggle themed-tooltip-host game-button flex items-center justify-between gap-2.5 px-3 py-1.5 text-xs font-bold ${isListeningHotkey ? 'is-listening animate-pulse border-[#ffbe2d] text-[#ffbe2d]' : ''}`}
+                                                        aria-label={t("dashboard.hotkey_tooltip", "System-wide hotkey to toggle the dashboard")}
+                                                    >
+                                                        <span className="dashboard-dropdown-content">
+                                                            <Keyboard className="w-3.5 h-3.5" />
+                                                            <span className="dashboard-dropdown-label">
+                                                                <span className="dashboard-dropdown-value">
+                                                                    {isListeningHotkey ? t("dashboard.hotkey_listening", "Press Key...") : formatHotkey(hotkeyModifiers, hotkeyVK)}
+                                                                </span>
+                                                            </span>
+                                                        </span>
+                                                        <span className="text-[8px] text-[#ffbe2d]/60">⚙</span>
+                                                    </button>
+                                                </div>
+
+                                                {/* Theme */}
+                                                <div className="dashboard-settings-row flex items-center justify-between gap-4">
+                                                    <span className="text-[11px] font-bold text-[#e1d5bf]">{t("dashboard.control_theme", "Theme")}:</span>
+                                                    <GameDropdown
+                                                        value={themeMode}
+                                                        options={[
+                                                            { value: "dark", label: t("dashboard.theme_dark", "Dark") },
+                                                            { value: "light", label: t("dashboard.theme_light", "Light") },
+                                                        ]}
+                                                        onChange={(val) => setThemeMode(val as ThemeMode)}
+                                                        className="dashboard-control dashboard-theme-toggle"
+                                                        selectedLabel={themeLabel}
+                                                        icon={themeMode === "dark" ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5 text-[#ffbe2d]" />}
+                                                        title={`${controlThemeLabel}: ${themeLabel}`}
+                                                    />
+                                                </div>
+
+                                                {/* Language */}
+                                                <div className="dashboard-settings-row flex items-center justify-between gap-4">
+                                                    <span className="text-[11px] font-bold text-[#e1d5bf]">{t("dashboard.control_language", "Language")}:</span>
+                                                    <GameDropdown
+                                                        value={currentLanguage}
+                                                        options={languages.map((lang) => ({ value: lang.code, label: lang.name }))}
+                                                        onChange={handleLanguageChange}
+                                                        className="dashboard-control dashboard-control-language"
+                                                        selectedLabel={selectedLanguageName}
+                                                        icon={<Languages className="w-3.5 h-3.5" />}
+                                                        title={`${controlLanguageLabel}: ${selectedLanguageName}`}
+                                                    />
+                                                </div>
+
+                                                {/* Region/Currency */}
+                                                <div className="dashboard-settings-row flex items-center justify-between gap-4">
+                                                    <span className="text-[11px] font-bold text-[#e1d5bf]">{t("dashboard.control_currency", "Currency")}:</span>
+                                                    <GameDropdown
+                                                        value={currentMarketScope ? `${currentMarketScope.currency_code}:${currentMarketScope.country_code}` : ""}
+                                                        options={regions.map((reg) => ({
+                                                            value: `${reg.currency_code}:${reg.country_code}`,
+                                                            label: `${reg.currency_code} - ${reg.name}`
+                                                        }))}
+                                                        onChange={(val) => {
+                                                            const [currency, country] = val.split(":");
+                                                            handleRegionChange(currency, country);
+                                                        }}
+                                                        className="dashboard-control dashboard-control-region"
+                                                        selectedLabel={currentMarketScope?.currency_code || ""}
+                                                        icon={<GoldIcon className="w-3.5 h-3.5" />}
+                                                        title={marketDisplayName}
+                                                    />
+                                                </div>
+
+                                                {/* Price Type */}
+                                                <div className="dashboard-settings-row flex items-center justify-between gap-4">
+                                                    <span className="text-[11px] font-bold text-[#e1d5bf]">{t("dashboard.control_price", "Price")}:</span>
+                                                    <GameDropdown
+                                                        value={priceMode}
+                                                        options={[
+                                                            { value: "suggested", label: t("dashboard.price_lowest_sell", "Lowest Sell") },
+                                                            { value: "instant", label: t("dashboard.price_highest_buy", "Highest Buy") },
+                                                        ]}
+                                                        onChange={(val) => setPriceMode(val as PriceMode)}
+                                                        className="dashboard-control dashboard-control-price"
+                                                        selectedLabel={compactPriceLabel}
+                                                        icon={<Tag className="w-3.5 h-3.5" />}
+                                                        title={`${controlPriceLabel}: ${fullPriceLabel}`}
+                                                    />
+                                                </div>
+
+                                                {/* Notify Threshold */}
+                                                <div className="dashboard-settings-row flex items-center justify-between gap-4">
+                                                    <span className="text-[11px] font-bold text-[#e1d5bf]">{t("dashboard.rarity_notify_label", "Notify")}:</span>
+                                                    <GameDropdown
+                                                        value={minRarityNotify}
+                                                        options={rarityGrades.map((grade) => ({
+                                                            value: grade,
+                                                            label: t("rarity." + grade, grade) + "+",
+                                                            color: rarityMeta(grade).color
+                                                        }))}
+                                                        onChange={handleMinRarityNotifyChange}
+                                                        className="dashboard-control dashboard-notify-toggle"
+                                                        selectedLabel={selectedRarityNotifyLabel}
+                                                        icon={<Bell className="w-3.5 h-3.5" />}
+                                                        title={rarityNotifyTitle}
+                                                        ariaLabel={`${rarityNotifyTitle}. ${controlRarityNotifyTooltip}`}
+                                                    />
+                                                </div>
+
+                                                {/* Notify Sources */}
+                                                <div className="flex flex-col gap-1.5 pt-2 border-t border-[#463d30]/40">
+                                                    <span className="text-[11px] font-bold text-[#caa66a] uppercase tracking-wider">{t("dashboard.notify_sources_label", "Sources")}:</span>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        {notifySourceOptions.map((option) => {
+                                                            const enabled = enabledNotifySources.has(option.value);
+                                                            return (
+                                                                <button
+                                                                    key={option.value}
+                                                                    type="button"
+                                                                    role="menuitemcheckbox"
+                                                                    aria-checked={enabled}
+                                                                    onClick={() => toggleNotifySource(option.value)}
+                                                                    className={`dashboard-notify-source-option flex items-center gap-2 p-1.5 rounded border border-[#463d30]/40 text-left transition-colors hover:bg-[#1a1620] cursor-pointer ${enabled ? "is-enabled text-[#ffbe2d] border-[#ffbe2d]/60" : "text-[#9a896f]"}`}
+                                                                >
+                                                                    <span className="dashboard-notify-source-icon text-xs">{option.icon}</span>
+                                                                    <span className="text-[10px] font-bold tracking-wide">{option.label}</span>
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>

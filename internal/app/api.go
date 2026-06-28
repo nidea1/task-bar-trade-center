@@ -7,6 +7,7 @@ import (
 
 	"github.com/nidea1/task-bar-trade-center/internal/inventory"
 	"github.com/nidea1/task-bar-trade-center/internal/market"
+	"github.com/nidea1/task-bar-trade-center/internal/win32"
 )
 
 const inventoryDashboardPollCacheMaxAge = 2 * time.Second
@@ -125,6 +126,8 @@ type DashboardSettings struct {
 	SortMode           string `json:"sort_mode"`
 	MarketableItemsTab string `json:"marketable_items_tab"`
 	NotifySources      string `json:"notify_sources"`
+	HotkeyModifiers    int    `json:"hotkey_modifiers"`
+	HotkeyVK           int    `json:"hotkey_vk"`
 }
 
 const (
@@ -152,6 +155,8 @@ func defaultDashboardSettings() DashboardSettings {
 		SortMode:           "price_desc",
 		MarketableItemsTab: "all",
 		NotifySources:      notificationSourcesAll,
+		HotkeyModifiers:    0,
+		HotkeyVK:           VK_F2,
 	}
 }
 
@@ -180,6 +185,10 @@ func normalizeDashboardSettings(settings DashboardSettings) DashboardSettings {
 		normalized.MarketableItemsTab = settings.MarketableItemsTab
 	}
 	normalized.NotifySources = normalizeNotificationSources(settings.NotifySources)
+	if settings.HotkeyVK != 0 {
+		normalized.HotkeyModifiers = settings.HotkeyModifiers
+		normalized.HotkeyVK = settings.HotkeyVK
+	}
 	return normalized
 }
 
@@ -233,9 +242,19 @@ func currentDashboardSettings() DashboardSettings {
 
 func setDashboardSettings(settings DashboardSettings) DashboardSettings {
 	normalized := normalizeDashboardSettings(settings)
+	
 	activeApp.dashboardSettingsMu.Lock()
+	oldModifiers := activeApp.dashboardSettings.HotkeyModifiers
+	oldVK := activeApp.dashboardSettings.HotkeyVK
 	activeApp.dashboardSettings = normalized
 	activeApp.dashboardSettingsMu.Unlock()
+	
+	if normalized.HotkeyModifiers != oldModifiers || normalized.HotkeyVK != oldVK {
+		if activeApp.appHWND != 0 {
+			win32.ProcPostMessageW.Call(activeApp.appHWND, WM_APP_HOTKEY_UPDATE, 0, 0)
+		}
+	}
+	
 	saveSettingsToDisk()
 	return normalized
 }

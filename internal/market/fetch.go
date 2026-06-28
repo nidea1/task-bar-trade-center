@@ -27,13 +27,19 @@ var steamRequestLimiter = struct {
 
 func FetchData(config catalog.ItemConfig, marketHashName string, now time.Time, scope MarketScope) (MarketData, error) {
 	data, err := fetchDataForScope(config, marketHashName, now, scope)
-	if err != nil || scope == defaultMarketScope() || hasCompleteMarketAnalysis(data.Analysis) {
+	if err != nil {
 		return data, err
+	}
+	if scope == defaultMarketScope() || hasCompleteMarketAnalysis(data.Analysis) {
+		return data, nil
 	}
 
 	data.Analysis.USDDataFallbackAttempted = true
 	usdData, usdErr := fetchDataForScope(config, marketHashName, now, defaultMarketScope())
 	if usdErr != nil {
+		if se, ok := usdErr.(*SteamError); ok && se.StatusCode == 429 {
+			return data, usdErr
+		}
 		return data, nil
 	}
 	return mergeMarketDataWithUSDFallback(data, usdData, scope), nil
@@ -121,6 +127,9 @@ func fetchDataForScope(config catalog.ItemConfig, marketHashName string, now tim
 	var iconURL string
 	listingBody, _, err := steamGet(client, referer, "")
 	if err != nil {
+		if se, ok := err.(*SteamError); ok && se.StatusCode == 429 {
+			return MarketData{}, err
+		}
 		requestErrors = append(requestErrors, "listing: "+err.Error())
 	} else {
 		iconURL = ParseIconURL(listingBody)
@@ -137,6 +146,9 @@ func fetchDataForScope(config catalog.ItemConfig, marketHashName string, now tim
 			if itemNameID != "" {
 				body, _, err := fetchItemOrdersHistogram(client, itemNameID, referer, scope)
 				if err != nil {
+					if se, ok := err.(*SteamError); ok && se.StatusCode == 429 {
+						return MarketData{}, err
+					}
 					requestErrors = append(requestErrors, "histogram: "+err.Error())
 				} else {
 					orderBook, hasOrderBook = parseItemOrdersHistogramResponse(body)
@@ -151,6 +163,9 @@ func fetchDataForScope(config catalog.ItemConfig, marketHashName string, now tim
 	if len(history) == 0 {
 		body, _, err := fetchSaleHistory(client, marketHashName, referer, scope)
 		if err != nil {
+			if se, ok := err.(*SteamError); ok && se.StatusCode == 429 {
+				return MarketData{}, err
+			}
 			requestErrors = append(requestErrors, "pricehistory: "+err.Error())
 		} else {
 			history = parseSaleHistoryResponse(body)
@@ -168,6 +183,9 @@ func fetchDataForScope(config catalog.ItemConfig, marketHashName string, now tim
 
 	body, _, err := fetchPriceOverview(client, marketHashName, scope)
 	if err != nil {
+		if se, ok := err.(*SteamError); ok && se.StatusCode == 429 {
+			return MarketData{}, err
+		}
 		requestErrors = append(requestErrors, "priceoverview: "+err.Error())
 	} else if data, ok := marketDataFromPriceOverview(marketHashName, body, now, scope.Currency); ok {
 		data.Analysis.IconURL = iconURL
@@ -194,6 +212,33 @@ func fetchPriceOverview(client *http.Client, marketHashName string, scope Market
 	return steamGet(client, PriceOverviewURL(marketHashName, scope), "")
 }
 
+type SteamError struct {
+	StatusCode int
+	Status     string
+	Endpoint   string
+	RetryAfter string
+}
+
+func (e *SteamError) Error() string {
+	return fmt.Sprintf("status %s", e.Status)
+}
+
+func getEndpointFromURL(targetURL string) string {
+	if strings.Contains(targetURL, "/pricehistory") {
+		return "pricehistory"
+	}
+	if strings.Contains(targetURL, "/priceoverview") {
+		return "priceoverview"
+	}
+	if strings.Contains(targetURL, "/itemordershistogram") {
+		return "itemordershistogram"
+	}
+	if strings.Contains(targetURL, "/listings/") {
+		return "listings"
+	}
+	return "unknown"
+}
+
 func steamGet(client *http.Client, targetURL string, referer string) ([]byte, int, error) {
 	req, err := http.NewRequest(http.MethodGet, targetURL, nil)
 	if err != nil {
@@ -218,7 +263,12 @@ func steamGet(client *http.Client, targetURL string, referer string) ([]byte, in
 		return body, resp.StatusCode, readErr
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return body, resp.StatusCode, fmt.Errorf("status %s", resp.Status)
+		return body, resp.StatusCode, &SteamError{
+			StatusCode: resp.StatusCode,
+			Status:     resp.Status,
+			Endpoint:   getEndpointFromURL(targetURL),
+			RetryAfter: resp.Header.Get("Retry-After"),
+		}
 	}
 	return body, resp.StatusCode, nil
 }

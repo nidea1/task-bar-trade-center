@@ -1,5 +1,8 @@
 package inventory
 
+import "github.com/nidea1/task-bar-trade-center/internal/playerdata"
+
+
 type ItemDescriptor struct {
 	Name           string `json:"name"`
 	MarketHashName string `json:"market_hash_name"`
@@ -113,6 +116,7 @@ type DashboardState struct {
 	Duplicates     []DashboardItem   `json:"duplicates"`
 	Equipped       []DashboardItem   `json:"equipped"`
 	MissingPrices  []DashboardItem   `json:"missing_prices"`
-	Refresh        RefreshStatus     `json:"refresh"`
-	Translations   map[string]string `json:"translations"`
+	Refresh        RefreshStatus              `json:"refresh"`
+	Translations   map[string]string          `json:"translations"`
+	TradeSlots     []playerdata.TradeShipSlot `json:"trade_slots"`
 }

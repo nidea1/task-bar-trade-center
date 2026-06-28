@@ -158,6 +158,7 @@ func BuildDashboard(snapshot playerdata.InventorySnapshot, catalog map[int]ItemD
 		Equipped:       equippedItems(items, 25),
 		MissingPrices:  missingPriceItems(items, 25),
 		Refresh:        options.Refresh,
+		TradeSlots:     snapshot.TradeSlots,
 	}
 	return state
 }

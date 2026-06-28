@@ -135,13 +135,28 @@ func processNewMarketableInventoryItems(newItems []marketableInventoryItem) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			logPrintf("[NOTIFY] Starting async price fetch for %d item(s)\n", len(items))
+			queue := currentInventoryPriceQueue()
 			for i := range items {
 				if ctx.Err() != nil {
 					logPrintf("[NOTIFY] Price fetch context error for item ID %d: %v\n", items[i].itemID, ctx.Err())
 					break
 				}
+				if queue != nil {
+					backoffUntil := queue.BackoffUntil()
+					if !backoffUntil.IsZero() && time.Now().Before(backoffUntil) {
+						logPrintf("[NOTIFY] Skipping price fetch for item ID %d because queue is in backoff until %s\n", items[i].itemID, backoffUntil.Format(time.RFC3339))
+						fillMarketableInventoryItemDetails(&items[i])
+						continue
+					}
+				}
 				logPrintf("[NOTIFY] Fetching price for item ID %d...\n", items[i].itemID)
-				fetchUncachedItemPrice(ctx, items[i].itemID)
+				err := fetchUncachedItemPrice(ctx, items[i].itemID)
+				if err != nil {
+					logPrintf("[NOTIFY] Price fetch failed for item ID %d: %v\n", items[i].itemID, err)
+					if queue != nil {
+						queue.TriggerBackoff(items[i].itemID, err)
+					}
+				}
 				fillMarketableInventoryItemDetails(&items[i])
 				logPrintf("[NOTIFY] Fetch completed for item ID %d. price=%s hasPrice=%t\n", items[i].itemID, items[i].price, items[i].hasPrice)
 			}

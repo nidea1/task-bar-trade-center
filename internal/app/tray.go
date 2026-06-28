@@ -183,6 +183,16 @@ func appWndProc(hWnd uintptr, msg uint32, wParam uintptr, lParam uintptr) uintpt
 	case WM_APP_STATUS_REFRESH:
 		updateTrayIconTooltip()
 		return 0
+	case WM_APP_HOTKEY_UPDATE:
+		unregisterDashboardHotkey()
+		registerDashboardHotkey()
+		return 0
+	case WM_APP_HOTKEY_DISABLE:
+		unregisterDashboardHotkey()
+		return 0
+	case WM_APP_HOTKEY_ENABLE:
+		registerDashboardHotkey()
+		return 0
 	case WM_APP_GAME_CLOSED_PROMPT:
 		if showYesNoMessageBox(tr("dialog.game_closed.title"), tr("dialog.game_closed.body")) {
 			return 1
