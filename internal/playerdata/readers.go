@@ -255,4 +255,3 @@ func (resolver *Resolver) readTradeSlots(memory Memory, list listInfo) []TradeSh
 	}
 	return slots
 }
-

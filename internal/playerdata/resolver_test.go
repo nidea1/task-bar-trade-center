@@ -395,7 +395,7 @@ func TestResolverReadsTradeSlots(t *testing.T) {
 	// actualTicks = cooldownRaw + 135194695325352348 = 639182559950000000
 	// 639182559950000000 is June 28, 2026 15:06:35 UTC
 	mem.uints[slot0Obj+0x18] = 503987864624647652 // cooldownUntil raw ticks
-	mem.ints[slot0Obj+0x20] = 1                  // state (active)
+	mem.ints[slot0Obj+0x20] = 1                   // state (active)
 
 	// Slot 2: index 1, state 0, cooldownRaw = 0
 	slot1Obj := uintptr(0x660000)
@@ -432,4 +432,3 @@ func TestResolverReadsTradeSlots(t *testing.T) {
 		t.Fatalf("slot1 = %+v, want index 1 state 0 cooldown zero", slot1)
 	}
 }
-

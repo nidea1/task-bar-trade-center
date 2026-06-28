@@ -876,7 +876,7 @@ func logInventoryInteractionPayloadMiss(p *tbhmem.Process, logDataPtr uintptr, c
 							cName = readStringLocal(p, nPtr)
 						}
 					}
-					
+
 					if cName == "String" {
 						if strVal := readCSharpStringLocal(p, ptr); strVal != "" {
 							if strings.Contains(strVal, "ItemName_") {
@@ -1010,8 +1010,6 @@ func resolveGradedItemID(baseItemID int, grade int) int {
 	z := baseItemID % 10
 	return xx*10000 + grade*1000 + y*100 + z*10 + 1
 }
-
-
 
 var (
 	pendingLogIndex   = -1

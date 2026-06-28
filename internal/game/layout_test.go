@@ -2,6 +2,7 @@ package game
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -174,26 +175,48 @@ func TestParseGameLayoutAcceptsLegacyWidthConfiguration(t *testing.T) {
 }
 
 func TestParseGameLayoutRejectsUnsupportedAndIncompleteDocuments(t *testing.T) {
+	modifyLayoutJSON := func(modify func(m map[string]any)) []byte {
+		var doc map[string]any
+		if err := json.Unmarshal(EmbeddedLayoutJSON(), &doc); err != nil {
+			t.Fatalf("failed to unmarshal embedded layout: %v", err)
+		}
+		modify(doc)
+		raw, err := json.Marshal(doc)
+		if err != nil {
+			t.Fatalf("failed to marshal modified layout: %v", err)
+		}
+		return raw
+	}
+
 	tests := []struct {
 		name string
 		raw  []byte
 	}{
 		{
 			name: "unsupported schema",
-			raw:  []byte(strings.Replace(string(EmbeddedLayoutJSON()), `"schema_version": 3`, `"schema_version": 4`, 1)),
+			raw: modifyLayoutJSON(func(m map[string]any) {
+				m["schema_version"] = 4
+			}),
 		},
 		{
 			name: "missing pointer value",
-			raw:  []byte(strings.Replace(string(EmbeddedLayoutJSON()), `"key_offset": "0x30"`, `"key_offset": ""`, 1)),
+			raw: modifyLayoutJSON(func(m map[string]any) {
+				hovered, ok := m["hovered_item"].(map[string]any)
+				if !ok {
+					t.Fatal("hovered_item not found or not a map")
+				}
+				hovered["key_offset"] = ""
+			}),
 		},
 		{
 			name: "empty pointer chain",
-			raw: []byte(strings.Replace(
-				string(EmbeddedLayoutJSON()),
-				`"pointer_offsets": ["0x40", "0x88", "0x10", "0xB8", "0x8", "0x20", "0x338"]`,
-				`"pointer_offsets": []`,
-				1,
-			)),
+			raw: modifyLayoutJSON(func(m map[string]any) {
+				hovered, ok := m["hovered_item"].(map[string]any)
+				if !ok {
+					t.Fatal("hovered_item not found or not a map")
+				}
+				hovered["pointer_offsets"] = []any{}
+			}),
 		},
 	}
 

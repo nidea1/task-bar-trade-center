@@ -36,4 +36,3 @@ type InventorySnapshot struct {
 	Items          []OwnedItem     `json:"items"`
 	TradeSlots     []TradeShipSlot `json:"trade_slots"`
 }
-

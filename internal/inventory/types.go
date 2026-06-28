@@ -2,7 +2,6 @@ package inventory
 
 import "github.com/nidea1/task-bar-trade-center/internal/playerdata"
 
-
 type ItemDescriptor struct {
 	Name           string `json:"name"`
 	MarketHashName string `json:"market_hash_name"`
@@ -102,20 +101,20 @@ type RefreshStatus struct {
 }
 
 type DashboardState struct {
-	UpdatedAt      string            `json:"updated_at"`
-	SnapshotReadAt string            `json:"snapshot_read_at"`
-	MarketScope    string            `json:"market_scope"`
-	CurrencyCode   string            `json:"currency_code"`
-	PricePrefix    string            `json:"price_prefix"`
-	PriceSuffix    string            `json:"price_suffix"`
-	Gold           uint64            `json:"gold"`
-	Totals         DashboardTotals   `json:"totals"`
-	Items          []DashboardItem   `json:"items"`
-	MostValuable   []DashboardItem   `json:"most_valuable"`
-	BestToSellNow  []DashboardItem   `json:"best_to_sell_now"`
-	Duplicates     []DashboardItem   `json:"duplicates"`
-	Equipped       []DashboardItem   `json:"equipped"`
-	MissingPrices  []DashboardItem   `json:"missing_prices"`
+	UpdatedAt      string                     `json:"updated_at"`
+	SnapshotReadAt string                     `json:"snapshot_read_at"`
+	MarketScope    string                     `json:"market_scope"`
+	CurrencyCode   string                     `json:"currency_code"`
+	PricePrefix    string                     `json:"price_prefix"`
+	PriceSuffix    string                     `json:"price_suffix"`
+	Gold           uint64                     `json:"gold"`
+	Totals         DashboardTotals            `json:"totals"`
+	Items          []DashboardItem            `json:"items"`
+	MostValuable   []DashboardItem            `json:"most_valuable"`
+	BestToSellNow  []DashboardItem            `json:"best_to_sell_now"`
+	Duplicates     []DashboardItem            `json:"duplicates"`
+	Equipped       []DashboardItem            `json:"equipped"`
+	MissingPrices  []DashboardItem            `json:"missing_prices"`
 	Refresh        RefreshStatus              `json:"refresh"`
 	Translations   map[string]string          `json:"translations"`
 	TradeSlots     []playerdata.TradeShipSlot `json:"trade_slots"`

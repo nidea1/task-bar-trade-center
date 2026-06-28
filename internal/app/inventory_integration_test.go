@@ -103,4 +103,3 @@ func TestResolveGradedItemID(t *testing.T) {
 		})
 	}
 }
-
