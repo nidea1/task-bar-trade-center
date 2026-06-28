@@ -99,7 +99,6 @@ func checkForUpdates(silent bool) {
 		return
 	}
 
-	// Store the action instead of interrupting startup with a modal prompt.
 	exeAsset, ok := updatecore.ExecutableAsset(release)
 	if !ok {
 		setUpdateState(UpdateStatusFailed, "No installable executable was found for the available update.", "", release.HTMLURL)
@@ -107,6 +106,28 @@ func checkForUpdates(silent bool) {
 	}
 
 	setUpdateState(UpdateStatusAvailable, tr("update.available", release.TagName), exeAsset.BrowserDownloadURL, release.HTMLURL)
+	promptAvailableUpdate()
+}
+
+func promptAvailableUpdate() {
+	if activeApp.updateStatus.Load() != UpdateStatusAvailable {
+		return
+	}
+	if askInstallUpdateOnUIThread() {
+		installAvailableUpdate()
+	}
+}
+
+func askInstallUpdateOnUIThread() bool {
+	if activeApp.appHWND == 0 {
+		return showInstallUpdatePrompt()
+	}
+	result, _, _ := win32.ProcSendMessageW.Call(activeApp.appHWND, WM_APP_UPDATE_PROMPT, 0, 0)
+	return result != 0
+}
+
+func showInstallUpdatePrompt() bool {
+	return showYesNoMessageBox(updateStatusText(), tr("dialog.update_available.body"))
 }
 
 func installAvailableUpdate() {

@@ -52,6 +52,8 @@ import {
     ThemeMode,
     PriceMode,
     SortMode,
+    BestOwnershipFilter,
+    BestSortMode,
     MarketableItemsTab,
     NotificationSource,
     DashboardSettings,
@@ -65,6 +67,7 @@ import {
     rarityMeta,
     itemCategoryOptions,
     filterAndSortItems,
+    filterAndSortBestItems,
     equipmentFilterValue,
     formatPricingUpdateText,
     formatPricingEtaText,
@@ -93,6 +96,10 @@ const defaultDashboardSettings: DashboardSettings = {
     rarity_filter: "all",
     equipment_filter: "all",
     sort_mode: "price_desc",
+    best_rarity_filter: "all",
+    best_equipment_filter: "all",
+    best_ownership_filter: "all",
+    best_sort_mode: "score_desc",
     marketable_items_tab: "all",
     notify_sources: allNotificationSources,
     hotkey_modifiers: 0,
@@ -105,6 +112,10 @@ type DashboardSettingsInput = {
     rarity_filter?: string;
     equipment_filter?: string;
     sort_mode?: string;
+    best_rarity_filter?: string;
+    best_equipment_filter?: string;
+    best_ownership_filter?: string;
+    best_sort_mode?: string;
     marketable_items_tab?: string;
     notify_sources?: string;
     hotkey_modifiers?: number;
@@ -164,6 +175,8 @@ function formatHotkey(modifiers: number, vk: number): string {
 
 function normalizeDashboardSettings(settings?: DashboardSettingsInput | null): DashboardSettings {
     const sortMode = settings?.sort_mode;
+    const bestOwnershipFilter = settings?.best_ownership_filter;
+    const bestSortMode = settings?.best_sort_mode;
     return {
         theme_mode: settings?.theme_mode === "light" ? "light" : defaultDashboardSettings.theme_mode,
         price_mode: settings?.price_mode === "instant" ? "instant" : defaultDashboardSettings.price_mode,
@@ -175,6 +188,19 @@ function normalizeDashboardSettings(settings?: DashboardSettingsInput | null): D
             || sortMode === "count_desc"
             || sortMode === "rarity_desc"
         ) ? sortMode : defaultDashboardSettings.sort_mode,
+        best_rarity_filter: settings?.best_rarity_filter || defaultDashboardSettings.best_rarity_filter,
+        best_equipment_filter: settings?.best_equipment_filter || defaultDashboardSettings.best_equipment_filter,
+        best_ownership_filter: (
+            bestOwnershipFilter === "equipped"
+            || bestOwnershipFilter === "unequipped"
+        ) ? bestOwnershipFilter : defaultDashboardSettings.best_ownership_filter,
+        best_sort_mode: (
+            bestSortMode === "score_asc"
+            || bestSortMode === "price_desc"
+            || bestSortMode === "price_asc"
+            || bestSortMode === "name_asc"
+            || bestSortMode === "rarity_desc"
+        ) ? bestSortMode : defaultDashboardSettings.best_sort_mode,
         marketable_items_tab: settings?.marketable_items_tab === "best" ? "best" : defaultDashboardSettings.marketable_items_tab,
         notify_sources: normalizeNotifySources(settings?.notify_sources),
         hotkey_modifiers: settings?.hotkey_modifiers ?? 0,
@@ -200,10 +226,15 @@ function App() {
     const [rarityFilter, setRarityFilter] = useState("all");
     const [equipmentFilter, setEquipmentFilter] = useState("all");
     const [sortMode, setSortMode] = useState<SortMode>("price_desc");
+    const [bestRarityFilter, setBestRarityFilter] = useState("all");
+    const [bestEquipmentFilter, setBestEquipmentFilter] = useState("all");
+    const [bestOwnershipFilter, setBestOwnershipFilter] = useState<BestOwnershipFilter>("all");
+    const [bestSortMode, setBestSortMode] = useState<BestSortMode>("score_desc");
     const [marketableItemsTab, setMarketableItemsTab] = useState<MarketableItemsTab>("all");
     const [notifySources, setNotifySources] = useState<string>(allNotificationSources);
     const [notifySourceMenuOpen, setNotifySourceMenuOpen] = useState(false);
     const [itemSearch, setItemSearch] = useState("");
+    const [bestItemSearch, setBestItemSearch] = useState("");
     const [hotkeyModifiers, setHotkeyModifiers] = useState<number>(0);
     const [hotkeyVK, setHotkeyVK] = useState<number>(0x71); // default F2
     const [isListeningHotkey, setIsListeningHotkey] = useState<boolean>(false);
@@ -287,6 +318,10 @@ function App() {
                 setRarityFilter(normalized.rarity_filter);
                 setEquipmentFilter(normalized.equipment_filter);
                 setSortMode(normalized.sort_mode);
+                setBestRarityFilter(normalized.best_rarity_filter);
+                setBestEquipmentFilter(normalized.best_equipment_filter);
+                setBestOwnershipFilter(normalized.best_ownership_filter);
+                setBestSortMode(normalized.best_sort_mode);
                 setMarketableItemsTab(normalized.marketable_items_tab);
                 setNotifySources(normalized.notify_sources);
                 setHotkeyModifiers(normalized.hotkey_modifiers);
@@ -365,6 +400,10 @@ function App() {
             rarity_filter: rarityFilter,
             equipment_filter: equipmentFilter,
             sort_mode: sortMode,
+            best_rarity_filter: bestRarityFilter,
+            best_equipment_filter: bestEquipmentFilter,
+            best_ownership_filter: bestOwnershipFilter,
+            best_sort_mode: bestSortMode,
             marketable_items_tab: marketableItemsTab,
             notify_sources: notifySources,
             hotkey_modifiers: hotkeyModifiers,
@@ -372,7 +411,7 @@ function App() {
         }).catch(() => {
             // Local UI state can continue even if settings persistence fails.
         });
-    }, [themeMode, priceMode, rarityFilter, equipmentFilter, sortMode, marketableItemsTab, notifySources, hotkeyModifiers, hotkeyVK]);
+    }, [themeMode, priceMode, rarityFilter, equipmentFilter, sortMode, bestRarityFilter, bestEquipmentFilter, bestOwnershipFilter, bestSortMode, marketableItemsTab, notifySources, hotkeyModifiers, hotkeyVK]);
 
     useEffect(() => {
         if (!isListeningHotkey) return;
@@ -465,6 +504,19 @@ function App() {
         () => filterAndSortItems(allItems, rarityFilter, equipmentFilter, sortMode, priceMode, itemSearch),
         [allItems, rarityFilter, equipmentFilter, sortMode, priceMode, itemSearch]
     );
+    const bestSellItems = state?.best_to_sell_now || [];
+    const bestRarityOptions = useMemo(
+        () => rarityTokenOptions(bestSellItems.map((item) => item.grade), t, currentLanguage),
+        [bestSellItems, state?.translations, currentLanguage]
+    );
+    const bestEquipmentOptions = useMemo(
+        () => itemCategoryOptions(bestSellItems.map((item) => equipmentFilterValue(item)).filter(Boolean), t, currentLanguage),
+        [bestSellItems, state?.translations, currentLanguage]
+    );
+    const filteredBestSellItems = useMemo(
+        () => filterAndSortBestItems(bestSellItems, bestRarityFilter, bestEquipmentFilter, bestOwnershipFilter, bestSortMode, priceMode, bestItemSearch),
+        [bestSellItems, bestRarityFilter, bestEquipmentFilter, bestOwnershipFilter, bestSortMode, priceMode, bestItemSearch]
+    );
     const displayedTotalValue = priceMode === "instant"
         ? totals?.instant_sell_value
         : totals?.suggested_listing_value;
@@ -523,7 +575,6 @@ function App() {
         const normalized = notificationSourceOrder.filter((value) => next.has(value));
         setNotifySources(normalized.length > 0 ? normalized.join(",") : noNotificationSources);
     };
-    const bestSellItems = state?.best_to_sell_now || [];
     const activeMarketableItemsTab: MarketableItemsTab = marketableItemsTab === "best" && bestSellItems.length === 0
         ? "all"
         : marketableItemsTab;
@@ -990,18 +1041,31 @@ function App() {
                             <MarketableItemsTabsPanel
                                 activeTab={activeMarketableItemsTab}
                                 onTabChange={setMarketableItemsTab}
-                                bestItems={bestSellItems}
+                                bestItems={filteredBestSellItems}
+                                bestTotalCount={bestSellItems.length}
                                 items={filteredItems}
                                 totalCount={allItems.length}
                                 state={state}
                                 currentLanguage={currentLanguage}
                                 priceMode={priceMode}
+                                bestRarityFilter={bestRarityFilter}
+                                bestEquipmentFilter={bestEquipmentFilter}
+                                bestOwnershipFilter={bestOwnershipFilter}
+                                bestSortMode={bestSortMode}
                                 rarityFilter={rarityFilter}
                                 equipmentFilter={equipmentFilter}
                                 sortMode={sortMode}
+                                bestRarityOptions={bestRarityOptions}
+                                bestEquipmentOptions={bestEquipmentOptions}
                                 rarityOptions={rarityOptions}
                                 equipmentOptions={equipmentOptions}
+                                bestSearchTerm={bestItemSearch}
                                 searchTerm={itemSearch}
+                                onBestRarityChange={setBestRarityFilter}
+                                onBestEquipmentChange={setBestEquipmentFilter}
+                                onBestOwnershipChange={(value) => setBestOwnershipFilter(value as BestOwnershipFilter)}
+                                onBestSortChange={(value) => setBestSortMode(value as BestSortMode)}
+                                onBestSearchChange={setBestItemSearch}
                                 onRarityChange={setRarityFilter}
                                 onEquipmentChange={setEquipmentFilter}
                                 onSortChange={(value) => setSortMode(value as SortMode)}

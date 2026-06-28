@@ -60,6 +60,7 @@ const (
 	WM_APP_HOTKEY_UPDATE      = 0x800A
 	WM_APP_HOTKEY_DISABLE     = 0x800B
 	WM_APP_HOTKEY_ENABLE      = 0x800C
+	WM_APP_UPDATE_PROMPT      = 0x800D
 	SW_HIDE                   = 0
 	SW_SHOWDEFAULT            = 10
 	SW_SHOWNA                 = 8

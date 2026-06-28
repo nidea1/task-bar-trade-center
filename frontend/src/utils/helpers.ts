@@ -3,6 +3,8 @@ import {
     DashboardItem,
     PriceMode,
     SortMode,
+    BestOwnershipFilter,
+    BestSortMode,
     DropdownOption,
     RarityMeta,
     ThemeMode
@@ -186,6 +188,66 @@ export function filterAndSortItems(
             default:
                 return itemUnitValue(b, priceMode) - itemUnitValue(a, priceMode)
                     || itemTotalValue(b, priceMode) - itemTotalValue(a, priceMode);
+        }
+    });
+}
+
+export function filterAndSortBestItems(
+    items: DashboardItem[],
+    rarityFilter: string,
+    equipmentFilter: string,
+    ownershipFilter: BestOwnershipFilter,
+    sortMode: BestSortMode,
+    priceMode: PriceMode,
+    searchTerm: string
+): DashboardItem[] {
+    const query = searchTerm.trim().toLowerCase();
+    const filtered = items.filter((item) => {
+        if (rarityFilter !== "all" && item.grade !== rarityFilter) {
+            return false;
+        }
+        if (equipmentFilter !== "all" && equipmentFilterValue(item) !== equipmentFilter) {
+            return false;
+        }
+        if (ownershipFilter === "equipped" && !item.equipped) {
+            return false;
+        }
+        if (ownershipFilter === "unequipped" && item.equipped) {
+            return false;
+        }
+        if (query) {
+            const searchable = [
+                item.name,
+                item.market_hash_name,
+                String(item.item_id),
+            ].join(" ").toLowerCase();
+            if (!searchable.includes(query)) {
+                return false;
+            }
+        }
+        return true;
+    });
+
+    return [...filtered].sort((a, b) => {
+        switch (sortMode) {
+            case "score_asc":
+                return (a.sell_score || 0) - (b.sell_score || 0)
+                    || itemUnitValue(b, priceMode) - itemUnitValue(a, priceMode);
+            case "price_desc":
+                return itemUnitValue(b, priceMode) - itemUnitValue(a, priceMode)
+                    || (b.sell_score || 0) - (a.sell_score || 0);
+            case "price_asc":
+                return itemUnitValue(a, priceMode) - itemUnitValue(b, priceMode)
+                    || (b.sell_score || 0) - (a.sell_score || 0);
+            case "name_asc":
+                return (a.name || a.market_hash_name).localeCompare(b.name || b.market_hash_name);
+            case "rarity_desc":
+                return rarityRank(b.grade) - rarityRank(a.grade)
+                    || (b.sell_score || 0) - (a.sell_score || 0);
+            case "score_desc":
+            default:
+                return (b.sell_score || 0) - (a.sell_score || 0)
+                    || itemUnitValue(b, priceMode) - itemUnitValue(a, priceMode);
         }
     });
 }

@@ -51,6 +51,7 @@ type App struct {
 	configurationStatus  atomic.Int32
 	updateStatus         atomic.Int32
 	appInitialized       atomic.Bool
+	shutdownRequested    atomic.Bool
 	minRarityNotifyLevel atomic.Int32
 
 	// Game process info

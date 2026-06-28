@@ -64,7 +64,7 @@ func TestCheckForUpdates_UpToDate(t *testing.T) {
 	}
 }
 
-func TestCheckForUpdates_RecordsAvailableUpdateWithoutPrompt(t *testing.T) {
+func TestCheckForUpdates_RecordsAvailableUpdateAndKeepsInstallerForLater(t *testing.T) {
 	// Setup test server
 	mockRelease := GitHubRelease{
 		TagName: "v99.0.0",
@@ -89,8 +89,11 @@ func TestCheckForUpdates_RecordsAvailableUpdateWithoutPrompt(t *testing.T) {
 		showYesNoMessageBoxMock = oldYesNo
 		showInfoMessageBoxMock = oldInfo
 	}()
+	var promptTitle string
+	var promptMessage string
 	showYesNoMessageBoxMock = func(title, message string) bool {
-		t.Fatalf("unexpected update prompt: %s - %s", title, message)
+		promptTitle = title
+		promptMessage = message
 		return false
 	}
 	showInfoMessageBoxMock = func(title, message string) {
@@ -105,6 +108,9 @@ func TestCheckForUpdates_RecordsAvailableUpdateWithoutPrompt(t *testing.T) {
 	downloadURL, releaseURL := updateActionURLs()
 	if downloadURL != "https://example.com/tbtc.exe" || releaseURL != mockRelease.HTMLURL {
 		t.Fatalf("update URLs = %q, %q", downloadURL, releaseURL)
+	}
+	if promptTitle == "" || promptMessage == "" {
+		t.Fatal("available update did not prompt the user")
 	}
 }
 
@@ -198,10 +204,13 @@ func TestRequestElevatedRestartReportsLaunchFailureWithoutClosing(t *testing.T) 
 func TestHandleGameClosedPromptsForAppExit(t *testing.T) {
 	originalShowYesNoMessageBoxMock := showYesNoMessageBoxMock
 	originalStatus := activeApp.appStatus.Load()
+	originalShutdownRequested := activeApp.shutdownRequested.Load()
 	t.Cleanup(func() {
 		showYesNoMessageBoxMock = originalShowYesNoMessageBoxMock
 		activeApp.appStatus.Store(originalStatus)
+		activeApp.shutdownRequested.Store(originalShutdownRequested)
 	})
+	activeApp.shutdownRequested.Store(false)
 
 	showYesNoMessageBoxMock = func(title, message string) bool {
 		if title != tr("dialog.game_closed.title") {
@@ -236,9 +245,11 @@ func TestRequestAppShutdown_PostsWMCloseToAppHWND(t *testing.T) {
 
 	// Set a sentinel activeApp.appHWND so we can verify it is used.
 	originalAppHWND := activeApp.appHWND
+	originalShutdownRequested := activeApp.shutdownRequested.Load()
 	activeApp.appHWND = 0xDEAD_BEEF
 	t.Cleanup(func() {
 		activeApp.appHWND = originalAppHWND
+		activeApp.shutdownRequested.Store(originalShutdownRequested)
 		win32.ProcPostMessageW = originalPostMessageW
 	})
 
@@ -266,11 +277,14 @@ func TestHandleGameClosedUsesRequestAppShutdown(t *testing.T) {
 	originalShowYesNoMessageBoxMock := showYesNoMessageBoxMock
 	originalAppHWND := activeApp.appHWND
 	originalStatus := activeApp.appStatus.Load()
+	originalShutdownRequested := activeApp.shutdownRequested.Load()
 	t.Cleanup(func() {
 		showYesNoMessageBoxMock = originalShowYesNoMessageBoxMock
 		activeApp.appHWND = originalAppHWND
 		activeApp.appStatus.Store(originalStatus)
+		activeApp.shutdownRequested.Store(originalShutdownRequested)
 	})
+	activeApp.shutdownRequested.Store(false)
 
 	// Set activeApp.appHWND to 0 so requestAppShutdown is a safe no-op
 	activeApp.appHWND = 0

@@ -198,6 +198,11 @@ func appWndProc(hWnd uintptr, msg uint32, wParam uintptr, lParam uintptr) uintpt
 			return 1
 		}
 		return 0
+	case WM_APP_UPDATE_PROMPT:
+		if showInstallUpdatePrompt() {
+			return 1
+		}
+		return 0
 	case WM_APP_OPEN_TRAY_MENU:
 		showTrayMenu()
 		return 0
@@ -351,6 +356,7 @@ func appLanguageForMenuCommand(commandID uint32) (string, bool) {
 // requestAppShutdown posts WM_CLOSE to the app window and asks the Wails host
 // to quit. It is safe to call from any goroutine.
 func requestAppShutdown() {
+	activeApp.shutdownRequested.Store(true)
 	if activeApp.appHWND != 0 {
 		win32.ProcPostMessageW.Call(activeApp.appHWND, WM_CLOSE, 0, 0)
 	}

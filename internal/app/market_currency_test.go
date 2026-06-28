@@ -14,14 +14,15 @@ import (
 )
 
 func TestSupportedMarketCurrenciesAndRegions(t *testing.T) {
-	if len(supportedMarketCurrencies) != 15 {
-		t.Fatalf("supported currency count = %d, want 15", len(supportedMarketCurrencies))
+	if len(supportedMarketCurrencies) != 16 {
+		t.Fatalf("supported currency count = %d, want 16", len(supportedMarketCurrencies))
 	}
 
 	wantIDs := map[string]int{
 		"USD": 1,
 		"EUR": 3,
 		"PHP": 12,
+		"CLP": 25,
 	}
 	seenCurrencies := make(map[string]struct{}, len(supportedMarketCurrencies))
 	for _, currency := range supportedMarketCurrencies {
@@ -139,6 +140,7 @@ func TestMarketScopeURLBuilders(t *testing.T) {
 		{currency: "EUR", country: "DE", wantID: "3"},
 		{currency: "EUR", country: "FR", wantID: "3"},
 		{currency: "PHP", country: "PH", wantID: "12"},
+		{currency: "CLP", country: "CL", wantID: "25"},
 	}
 
 	for _, tt := range tests {

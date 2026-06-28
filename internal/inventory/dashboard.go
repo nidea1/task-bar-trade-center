@@ -153,7 +153,7 @@ func BuildDashboard(snapshot playerdata.InventorySnapshot, catalog map[int]ItemD
 		Totals:         totals,
 		Items:          items,
 		MostValuable:   limitItems(items, 25),
-		BestToSellNow:  bestItemsToSellNow(items, 12),
+		BestToSellNow:  bestItemsToSellNow(items),
 		Duplicates:     duplicateItems(items, 25),
 		Equipped:       equippedItems(items, 25),
 		MissingPrices:  missingPriceItems(items, 25),
@@ -253,7 +253,7 @@ func missingPriceItems(items []DashboardItem, limit int) []DashboardItem {
 	return limitItems(filtered, limit)
 }
 
-func bestItemsToSellNow(items []DashboardItem, limit int) []DashboardItem {
+func bestItemsToSellNow(items []DashboardItem) []DashboardItem {
 	filtered := make([]DashboardItem, 0)
 	for _, item := range items {
 		if item.SellScore >= 45 {
@@ -266,7 +266,7 @@ func bestItemsToSellNow(items []DashboardItem, limit int) []DashboardItem {
 		}
 		return filtered[i].SellScore > filtered[j].SellScore
 	})
-	return limitItems(filtered, limit)
+	return filtered
 }
 
 func sellNowScore(item DashboardItem) (float64, []string) {

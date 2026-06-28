@@ -1,14 +1,15 @@
 import React from 'react';
 import { Package, ExternalLink } from 'lucide-react';
-import { DashboardItem, DashboardState } from '../types';
+import { DashboardItem, DashboardState, PriceMode } from '../types';
 import { OpenMarketListing } from '../../wailsjs/go/main/App';
-import { rarityMeta, formatPrice, formatNumber } from '../utils/helpers';
+import { rarityMeta, formatPrice, formatNumber, itemUnitValue } from '../utils/helpers';
 import { bestSellReasonLabel } from '../utils/translations';
 
 interface BestItemsToSellNowContentProps {
     items: DashboardItem[];
     state: DashboardState | null;
     currentLanguage: string;
+    priceMode: PriceMode;
     t: (key: string, fallback: string) => string;
 }
 
@@ -16,6 +17,7 @@ export function BestItemsToSellNowContent({
     items,
     state,
     currentLanguage,
+    priceMode,
     t
 }: BestItemsToSellNowContentProps) {
     return (
@@ -59,7 +61,7 @@ export function BestItemsToSellNowContent({
                                         <ExternalLink className="w-3 h-3" />
                                     </div>
                                     <div className="best-sell-price">
-                                        <span>{formatPrice(item.suggested, state, item)}</span>
+                                        <span>{formatPrice(itemUnitValue(item, priceMode), state, item)}</span>
                                         <span>{t("dashboard.weekly_avg", "Weekly avg")} {weeklyAverageText}</span>
                                     </div>
                                 </div>

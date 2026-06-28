@@ -258,6 +258,9 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 
 func handleGameClosed() bool {
 	shouldClose := askGameClosedOnUIThread()
+	if shouldClose {
+		activeApp.shutdownRequested.Store(true)
+	}
 	resetGameProcess()
 	if !shouldClose {
 		return false

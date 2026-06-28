@@ -4,6 +4,8 @@ import {
     DashboardState,
     PriceMode,
     SortMode,
+    BestOwnershipFilter,
+    BestSortMode,
     MarketableItemsTab,
     DropdownOption
 } from '../types';
@@ -15,17 +17,30 @@ interface MarketableItemsTabsPanelProps {
     activeTab: MarketableItemsTab;
     onTabChange: (tab: MarketableItemsTab) => void;
     bestItems: DashboardItem[];
+    bestTotalCount: number;
     items: DashboardItem[];
     totalCount: number;
     state: DashboardState | null;
     currentLanguage: string;
     priceMode: PriceMode;
+    bestRarityFilter: string;
+    bestEquipmentFilter: string;
+    bestOwnershipFilter: BestOwnershipFilter;
+    bestSortMode: BestSortMode;
     rarityFilter: string;
     equipmentFilter: string;
     sortMode: SortMode;
+    bestRarityOptions: DropdownOption[];
+    bestEquipmentOptions: DropdownOption[];
     rarityOptions: DropdownOption[];
     equipmentOptions: DropdownOption[];
+    bestSearchTerm: string;
     searchTerm: string;
+    onBestRarityChange: (value: string) => void;
+    onBestEquipmentChange: (value: string) => void;
+    onBestOwnershipChange: (value: string) => void;
+    onBestSortChange: (value: string) => void;
+    onBestSearchChange: (value: string) => void;
     onRarityChange: (value: string) => void;
     onEquipmentChange: (value: string) => void;
     onSortChange: (value: string) => void;
@@ -38,17 +53,30 @@ export function MarketableItemsTabsPanel({
     activeTab,
     onTabChange,
     bestItems,
+    bestTotalCount,
     items,
     totalCount,
     state,
     currentLanguage,
     priceMode,
+    bestRarityFilter,
+    bestEquipmentFilter,
+    bestOwnershipFilter,
+    bestSortMode,
     rarityFilter,
     equipmentFilter,
     sortMode,
+    bestRarityOptions,
+    bestEquipmentOptions,
     rarityOptions,
     equipmentOptions,
+    bestSearchTerm,
     searchTerm,
+    onBestRarityChange,
+    onBestEquipmentChange,
+    onBestOwnershipChange,
+    onBestSortChange,
+    onBestSearchChange,
     onRarityChange,
     onEquipmentChange,
     onSortChange,
@@ -64,13 +92,13 @@ export function MarketableItemsTabsPanel({
                         type="button"
                         role="tab"
                         aria-selected={activeTab === "best"}
-                        disabled={bestItems.length === 0}
+                        disabled={bestTotalCount === 0}
                         onClick={() => onTabChange("best")}
                         className={`marketable-tab ${activeTab === "best" ? "is-active" : ""}`}
                     >
                         <TrendingUp className="w-3.5 h-3.5" />
                         <span>{t("dashboard.best_items_to_sell_now", "Best Items to Sell Now")}</span>
-                        <strong>{bestItems.length}</strong>
+                        <strong>{bestItems.length === bestTotalCount ? bestTotalCount : `${bestItems.length}/${bestTotalCount}`}</strong>
                     </button>
                     <button
                         type="button"
@@ -85,9 +113,57 @@ export function MarketableItemsTabsPanel({
                     </button>
                 </div>
 
+                {activeTab === "best" && (
+                    <div className="inventory-filter-row inventory-filter-row-best no-drag">
+                        <label className="inventory-search inventory-filter-search">
+                            <Search className="w-3.5 h-3.5" />
+                            <input
+                                value={bestSearchTerm}
+                                onChange={(event) => onBestSearchChange(event.target.value)}
+                                placeholder={searchPlaceholder}
+                            />
+                        </label>
+                        <GameDropdown
+                            value={bestRarityFilter}
+                            options={[{ value: "all", label: t("dashboard.all_rarities", "All Rarities") }, ...bestRarityOptions]}
+                            onChange={onBestRarityChange}
+                            className="inventory-filter-control"
+                        />
+                        <GameDropdown
+                            value={bestEquipmentFilter}
+                            options={[{ value: "all", label: t("dashboard.all_equipment", "All Types") }, ...bestEquipmentOptions]}
+                            onChange={onBestEquipmentChange}
+                            className="inventory-filter-control"
+                        />
+                        <GameDropdown
+                            value={bestOwnershipFilter}
+                            options={[
+                                { value: "all", label: t("dashboard.all_equipped_states", "All States") },
+                                { value: "equipped", label: t("dashboard.equipped", "Equipped") },
+                                { value: "unequipped", label: t("dashboard.unequipped", "Unequipped") },
+                            ]}
+                            onChange={onBestOwnershipChange}
+                            className="inventory-filter-control"
+                        />
+                        <GameDropdown
+                            value={bestSortMode}
+                            options={[
+                                { value: "score_desc", label: t("dashboard.sort_score_desc", "Score High-Low") },
+                                { value: "score_asc", label: t("dashboard.sort_score_asc", "Score Low-High") },
+                                { value: "price_desc", label: t("dashboard.sort_price_desc", "Unit Price High-Low") },
+                                { value: "price_asc", label: t("dashboard.sort_price_asc", "Unit Price Low-High") },
+                                { value: "name_asc", label: t("dashboard.sort_name_asc", "Name A-Z") },
+                                { value: "rarity_desc", label: t("dashboard.sort_rarity_desc", "Rarity High-Low") },
+                            ]}
+                            onChange={onBestSortChange}
+                            className="inventory-filter-control inventory-filter-sort"
+                        />
+                    </div>
+                )}
+
                 {activeTab === "all" && (
-                    <div className="inventory-filter-row no-drag">
-                        <label className="inventory-search">
+                    <div className="inventory-filter-row inventory-filter-row-all no-drag">
+                        <label className="inventory-search inventory-filter-search">
                             <Search className="w-3.5 h-3.5" />
                             <input
                                 value={searchTerm}
@@ -99,13 +175,13 @@ export function MarketableItemsTabsPanel({
                             value={rarityFilter}
                             options={[{ value: "all", label: t("dashboard.all_rarities", "All Rarities") }, ...rarityOptions]}
                             onChange={onRarityChange}
-                            className="min-w-[128px]"
+                            className="inventory-filter-control"
                         />
                         <GameDropdown
                             value={equipmentFilter}
                             options={[{ value: "all", label: t("dashboard.all_equipment", "All Types") }, ...equipmentOptions]}
                             onChange={onEquipmentChange}
-                            className="min-w-[128px]"
+                            className="inventory-filter-control"
                         />
                         <GameDropdown
                             value={sortMode}
@@ -117,7 +193,7 @@ export function MarketableItemsTabsPanel({
                                 { value: "rarity_desc", label: t("dashboard.sort_rarity_desc", "Rarity High-Low") },
                             ]}
                             onChange={onSortChange}
-                            className="min-w-[142px]"
+                            className="inventory-filter-control inventory-filter-sort"
                         />
                     </div>
                 )}
@@ -130,6 +206,7 @@ export function MarketableItemsTabsPanel({
                     items={bestItems}
                     state={state}
                     currentLanguage={currentLanguage}
+                    priceMode={priceMode}
                     t={t}
                 />
             ) : (

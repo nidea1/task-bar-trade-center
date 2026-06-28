@@ -119,15 +119,19 @@ type DashboardFooterInfo struct {
 }
 
 type DashboardSettings struct {
-	ThemeMode          string `json:"theme_mode"`
-	PriceMode          string `json:"price_mode"`
-	RarityFilter       string `json:"rarity_filter"`
-	EquipmentFilter    string `json:"equipment_filter"`
-	SortMode           string `json:"sort_mode"`
-	MarketableItemsTab string `json:"marketable_items_tab"`
-	NotifySources      string `json:"notify_sources"`
-	HotkeyModifiers    int    `json:"hotkey_modifiers"`
-	HotkeyVK           int    `json:"hotkey_vk"`
+	ThemeMode           string `json:"theme_mode"`
+	PriceMode           string `json:"price_mode"`
+	RarityFilter        string `json:"rarity_filter"`
+	EquipmentFilter     string `json:"equipment_filter"`
+	SortMode            string `json:"sort_mode"`
+	BestRarityFilter    string `json:"best_rarity_filter"`
+	BestEquipmentFilter string `json:"best_equipment_filter"`
+	BestOwnershipFilter string `json:"best_ownership_filter"`
+	BestSortMode        string `json:"best_sort_mode"`
+	MarketableItemsTab  string `json:"marketable_items_tab"`
+	NotifySources       string `json:"notify_sources"`
+	HotkeyModifiers     int    `json:"hotkey_modifiers"`
+	HotkeyVK            int    `json:"hotkey_vk"`
 }
 
 const (
@@ -148,15 +152,19 @@ var notificationSourceOrder = []string{
 
 func defaultDashboardSettings() DashboardSettings {
 	return DashboardSettings{
-		ThemeMode:          "dark",
-		PriceMode:          "suggested",
-		RarityFilter:       "all",
-		EquipmentFilter:    "all",
-		SortMode:           "price_desc",
-		MarketableItemsTab: "all",
-		NotifySources:      notificationSourcesAll,
-		HotkeyModifiers:    0,
-		HotkeyVK:           VK_F2,
+		ThemeMode:           "dark",
+		PriceMode:           "suggested",
+		RarityFilter:        "all",
+		EquipmentFilter:     "all",
+		SortMode:            "price_desc",
+		BestRarityFilter:    "all",
+		BestEquipmentFilter: "all",
+		BestOwnershipFilter: "all",
+		BestSortMode:        "score_desc",
+		MarketableItemsTab:  "all",
+		NotifySources:       notificationSourcesAll,
+		HotkeyModifiers:     0,
+		HotkeyVK:            VK_F2,
 	}
 }
 
@@ -179,6 +187,20 @@ func normalizeDashboardSettings(settings DashboardSettings) DashboardSettings {
 	switch settings.SortMode {
 	case "price_desc", "price_asc", "name_asc", "count_desc", "rarity_desc":
 		normalized.SortMode = settings.SortMode
+	}
+	if settings.BestRarityFilter != "" {
+		normalized.BestRarityFilter = settings.BestRarityFilter
+	}
+	if settings.BestEquipmentFilter != "" {
+		normalized.BestEquipmentFilter = settings.BestEquipmentFilter
+	}
+	switch settings.BestOwnershipFilter {
+	case "all", "equipped", "unequipped":
+		normalized.BestOwnershipFilter = settings.BestOwnershipFilter
+	}
+	switch settings.BestSortMode {
+	case "score_desc", "score_asc", "price_desc", "price_asc", "name_asc", "rarity_desc":
+		normalized.BestSortMode = settings.BestSortMode
 	}
 	switch settings.MarketableItemsTab {
 	case "best", "all":
@@ -242,19 +264,19 @@ func currentDashboardSettings() DashboardSettings {
 
 func setDashboardSettings(settings DashboardSettings) DashboardSettings {
 	normalized := normalizeDashboardSettings(settings)
-	
+
 	activeApp.dashboardSettingsMu.Lock()
 	oldModifiers := activeApp.dashboardSettings.HotkeyModifiers
 	oldVK := activeApp.dashboardSettings.HotkeyVK
 	activeApp.dashboardSettings = normalized
 	activeApp.dashboardSettingsMu.Unlock()
-	
+
 	if normalized.HotkeyModifiers != oldModifiers || normalized.HotkeyVK != oldVK {
 		if activeApp.appHWND != 0 {
 			win32.ProcPostMessageW.Call(activeApp.appHWND, WM_APP_HOTKEY_UPDATE, 0, 0)
 		}
 	}
-	
+
 	saveSettingsToDisk()
 	return normalized
 }

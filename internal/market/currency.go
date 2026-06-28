@@ -25,6 +25,7 @@ var supportedMarketCurrencies = []MarketCurrency{
 	{Code: "PLN", SteamCurrencyID: 6, DefaultCountry: "PL", PriceSuffix: "zł"},
 	{Code: "CAD", SteamCurrencyID: 20, DefaultCountry: "CA", PricePrefix: "CDN$ "},
 	{Code: "AUD", SteamCurrencyID: 21, DefaultCountry: "AU", PricePrefix: "A$ "},
+	{Code: "CLP", SteamCurrencyID: 25, DefaultCountry: "CL", PricePrefix: "CLP$ "},
 }
 
 var supportedMarketRegions = []MarketRegion{
@@ -53,6 +54,7 @@ var supportedMarketRegions = []MarketRegion{
 	{CountryCode: "PL", Name: "Poland", CurrencyCode: "PLN"},
 	{CountryCode: "CA", Name: "Canada", CurrencyCode: "CAD"},
 	{CountryCode: "AU", Name: "Australia", CurrencyCode: "AUD"},
+	{CountryCode: "CL", Name: "Chile", CurrencyCode: "CLP"},
 }
 
 var marketSelection = struct {
@@ -218,6 +220,7 @@ var fallbackExchangeRates = map[string]float64{
 	"PLN": 4.0,
 	"CAD": 1.37,
 	"AUD": 1.50,
+	"CLP": 940.0,
 }
 
 var (

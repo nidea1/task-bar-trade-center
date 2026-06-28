@@ -13,6 +13,7 @@ func TestTrayNotificationsEmitOnlyForDistinctStateTransitions(t *testing.T) {
 	originalStatus := activeApp.appStatus.Load()
 	originalConfigStatus := activeApp.configurationStatus.Load()
 	originalUpdateStatus := activeApp.updateStatus.Load()
+	originalShutdownRequested := activeApp.shutdownRequested.Load()
 
 	var received []string
 	var receivedTitles []string
@@ -26,6 +27,7 @@ func TestTrayNotificationsEmitOnlyForDistinctStateTransitions(t *testing.T) {
 	activeApp.appStatus.Store(AppStatusStarting)
 	activeApp.configurationStatus.Store(ConfigStatusUnknown)
 	activeApp.updateStatus.Store(UpdateStatusUnknown)
+	activeApp.shutdownRequested.Store(false)
 	clearPendingTrayNotifications()
 
 	t.Cleanup(func() {
@@ -35,6 +37,7 @@ func TestTrayNotificationsEmitOnlyForDistinctStateTransitions(t *testing.T) {
 		activeApp.appStatus.Store(originalStatus)
 		activeApp.configurationStatus.Store(originalConfigStatus)
 		activeApp.updateStatus.Store(originalUpdateStatus)
+		activeApp.shutdownRequested.Store(originalShutdownRequested)
 		applyDisplayLanguagePreference(originalPreference)
 		clearPendingTrayNotifications()
 	})
@@ -63,6 +66,38 @@ func TestTrayNotificationsEmitOnlyForDistinctStateTransitions(t *testing.T) {
 	allNotificationText := strings.Join(append(receivedTitles, received...), "\n")
 	if strings.Contains(allNotificationText, "diagnostic detail") {
 		t.Fatalf("technical diagnostics leaked into tray notification: %q", allNotificationText)
+	}
+}
+
+func TestRuntimeNotificationsAreSuppressedDuringShutdown(t *testing.T) {
+	originalAppHWND := activeApp.appHWND
+	originalTrayIconAdded := activeApp.trayIconAdded
+	originalPublisher := publishTrayNotification
+	originalStatus := activeApp.appStatus.Load()
+	originalShutdownRequested := activeApp.shutdownRequested.Load()
+
+	var received []string
+	activeApp.appHWND = 1
+	activeApp.trayIconAdded = true
+	activeApp.appStatus.Store(AppStatusReady)
+	activeApp.shutdownRequested.Store(true)
+	publishTrayNotification = func(title string, message string, _ uintptr) {
+		received = append(received, title, message)
+	}
+	clearPendingTrayNotifications()
+	t.Cleanup(func() {
+		activeApp.appHWND = originalAppHWND
+		activeApp.trayIconAdded = originalTrayIconAdded
+		publishTrayNotification = originalPublisher
+		activeApp.appStatus.Store(originalStatus)
+		activeApp.shutdownRequested.Store(originalShutdownRequested)
+		clearPendingTrayNotifications()
+	})
+
+	setAppStatus(AppStatusWaitingForGame)
+	flushTrayNotifications()
+	if len(received) != 0 {
+		t.Fatalf("shutdown emitted runtime notifications: %q", received)
 	}
 }
 

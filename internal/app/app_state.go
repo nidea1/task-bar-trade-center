@@ -150,7 +150,7 @@ func notifyApplicationStarted() {
 }
 
 func notifyRuntimeStateChange(previous int32, status int32) {
-	if previous == status || !activeApp.trayIconAdded {
+	if previous == status || !activeApp.trayIconAdded || activeApp.shutdownRequested.Load() {
 		return
 	}
 	if runtimeNeedsAction(status) {

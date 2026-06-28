@@ -156,6 +156,40 @@ func TestBuildDashboardBestItemsToSellNowUsesMarketSignals(t *testing.T) {
 	}
 }
 
+func TestBuildDashboardBestItemsToSellNowIsNotLimitedToTwelve(t *testing.T) {
+	now := time.Unix(1700000000, 0)
+	snapshot := playerdata.InventorySnapshot{ReadAt: now}
+	catalog := make(map[int]ItemDescriptor)
+	quotes := make(quoteMap)
+	for id := 1; id <= 13; id++ {
+		snapshot.Items = append(snapshot.Items, playerdata.OwnedItem{
+			ItemID:     id,
+			UniqueID:   uint64(id),
+			Location:   playerdata.LocationInventory,
+			Marketable: true,
+		})
+		catalog[id] = ItemDescriptor{Name: "Liquid Item", Marketable: true}
+		quotes[id] = PriceQuote{
+			Suggested:        float64(id),
+			SpreadPercent:    6,
+			DailySalesVolume: 120,
+			BuyOrderCount:    80,
+			HasSuggested:     true,
+			HasSpread:        true,
+			HasDailySales:    true,
+			HasOrderBook:     true,
+			Confidence:       "verified",
+			HasConfidence:    true,
+		}
+	}
+
+	state := BuildDashboard(snapshot, catalog, quotes, DashboardOptions{Now: now})
+
+	if len(state.BestToSellNow) != 13 {
+		t.Fatalf("best sell item count = %d, want 13", len(state.BestToSellNow))
+	}
+}
+
 func TestBuildDashboardIncludesEmptyStashPages(t *testing.T) {
 	now := time.Unix(1700000000, 0)
 	snapshot := playerdata.InventorySnapshot{

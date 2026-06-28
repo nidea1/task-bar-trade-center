@@ -1215,6 +1215,9 @@
   gap: 0.75rem;
   padding: 0.75rem;
   background: #030304;
+  max-height: min(620px, calc(100vh - 300px));
+  overflow-y: auto;
+  align-content: start;
 }
 
 .best-sell-card {
@@ -1406,6 +1409,7 @@
 }
 
 .dashboard-items-layout {
+  --dashboard-item-panel-height: min(620px, calc(100vh - 300px));
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
@@ -1419,6 +1423,19 @@
 @media (min-width: 1024px) {
   .dashboard-items-layout.has-missing-prices {
     grid-template-columns: minmax(0, 3fr) minmax(220px, 1fr);
+    grid-auto-rows: var(--dashboard-item-panel-height);
+  }
+
+  .dashboard-items-layout.has-missing-prices > .game-panel {
+    height: var(--dashboard-item-panel-height);
+    max-height: var(--dashboard-item-panel-height);
+  }
+
+  .dashboard-items-layout.has-missing-prices .best-sell-grid,
+  .dashboard-items-layout.has-missing-prices .inventory-card-scroll {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
   }
 }
 
@@ -1458,10 +1475,12 @@
 
 .missing-prices-panel {
   height: 100%;
+  max-height: var(--dashboard-item-panel-height);
 }
 
 .missing-prices-list {
-  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .missing-price-row {
@@ -1620,11 +1639,20 @@
 }
 
 .inventory-filter-row {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  width: 100%;
+  min-width: 0;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: stretch;
   gap: 0.5rem;
+}
+
+.inventory-filter-row-best {
+  grid-template-columns: minmax(145px, 1.35fr) repeat(4, minmax(112px, 1fr));
+}
+
+.inventory-filter-row-all {
+  grid-template-columns: minmax(150px, 1.35fr) repeat(3, minmax(118px, 1fr));
 }
 
 .inventory-search {
@@ -1638,6 +1666,26 @@
   border: 1px solid #463d30;
   border-radius: 3px;
   color: #ffbe2d;
+}
+
+.inventory-filter-search,
+.inventory-filter-control {
+  width: 100%;
+  min-width: 0;
+}
+
+.inventory-filter-control {
+  display: block;
+}
+
+.inventory-filter-control .game-button {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+}
+
+.inventory-filter-control .dashboard-dropdown-content {
+  min-width: 0;
 }
 
 .inventory-search input {
@@ -1654,6 +1702,17 @@
 .inventory-search input::placeholder {
   color: #9a896f;
   font-weight: 600;
+}
+
+@media (max-width: 760px) {
+  .inventory-filter-row-best,
+  .inventory-filter-row-all {
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  }
+
+  .inventory-filter-search {
+    grid-column: 1 / -1;
+  }
 }
 
 .inventory-empty {

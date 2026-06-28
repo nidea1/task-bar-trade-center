@@ -1,6 +1,8 @@
 export type ThemeMode = "dark" | "light";
 export type PriceMode = "suggested" | "instant";
 export type SortMode = "price_desc" | "price_asc" | "name_asc" | "count_desc" | "rarity_desc";
+export type BestSortMode = "score_desc" | "score_asc" | "price_desc" | "price_asc" | "name_asc" | "rarity_desc";
+export type BestOwnershipFilter = "all" | "equipped" | "unequipped";
 export type MarketableItemsTab = "best" | "all";
 export type NotificationSource = "box" | "craft" | "synthesis" | "offering";
 
@@ -10,6 +12,10 @@ export interface DashboardSettings {
     rarity_filter: string;
     equipment_filter: string;
     sort_mode: SortMode;
+    best_rarity_filter: string;
+    best_equipment_filter: string;
+    best_ownership_filter: BestOwnershipFilter;
+    best_sort_mode: BestSortMode;
     marketable_items_tab: MarketableItemsTab;
     notify_sources: string;
     hotkey_modifiers: number;

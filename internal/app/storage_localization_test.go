@@ -56,15 +56,19 @@ func TestSettingsPersistDashboardSettings(t *testing.T) {
 
 	activeApp.settingsFilePath = filepath.Join(t.TempDir(), "settings.json")
 	want := DashboardSettings{
-		ThemeMode:          "light",
-		PriceMode:          "instant",
-		RarityFilter:       "RARE",
-		EquipmentFilter:    "weapon",
-		SortMode:           "rarity_desc",
-		MarketableItemsTab: "best",
-		NotifySources:      "box,offering",
-		HotkeyModifiers:    0,
-		HotkeyVK:           VK_F2,
+		ThemeMode:           "light",
+		PriceMode:           "instant",
+		RarityFilter:        "RARE",
+		EquipmentFilter:     "weapon",
+		SortMode:            "rarity_desc",
+		BestRarityFilter:    "LEGENDARY",
+		BestEquipmentFilter: "SWORD",
+		BestOwnershipFilter: "unequipped",
+		BestSortMode:        "score_asc",
+		MarketableItemsTab:  "best",
+		NotifySources:       "box,offering",
+		HotkeyModifiers:     0,
+		HotkeyVK:            VK_F2,
 	}
 	setDashboardSettings(want)
 
