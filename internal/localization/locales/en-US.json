@@ -172,6 +172,7 @@
   "menu.restart_admin": "Restart as administrator",
   "menu.status": "Status: %s",
   "menu.update_configs": "Update configurations",
+  "menu.game_scale": "Window Scale",
   "notification.action_required": "Right-click the tray icon to act.",
   "notification.admin_restart_failed": "Could not restart as administrator.",
   "notification.configuration": "Configuration — %s",

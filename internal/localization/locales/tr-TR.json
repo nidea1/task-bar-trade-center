@@ -172,6 +172,7 @@
   "menu.restart_admin": "Yönetici olarak yeniden başlat",
   "menu.status": "Durum: %s",
   "menu.update_configs": "Yapılandırmaları güncelle",
+  "menu.game_scale": "Pencere Ölçeği",
   "notification.action_required": "İşlem için tray simgesine sağ tıklayın.",
   "notification.admin_restart_failed": "Yönetici olarak yeniden başlatılamadı.",
   "notification.configuration": "Yapılandırma — %s",

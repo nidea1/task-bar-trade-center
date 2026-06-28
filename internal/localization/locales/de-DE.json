@@ -171,6 +171,7 @@
   "menu.refresh_inventory": "Inventarpreise aktualisieren",
   "menu.restart_admin": "Als Administrator neu starten",
   "menu.status": "Status: %s",
+  "menu.game_scale": "Fensterskalierung",
   "menu.update_configs": "Konfigurationen aktualisieren",
   "notification.action_required": "Rechtsklick auf das Tray-Symbol zum Handeln.",
   "notification.admin_restart_failed": "Konnte nicht als Administrator neu gestartet werden.",

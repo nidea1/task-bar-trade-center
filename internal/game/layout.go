@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -19,7 +20,7 @@ const (
 	LayoutSourceLocalDevelopment = "local-development"
 
 	LayoutPathEnvironment = "TBTC_GAME_LAYOUT_PATH"
-	DefaultLayoutURL      = "https://raw.githubusercontent.com/nidea1/task-bar-trade-center/main/game-layout.json"
+	DefaultLayoutURL      = "https://raw.githubusercontent.com/nidea1/task-bar-trade-center/main/internal/game/game-layout.json"
 )
 
 var (
@@ -47,8 +48,10 @@ type layoutDocument struct {
 		HeightPointerOffsets    []string          `json:"height_pointer_offsets"`
 		HeightPointerBaseAOB    layoutAOBDocument `json:"height_pointer_base_aob"`
 	} `json:"tooltip"`
-	PlacementCalibrations []overlay.PlacementCalibration `json:"placement_calibrations"`
-	XCalibrations         []overlay.XCalibration         `json:"x_calibrations"`
+	PlacementCalibrations []overlay.PlacementCalibration    `json:"placement_calibrations"`
+	XCalibrations         []overlay.XCalibration            `json:"x_calibrations"`
+	ScaleCalibrations     []overlay.ScaleCalibrationProfile `json:"scale_calibrations"`
+	PositionCalibrations  []overlay.PositionCalibration     `json:"position_calibrations"`
 }
 
 type layoutAOBDocument struct {
@@ -76,6 +79,8 @@ type GameLayout struct {
 
 	PlacementCalibrations []overlay.PlacementCalibration
 	XCalibrations         []overlay.XCalibration
+	ScaleCalibrations     []overlay.ScaleCalibrationProfile
+	PositionCalibrations  []overlay.PositionCalibration
 }
 
 func EmbeddedLayoutJSON() []byte {
@@ -104,11 +109,11 @@ func ParseGameLayout(raw []byte) (GameLayout, error) {
 	}
 	hoveredItemPtrOffset := uintptr(0)
 	if document.HoveredItem.ItemPtrOffset != "" {
-		val, err := parseLayoutOffset("hovered_item.item_ptr_offset", document.HoveredItem.ItemPtrOffset)
+		value, err := parseLayoutOffset("hovered_item.item_ptr_offset", document.HoveredItem.ItemPtrOffset)
 		if err != nil {
 			return GameLayout{}, err
 		}
-		hoveredItemPtrOffset = val
+		hoveredItemPtrOffset = value
 	}
 	hoveredKeyOffset, err := parseLayoutOffset("hovered_item.key_offset", document.HoveredItem.KeyOffset)
 	if err != nil {
@@ -182,6 +187,11 @@ func ParseGameLayout(raw []byte) (GameLayout, error) {
 		}
 	}
 
+	scaleCalibrations, err := normalizeScaleCalibrations(document.ScaleCalibrations)
+	if err != nil {
+		return GameLayout{}, err
+	}
+
 	return GameLayout{
 		HoveredItemPointerBaseOffset:   hoveredBase,
 		HoveredItemPointerOffsets:      hoveredOffsets,
@@ -199,7 +209,71 @@ func ParseGameLayout(raw []byte) (GameLayout, error) {
 		TooltipHeightPointerBaseAOB:    heightPointerBaseAOB,
 		PlacementCalibrations:          append([]overlay.PlacementCalibration(nil), document.PlacementCalibrations...),
 		XCalibrations:                  append([]overlay.XCalibration(nil), document.XCalibrations...),
+		ScaleCalibrations:              scaleCalibrations,
+		PositionCalibrations:           append([]overlay.PositionCalibration(nil), document.PositionCalibrations...),
 	}, nil
+}
+
+func normalizeScaleCalibrations(
+	profiles []overlay.ScaleCalibrationProfile,
+) ([]overlay.ScaleCalibrationProfile, error) {
+	if len(profiles) == 0 {
+		return nil, nil
+	}
+
+	result := make([]overlay.ScaleCalibrationProfile, 0, len(profiles))
+	seenScales := make(map[int32]struct{}, len(profiles))
+
+	for profileIndex, profile := range profiles {
+		if profile.ScalePercent <= 0 {
+			return nil, fmt.Errorf("scale_calibrations[%d].scale_percent must be positive", profileIndex)
+		}
+		if _, exists := seenScales[profile.ScalePercent]; exists {
+			return nil, fmt.Errorf("scale_calibrations contains duplicate scale_percent %d", profile.ScalePercent)
+		}
+		seenScales[profile.ScalePercent] = struct{}{}
+
+		if len(profile.XAnchors) < 2 {
+			return nil, fmt.Errorf("scale_calibrations[%d].x_anchors must contain at least two anchors", profileIndex)
+		}
+
+		anchors := append([]overlay.XCalibrationAnchor(nil), profile.XAnchors...)
+		sort.Slice(anchors, func(left, right int) bool {
+			return anchors[left].X < anchors[right].X
+		})
+
+		normalizedAnchors := make([]overlay.XCalibrationAnchor, 0, len(anchors))
+		for anchorIndex, anchor := range anchors {
+			if len(normalizedAnchors) > 0 && anchor.X == normalizedAnchors[len(normalizedAnchors)-1].X {
+				previous := normalizedAnchors[len(normalizedAnchors)-1]
+				if anchor.Offset != previous.Offset {
+					return nil, fmt.Errorf(
+						"scale_calibrations[%d].x_anchors[%d] conflicts with another anchor at x %.6f",
+						profileIndex,
+						anchorIndex,
+						anchor.X,
+					)
+				}
+				continue
+			}
+			normalizedAnchors = append(normalizedAnchors, anchor)
+		}
+
+		if len(normalizedAnchors) < 2 {
+			return nil, fmt.Errorf("scale_calibrations[%d] must contain at least two unique x anchors", profileIndex)
+		}
+
+		result = append(result, overlay.ScaleCalibrationProfile{
+			ScalePercent: profile.ScalePercent,
+			YOffset:      profile.YOffset,
+			XAnchors:     normalizedAnchors,
+		})
+	}
+
+	sort.Slice(result, func(left, right int) bool {
+		return result[left].ScalePercent < result[right].ScalePercent
+	})
+	return result, nil
 }
 
 func ApplyEmbeddedAOBFallback(layout GameLayout, embeddedDefaults []byte) (GameLayout, error) {

@@ -172,6 +172,7 @@
   "menu.restart_admin": "Reiniciar como administrador",
   "menu.status": "Status: %s",
   "menu.update_configs": "Atualizar configurações",
+  "menu.game_scale": "Escala da janela",
   "notification.action_required": "Clique com o botão direito no ícone da bandeja do sistema para agir.",
   "notification.admin_restart_failed": "Não foi possível reiniciar como administrador.",
   "notification.configuration": "Configuração — %s",

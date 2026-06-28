@@ -245,6 +245,10 @@ func trayCallbackEvent(lParam uintptr) uint32 {
 }
 
 func handleTrayCommand(commandID uint32) {
+	if scale, ok := gameScaleForMenuCommand(commandID); ok {
+		selectGameScale(scale)
+		return
+	}
 	if language, ok := appLanguageForMenuCommand(commandID); ok {
 		selectDisplayLanguage(language)
 		return

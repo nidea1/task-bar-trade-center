@@ -172,6 +172,7 @@
   "menu.restart_admin": "Riavvia come amministratore",
   "menu.status": "Stato: %s",
   "menu.update_configs": "Aggiorna configurazioni",
+  "menu.game_scale": "Scala finestra",
   "notification.action_required": "Fai clic con il pulsante destro del mouse sull'icona della barra delle applicazioni per agire.",
   "notification.admin_restart_failed": "Impossibile riavviare come amministratore.",
   "notification.configuration": "Configurazione — %s",

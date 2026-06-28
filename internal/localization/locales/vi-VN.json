@@ -172,6 +172,7 @@
   "menu.restart_admin": "Khởi động lại bằng quyền quản trị",
   "menu.status": "Trạng thái: %s",
   "menu.update_configs": "Cập nhật cấu hình",
+  "menu.game_scale": "Tỷ lệ cửa sổ",
   "notification.action_required": "Nhấp chuột phải vào biểu tượng khay hệ thống để thực hiện.",
   "notification.admin_restart_failed": "Không thể khởi động lại bằng quyền quản trị viên.",
   "notification.configuration": "Cấu hình — %s",

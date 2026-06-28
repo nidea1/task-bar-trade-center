@@ -172,6 +172,7 @@
   "menu.restart_admin": "Mulai ulang sebagai administrator",
   "menu.status": "Status: %s",
   "menu.update_configs": "Perbarui konfigurasi",
+  "menu.game_scale": "Skala Jendela",
   "notification.action_required": "Klik kanan ikon tray untuk bertindak.",
   "notification.admin_restart_failed": "Tidak dapat memulai ulang sebagai administrator.",
   "notification.configuration": "Konfigurasi — %s",

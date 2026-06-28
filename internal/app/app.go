@@ -1,9 +1,6 @@
 package app
 
 import (
-	"github.com/nidea1/task-bar-trade-center/internal/market"
-	"github.com/nidea1/task-bar-trade-center/internal/win32"
-
 	"fmt"
 	"runtime"
 	"syscall"
@@ -11,6 +8,8 @@ import (
 	"unsafe"
 
 	"github.com/nidea1/task-bar-trade-center/internal/game"
+	"github.com/nidea1/task-bar-trade-center/internal/market"
+	"github.com/nidea1/task-bar-trade-center/internal/win32"
 )
 
 func Run() {
@@ -81,6 +80,7 @@ func startMonitoringAfterLocalInitialization() {
 	}
 	registerDashboardHotkey()
 	installMarketClickHook()
+	go watchLocalGameLayoutChanges()
 	go attachGameAndWatchHoveredItems()
 	go checkUpdatesOnStartup()
 	go refreshGameLayoutInBackground()
@@ -225,6 +225,7 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 						name = config.Name["en-US"]
 					}
 					setCurrentItemName(name)
+					logCurrentTooltipCalibration()
 					logPrintf("Mouse is over item: %s (ID: %d)\n", getCurrentItemName(), currentItemID)
 					logPrintf("Item ID read mode: %s\n", readMode)
 					if EnablePriceHUD {

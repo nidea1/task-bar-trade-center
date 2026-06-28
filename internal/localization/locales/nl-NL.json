@@ -172,6 +172,7 @@
   "menu.restart_admin": "Opnieuw opstarten als administrator",
   "menu.status": "Status: %s",
   "menu.update_configs": "Configuraties bijwerken",
+  "menu.game_scale": "Vensterschaal",
   "notification.action_required": "Klik met de rechtermuisknop op het systeemvakpictogram om actie te ondernemen.",
   "notification.admin_restart_failed": "Kan niet opnieuw opstarten als administrator.",
   "notification.configuration": "Configuratie — %s",

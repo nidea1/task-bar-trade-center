@@ -172,6 +172,7 @@
   "menu.restart_admin": "เริ่มต้นใหม่ในฐานะผู้ดูแลระบบ",
   "menu.status": "สถานะ: %s",
   "menu.update_configs": "อัปเดตการตั้งค่า",
+  "menu.game_scale": "ขนาดหน้าต่าง",
   "notification.action_required": "คลิกขวาที่ไอคอนระบบเพื่อดำเนินการ",
   "notification.admin_restart_failed": "ไม่สามารถเริ่มต้นใหม่ในฐานะผู้ดูแลระบบได้",
   "notification.configuration": "การตั้งค่า — %s",

@@ -172,6 +172,7 @@
   "menu.restart_admin": "Redémarrer en administrateur",
   "menu.status": "État : %s",
   "menu.update_configs": "Mettre à jour les configurations",
+  "menu.game_scale": "Échelle de la fenêtre",
   "notification.action_required": "Faites un clic droit sur l'icône de la barre d'état pour agir.",
   "notification.admin_restart_failed": "Impossible de redémarrer en tant qu'administrateur.",
   "notification.configuration": "Configuration — %s",

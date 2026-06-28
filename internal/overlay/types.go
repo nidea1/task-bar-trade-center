@@ -48,6 +48,38 @@ type XCalibration struct {
 	Offset int32   `json:"offset"`
 }
 
+// XCalibrationAnchor is a measured point in a scale profile. Values between
+// two anchors are resolved with linear interpolation.
+type XCalibrationAnchor struct {
+	X      float32 `json:"x"`
+	Offset int32   `json:"offset"`
+}
+
+// ScaleCalibrationProfile contains the values shared by every tooltip at one
+// game UI scale. YOffset is stored once because it does not depend on tooltip Y.
+type ScaleCalibrationProfile struct {
+	ScalePercent int32                `json:"scale_percent"`
+	YOffset      int32                `json:"y_offset"`
+	XAnchors     []XCalibrationAnchor `json:"x_anchors"`
+}
+
+// PositionCalibration is the legacy 2D calibration format. It remains readable
+// so older remote or cached layouts continue to work during migration. New
+// layouts should use ScaleCalibrationProfile instead.
+type PositionCalibration struct {
+	Scale   float32 `json:"scale,omitempty"`
+	X       float32 `json:"x"`
+	Y       float32 `json:"y"`
+	XOffset int32   `json:"x_offset"`
+	YOffset int32   `json:"y_offset"`
+}
+
+type PositionOffset struct {
+	XOffset      int32
+	YOffset      int32
+	ScalePercent int32
+}
+
 func CalculateRequiredHeight(data PriceView, mode int32, compactMode int32) int32 {
 	y := int32(94)
 

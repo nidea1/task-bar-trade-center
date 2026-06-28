@@ -2,7 +2,15 @@
   "schema_version": 3,
   "hovered_item": {
     "pointer_base_offset": "0x05DF8198",
-    "pointer_offsets": ["0x40", "0x88", "0x10", "0xB8", "0x8", "0x20", "0x338"],
+    "pointer_offsets": [
+      "0x40",
+      "0x88",
+      "0x10",
+      "0xB8",
+      "0x8",
+      "0x20",
+      "0x338"
+    ],
     "item_ptr_offset": "0x10",
     "key_offset": "0x30",
     "pointer_base_aob": {
@@ -13,21 +21,45 @@
   },
   "tooltip": {
     "x_pointer_base_offset": "0x05E17C80",
-    "x_pointer_offsets": ["0xB8", "0x0", "0x60", "0x10", "0x20", "0x90", "0x170"],
+    "x_pointer_offsets": [
+      "0xB8",
+      "0x0",
+      "0x60",
+      "0x10",
+      "0x20",
+      "0x90",
+      "0x170"
+    ],
     "x_pointer_base_aob": {
       "pattern": "48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? C6 05 ?? ?? ?? ?? 01 48 8B 0D ?? ?? ?? ?? 83 B9 E4 00 00 00 00 75 05 E8 ?? ?? ?? ?? 48 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ??",
       "displacement_offset": 27,
       "instruction_end_offset": 31
     },
     "y_pointer_base_offset": "0x05DF8198",
-    "y_pointer_offsets": ["0xB8", "0x10", "0x30", "0x20", "0x90", "0x40", "0xAC"],
+    "y_pointer_offsets": [
+      "0xB8",
+      "0x10",
+      "0x30",
+      "0x20",
+      "0x90",
+      "0x40",
+      "0xAC"
+    ],
     "y_pointer_base_aob": {
       "pattern": "48 83 EC 28 80 3D ?? ?? ?? ?? 00 75 13 48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? C6 05 ?? ?? ?? ?? 01 48 8B 05 ?? ?? ?? ?? 48 8B 80 B8 00 00 00 0F B6 00 48 83 C4 28 C3",
       "displacement_offset": 35,
       "instruction_end_offset": 39
     },
     "height_pointer_base_offset": "0x05DA01C8",
-    "height_pointer_offsets": ["0xB8", "0x0", "0xB0", "0x130", "0x300", "0x10", "0x614"],
+    "height_pointer_offsets": [
+      "0xB8",
+      "0x0",
+      "0xB0",
+      "0x130",
+      "0x300",
+      "0x10",
+      "0x614"
+    ],
     "height_pointer_base_aob": {
       "pattern": "48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? C6 05 ?? ?? ?? ?? 01 48 8B 0D ?? ?? ?? ?? 83 B9 E4 00 00 00 00 75 05 E8 ?? ?? ?? ?? 48 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ??",
       "displacement_offset": 3,
@@ -35,51 +67,402 @@
     }
   },
   "placement_calibrations": [
-    {"tooltip_y": 173, "tooltip_height": 348, "panel_width": 200, "offset_y": 116},
-    {"tooltip_y": 199, "tooltip_height": 398, "panel_width": 200, "offset_y": 66},
-    {"tooltip_y": 157, "tooltip_height": 314, "panel_width": 200, "offset_y": 150},
-    {"tooltip_y": 207, "tooltip_height": 414, "panel_width": 200, "offset_y": 49},
-    {"tooltip_y": 222, "tooltip_height": 445, "panel_width": 200, "offset_y": 19},
-    {"tooltip_y": 274, "tooltip_height": 548, "panel_width": 200, "offset_y": -153},
-    {"tooltip_y": 182, "tooltip_height": 364, "panel_width": 200, "offset_y": 100},
-    {"tooltip_y": 132, "tooltip_height": 264, "panel_width": 200, "offset_y": 200},
-    {"tooltip_y": 216, "tooltip_height": 431, "panel_width": 200, "offset_y": 32}
+    {
+      "tooltip_y": 173,
+      "tooltip_height": 348,
+      "panel_width": 200,
+      "offset_y": 116
+    },
+    {
+      "tooltip_y": 199,
+      "tooltip_height": 398,
+      "panel_width": 200,
+      "offset_y": 66
+    },
+    {
+      "tooltip_y": 157,
+      "tooltip_height": 314,
+      "panel_width": 200,
+      "offset_y": 150
+    },
+    {
+      "tooltip_y": 207,
+      "tooltip_height": 414,
+      "panel_width": 200,
+      "offset_y": 49
+    },
+    {
+      "tooltip_y": 222,
+      "tooltip_height": 445,
+      "panel_width": 200,
+      "offset_y": 19
+    },
+    {
+      "tooltip_y": 274,
+      "tooltip_height": 548,
+      "panel_width": 200,
+      "offset_y": -153
+    },
+    {
+      "tooltip_y": 182,
+      "tooltip_height": 364,
+      "panel_width": 200,
+      "offset_y": 100
+    },
+    {
+      "tooltip_y": 132,
+      "tooltip_height": 264,
+      "panel_width": 200,
+      "offset_y": 200
+    },
+    {
+      "tooltip_y": 216,
+      "tooltip_height": 431,
+      "panel_width": 200,
+      "offset_y": 32
+    }
   ],
   "x_calibrations": [
-    {"x": -310.0, "offset": -256},
-    {"x": -289.897, "offset": -217},
-    {"x": -279, "offset": -194},
-    {"x": -270.0, "offset": -176},
-    {"x": -251.897, "offset": -140},
-    {"x": -249.897, "offset": -136},
-    {"x": -245.0, "offset": -126},
-    {"x": -235, "offset": -106},
-    {"x": -230.0, "offset": -96},
-    {"x": -211.897, "offset": -60},
-    {"x": -209.897, "offset": -56},
-    {"x": -201.0, "offset": -38},
-    {"x": -190.0, "offset": -16},
-    {"x": -171.897, "offset": 20},
-    {"x": -169.897, "offset": 24},
-    {"x": -150.0, "offset": 64},
-    {"x": -131.897, "offset": 100},
-    {"x": -129.897, "offset": 104},
-    {"x": -110.0, "offset": 144},
-    {"x": -101, "offset": 162},
-    {"x": -91.897, "offset": 180},
-    {"x": -89.897, "offset": 184},
-    {"x": -70.0, "offset": 224},
-    {"x": -67.0, "offset": 230},
-    {"x": -57, "offset": 250},
-    {"x": -51.897, "offset": 260},
-    {"x": -49.897, "offset": 264},
-    {"x": -23.0, "offset": 318},
-    {"x": -11.897, "offset": 340},
-    {"x": 12.102, "offset": 387},
-    {"x": 52.102, "offset": 467},
-    {"x": 92.102, "offset": 547},
-    {"x": 150.0, "offset": 662},
-    {"x": 190.0, "offset": 742},
-    {"x": 230.0, "offset": 822}
-  ]
+    {
+      "x": -310.0,
+      "offset": -256
+    },
+    {
+      "x": -289.897,
+      "offset": -217
+    },
+    {
+      "x": -279,
+      "offset": -194
+    },
+    {
+      "x": -270.0,
+      "offset": -176
+    },
+    {
+      "x": -251.897,
+      "offset": -140
+    },
+    {
+      "x": -249.897,
+      "offset": -136
+    },
+    {
+      "x": -245.0,
+      "offset": -126
+    },
+    {
+      "x": -235,
+      "offset": -106
+    },
+    {
+      "x": -230.0,
+      "offset": -96
+    },
+    {
+      "x": -211.897,
+      "offset": -60
+    },
+    {
+      "x": -209.897,
+      "offset": -56
+    },
+    {
+      "x": -201.0,
+      "offset": -38
+    },
+    {
+      "x": -190.0,
+      "offset": -16
+    },
+    {
+      "x": -171.897,
+      "offset": 20
+    },
+    {
+      "x": -169.897,
+      "offset": 24
+    },
+    {
+      "x": -150.0,
+      "offset": 64
+    },
+    {
+      "x": -131.897,
+      "offset": 100
+    },
+    {
+      "x": -129.897,
+      "offset": 104
+    },
+    {
+      "x": -110.0,
+      "offset": 144
+    },
+    {
+      "x": -101,
+      "offset": 162
+    },
+    {
+      "x": -91.897,
+      "offset": 180
+    },
+    {
+      "x": -89.897,
+      "offset": 184
+    },
+    {
+      "x": -70.0,
+      "offset": 224
+    },
+    {
+      "x": -67.0,
+      "offset": 230
+    },
+    {
+      "x": -57,
+      "offset": 250
+    },
+    {
+      "x": -51.897,
+      "offset": 260
+    },
+    {
+      "x": -49.897,
+      "offset": 264
+    },
+    {
+      "x": -23.0,
+      "offset": 318
+    },
+    {
+      "x": -11.897,
+      "offset": 340
+    },
+    {
+      "x": 12.102,
+      "offset": 387
+    },
+    {
+      "x": 52.102,
+      "offset": 467
+    },
+    {
+      "x": 92.102,
+      "offset": 547
+    },
+    {
+      "x": 150.0,
+      "offset": 662
+    },
+    {
+      "x": 190.0,
+      "offset": 742
+    },
+    {
+      "x": 230.0,
+      "offset": 822
+    }
+  ],
+  "scale_calibrations": [
+    {
+      "scale_percent": 100,
+      "y_offset": 116,
+      "x_anchors": [
+        {
+          "x": -310.0,
+          "offset": -256
+        },
+        {
+          "x": -269.953,
+          "offset": -176
+        },
+        {
+          "x": -251.897,
+          "offset": -140
+        },
+        {
+          "x": -244.906,
+          "offset": -126
+        },
+        {
+          "x": -229.953,
+          "offset": -96
+        },
+        {
+          "x": -211.897,
+          "offset": -60
+        },
+        {
+          "x": -211.803,
+          "offset": -58
+        },
+        {
+          "x": -200.906,
+          "offset": -38
+        },
+        {
+          "x": -189.953,
+          "offset": -16
+        },
+        {
+          "x": -171.897,
+          "offset": 20
+        },
+        {
+          "x": -149.953,
+          "offset": 63
+        },
+        {
+          "x": -131.85,
+          "offset": 100
+        },
+        {
+          "x": -109.906,
+          "offset": 143
+        },
+        {
+          "x": -91.897,
+          "offset": 180
+        },
+        {
+          "x": -69.906,
+          "offset": 223
+        },
+        {
+          "x": -66.906,
+          "offset": 230
+        },
+        {
+          "x": -51.85,
+          "offset": 260
+        },
+        {
+          "x": -29.906,
+          "offset": 303
+        },
+        {
+          "x": -22.906,
+          "offset": 318
+        },
+        {
+          "x": -11.897,
+          "offset": 340
+        },
+        {
+          "x": 10.094,
+          "offset": 383
+        },
+        {
+          "x": 12.15,
+          "offset": 386
+        },
+        {
+          "x": 50.094,
+          "offset": 463
+        },
+        {
+          "x": 90.094,
+          "offset": 543
+        },
+        {
+          "x": 92.197,
+          "offset": 546
+        },
+        {
+          "x": 130.094,
+          "offset": 623
+        },
+        {
+          "x": 150.449,
+          "offset": 663
+        },
+        {
+          "x": 170.094,
+          "offset": 703
+        },
+        {
+          "x": 190.0,
+          "offset": 743
+        },
+        {
+          "x": 210.094,
+          "offset": 783
+        },
+        {
+          "x": 230.0,
+          "offset": 823
+        }
+      ]
+    },
+    {
+      "scale_percent": 125,
+      "y_offset": 206,
+      "x_anchors": [
+        { "x": -310.000, "offset": -213 },
+        { "x": -270.000, "offset": -123 },
+        { "x": -230.000, "offset": -33 },
+        { "x": -190.000, "offset": 57 },
+        { "x": -150.000, "offset": 147 },
+        { "x": -131.897, "offset": 187 },
+        { "x": -110.000, "offset": 237 },
+        { "x": -91.897, "offset": 277 },
+        { "x": -70.000, "offset": 327 },
+        { "x": -51.897, "offset": 367 },
+        { "x": -30.000, "offset": 417 },
+        { "x": -11.897, "offset": 457 },
+        { "x": 10.000, "offset": 507 },
+        { "x": 12.103, "offset": 510 },
+        { "x": 50.000, "offset": 597 },
+        { "x": 52.103, "offset": 600 },
+        { "x": 90.000, "offset": 687 },
+        { "x": 92.103, "offset": 690 },
+        { "x": 130.000, "offset": 777 },
+        { "x": 132.103, "offset": 780 },
+        { "x": 150.000, "offset": 820 },
+        { "x": 170.000, "offset": 867 },
+        { "x": 172.103, "offset": 870 },
+        { "x": 190.000, "offset": 910 },
+        { "x": 210.000, "offset": 957 },
+        { "x": 212.103, "offset": 960 },
+        { "x": 230.000, "offset": 1000 }
+      ]
+    },
+    {
+      "scale_percent": 150,
+      "y_offset": 365,
+      "x_anchors": [
+        { "x": -310.000, "offset": -166 },
+        { "x": -270.000, "offset": -66 },
+        { "x": -230.000, "offset": 34 },
+        { "x": -190.000, "offset": 134 },
+        { "x": -150.000, "offset": 234 },
+        { "x": -131.897, "offset": 277 },
+        { "x": -110.000, "offset": 334 },
+        { "x": -91.897, "offset": 377 },
+        { "x": -70.000, "offset": 434 },
+        { "x": -67.000, "offset": 442 },
+        { "x": -51.897, "offset": 477 },
+        { "x": -30.000, "offset": 504 },
+        { "x": -23.000, "offset": 552 },
+        { "x": -11.897, "offset": 577 },
+        { "x": 10.000, "offset": 594 },
+        { "x": 12.103, "offset": 637 },
+        { "x": 50.000, "offset": 684 },
+        { "x": 52.103, "offset": 737 },
+        { "x": 90.000, "offset": 774 },
+        { "x": 92.103, "offset": 837 },
+        { "x": 130.000, "offset": 864 },
+        { "x": 132.103, "offset": 867 },
+        { "x": 150.000, "offset": 987 },
+        { "x": 170.000, "offset": 954 },
+        { "x": 172.103, "offset": 957 },
+        { "x": 190.000, "offset": 1087 },
+        { "x": 210.000, "offset": 1044 },
+        { "x": 212.103, "offset": 1047 },
+        { "x": 230.000, "offset": 1187 }
+      ]
+    }
+  ],
+  "position_calibrations": []
 }

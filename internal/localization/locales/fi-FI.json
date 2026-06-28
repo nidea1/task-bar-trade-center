@@ -172,6 +172,7 @@
   "menu.restart_admin": "Käynnistä uudelleen järjestelmänvalvojana",
   "menu.status": "Tila: %s",
   "menu.update_configs": "Päivitä määritykset",
+  "menu.game_scale": "Ikkunan skaala",
   "notification.action_required": "Napsauta ilmoitusalueen kuvaketta hiiren kakkospainikkeella toimiaksesi.",
   "notification.admin_restart_failed": "Uudelleenkäynnistys järjestelmänvalvojana epäonnistui.",
   "notification.configuration": "Määritykset — %s",

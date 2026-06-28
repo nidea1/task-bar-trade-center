@@ -1,17 +1,16 @@
 package app
 
 import (
-	"github.com/nidea1/task-bar-trade-center/internal/game"
-	"github.com/nidea1/task-bar-trade-center/internal/win32"
-
 	"unsafe"
 
+	"github.com/nidea1/task-bar-trade-center/internal/game"
 	"github.com/nidea1/task-bar-trade-center/internal/overlay"
+	"github.com/nidea1/task-bar-trade-center/internal/win32"
 )
 
 func marketOverlayRect() (win32.RECT, bool) {
-	if tooltipRect, ok := readTooltipRectFromMemory(); ok {
-		activeApp.lastOverlayRect = placeOverlayByTooltipRect(tooltipRect)
+	if tooltipSnapshot, ok := readTooltipSnapshotFromMemory(); ok {
+		activeApp.lastOverlayRect = placeOverlayByTooltipSnapshot(tooltipSnapshot)
 		activeApp.hasLastOverlayRect = true
 		return activeApp.lastOverlayRect, true
 	}
@@ -164,7 +163,18 @@ func activeOverlayHeight() int32 {
 	return calculateRequiredHeight(data, activeApp.overlayMode.Load())
 }
 
+func placeOverlayByTooltipSnapshot(snapshot tooltipMemorySnapshot) win32.RECT {
+	return placeOverlayByTooltipRectAndMemoryPosition(snapshot.Rect, snapshot.MemoryX, snapshot.MemoryY, true)
+}
+
+// placeOverlayByTooltipRect preserves the previous internal entry point for
+// callers that only have a rectangle and therefore cannot use raw-memory X
+// calibration. In that case the legacy placement path remains active.
 func placeOverlayByTooltipRect(tooltipRect win32.RECT) win32.RECT {
+	return placeOverlayByTooltipRectAndMemoryPosition(tooltipRect, 0, 0, false)
+}
+
+func placeOverlayByTooltipRectAndMemoryPosition(tooltipRect win32.RECT, memoryX float32, memoryY float32, hasMemoryPosition bool) win32.RECT {
 	screen := virtualScreenRect()
 	var clientOrigin win32.POINT
 	hasClientOrigin := false
@@ -175,8 +185,37 @@ func placeOverlayByTooltipRect(tooltipRect win32.RECT) win32.RECT {
 	activeApp.gameLayoutMu.RLock()
 	placementCalibrations := append([]overlay.PlacementCalibration(nil), activeApp.activeGameLayout.PlacementCalibrations...)
 	xCalibrations := append([]overlay.XCalibration(nil), activeApp.activeGameLayout.XCalibrations...)
+	scaleCalibrations := append([]overlay.ScaleCalibrationProfile(nil), activeApp.activeGameLayout.ScaleCalibrations...)
+	positionCalibrations := append([]overlay.PositionCalibration(nil), activeApp.activeGameLayout.PositionCalibrations...)
 	activeApp.gameLayoutMu.RUnlock()
-	return overlay.PlaceByTooltipRect(tooltipRect, screen, clientOrigin, hasClientOrigin, activeOverlayHeight(), placementCalibrations, xCalibrations, overlayPlacementConfig())
+	if !hasMemoryPosition {
+		return overlay.PlaceByTooltipRect(
+			tooltipRect,
+			screen,
+			clientOrigin,
+			hasClientOrigin,
+			activeOverlayHeight(),
+			placementCalibrations,
+			xCalibrations,
+			overlayPlacementConfig(),
+		)
+	}
+
+	return overlay.PlaceByTooltipRectWithPosition(
+		tooltipRect,
+		screen,
+		clientOrigin,
+		hasClientOrigin,
+		activeOverlayHeight(),
+		placementCalibrations,
+		xCalibrations,
+		scaleCalibrations,
+		positionCalibrations,
+		memoryX,
+		memoryY,
+		currentGameScale(),
+		overlayPlacementConfig(),
+	)
 }
 
 func scaleByReference(value int32, referenceValue int32, referenceBase int32) int32 {

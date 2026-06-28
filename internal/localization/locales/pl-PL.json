@@ -172,6 +172,7 @@
   "menu.restart_admin": "Uruchom ponownie jako administrator",
   "menu.status": "Stan: %s",
   "menu.update_configs": "Aktualizuj konfiguracje",
+  "menu.game_scale": "Skala okna",
   "notification.action_required": "Kliknij prawym przyciskiem myszy ikonę w zasobniku, aby podjąć działanie.",
   "notification.admin_restart_failed": "Nie udało się uruchomić ponownie jako administrator.",
   "notification.configuration": "Konfiguracja — %s",

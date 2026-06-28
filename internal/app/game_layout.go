@@ -1,16 +1,23 @@
 package app
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/nidea1/task-bar-trade-center/internal/game"
 )
 
-const gameLayoutUserAgent = AppShortName + "-game.GameLayout"
+const (
+	gameLayoutUserAgent = AppShortName + "-game.GameLayout"
+
+	localGameLayoutPollInterval = 100 * time.Millisecond
+	localGameLayoutStableDelay  = 250 * time.Millisecond
+)
 
 var (
 	embeddedGameLayoutJSON = game.EmbeddedLayoutJSON()
@@ -77,6 +84,102 @@ func loadLocalGameLayout() error {
 	setConfigurationStatus(ConfigStatusEmbedded, "")
 	fmt.Println("Game layout loaded from embedded defaults.")
 	return nil
+}
+
+func watchLocalGameLayoutChanges() {
+	localLayoutPath := strings.TrimSpace(os.Getenv(game.LayoutPathEnvironment))
+	if localLayoutPath == "" {
+		return
+	}
+
+	if absolutePath, err := filepath.Abs(localLayoutPath); err == nil {
+		localLayoutPath = absolutePath
+	}
+
+	initialRaw, err := os.ReadFile(localLayoutPath)
+	if err != nil {
+		fmt.Printf("Local game layout watcher could not read %q: %v\n", localLayoutPath, err)
+		return
+	}
+
+	lastProcessedHash := sha256.Sum256(initialRaw)
+	var pendingHash [32]byte
+	var pendingSince time.Time
+	pending := false
+	lastReadError := ""
+
+	ticker := time.NewTicker(localGameLayoutPollInterval)
+	defer ticker.Stop()
+
+	fmt.Printf("Watching local game layout for changes: %s\n", localLayoutPath)
+
+	for range ticker.C {
+		raw, err := os.ReadFile(localLayoutPath)
+		if err != nil {
+			errorMessage := err.Error()
+			if errorMessage != lastReadError {
+				fmt.Printf("Local game layout watcher read failed: %v\n", err)
+				lastReadError = errorMessage
+			}
+			continue
+		}
+
+		if lastReadError != "" {
+			fmt.Println("Local game layout watcher resumed.")
+			lastReadError = ""
+		}
+
+		currentHash := sha256.Sum256(raw)
+		if currentHash == lastProcessedHash {
+			pending = false
+			continue
+		}
+
+		now := time.Now()
+		if !pending || currentHash != pendingHash {
+			pendingHash = currentHash
+			pendingSince = now
+			pending = true
+			continue
+		}
+
+		if now.Sub(pendingSince) < localGameLayoutStableDelay {
+			continue
+		}
+
+		lastProcessedHash = currentHash
+		pending = false
+
+		layout, err := game.ParseGameLayout(raw)
+		if err != nil {
+			fmt.Printf("Local game layout change rejected; last valid layout remains active: %v\n", err)
+			continue
+		}
+
+		applyReloadedLocalGameLayout(layout, localLayoutPath)
+	}
+}
+
+func applyReloadedLocalGameLayout(layout game.GameLayout, localLayoutPath string) {
+	setActiveGameLayout(layout, game.LayoutSourceLocalDevelopment)
+
+	activeApp.gameLayoutReadHealth.Reset()
+	activeApp.tooltipXAOBResolver.Reset()
+	activeApp.tooltipYAOBResolver.Reset()
+	activeApp.tooltipHeightAOBResolver.Reset()
+
+	setConfigurationStatus(ConfigStatusDevelopment, "")
+	if activeApp.gameReady.Load() {
+		setAppStatus(AppStatusReady)
+	} else {
+		setAppStatus(AppStatusWaitingForGame)
+	}
+
+	if activeApp.showOverlay.Load() {
+		redrawOverlay()
+	}
+
+	fmt.Printf("Local game layout reloaded and applied: %s\n", localLayoutPath)
 }
 
 func refreshGameLayoutInBackground() {

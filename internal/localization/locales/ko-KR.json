@@ -172,6 +172,7 @@
   "menu.restart_admin": "관리자 권한으로 재시작",
   "menu.status": "상태: %s",
   "menu.update_configs": "구성 업데이트",
+  "menu.game_scale": "창 크기",
   "notification.action_required": "작업을 수행하려면 트레이 아이콘을 마우스 오른쪽 버튼으로 클릭하십시오.",
   "notification.admin_restart_failed": "관리자 권한으로 재시작할 수 없습니다.",
   "notification.configuration": "구성 정보 — %s",

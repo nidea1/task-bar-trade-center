@@ -111,6 +111,7 @@ func writePriceCacheFileLocked() {
 
 type AppSettings struct {
 	OverlayModeSetting int32             `json:"overlay_mode"`
+	GameScalePercent   int32             `json:"game_scale_percent"`
 	MarketCurrencyCode string            `json:"market_currency"`
 	MarketCountry      string            `json:"market_country"`
 	DisplayLanguage    string            `json:"display_language"`
@@ -181,6 +182,7 @@ func loadSettingsFromDisk() {
 	if err := filestore.ReadJSON(activeApp.settingsFilePath, &settings); err != nil {
 		if os.IsNotExist(err) {
 			applyDisplayLanguagePreference(displayLanguageSystem)
+			selectedGameScale.Store(GameScale100)
 			saveSettingsToDisk()
 		} else {
 			fmt.Printf("Settings file could not be read: %v\n", err)
@@ -189,6 +191,8 @@ func loadSettingsFromDisk() {
 	}
 
 	activeApp.overlayMode.Store(settings.OverlayModeSetting)
+	selectedGameScale.Store(normalizeGameScale(settings.GameScalePercent))
+
 	scope := market.ScopeFromSettings(settings.MarketCurrencyCode, settings.MarketCountry)
 	market.SetScope(scope.Currency.Code, scope.Region.CountryCode)
 	applyDisplayLanguagePreference(settings.DisplayLanguage)
@@ -202,7 +206,15 @@ func loadSettingsFromDisk() {
 	activeApp.dashboardSettings = normalizeDashboardSettings(settings.Dashboard)
 	activeApp.dashboardSettingsMu.Unlock()
 
-	fmt.Printf("Settings loaded from disk: overlayMode=%d market=%s language=%s minRarity=%s dashboard=%+v\n", settings.OverlayModeSetting, market.FormatScope(scope), currentDisplayLanguage(), minRarity, currentDashboardSettings())
+	fmt.Printf(
+		"Settings loaded from disk: overlayMode=%d gameScale=%s market=%s language=%s minRarity=%s dashboard=%+v\n",
+		settings.OverlayModeSetting,
+		gameScaleLabel(currentGameScale()),
+		market.FormatScope(scope),
+		currentDisplayLanguage(),
+		minRarity,
+		currentDashboardSettings(),
+	)
 }
 
 func saveSettingsToDisk() {
@@ -213,6 +225,7 @@ func saveSettingsToDisk() {
 	scope := market.CurrentScope()
 	settings := AppSettings{
 		OverlayModeSetting: activeApp.overlayMode.Load(),
+		GameScalePercent:   currentGameScale(),
 		MarketCurrencyCode: scope.Currency.Code,
 		MarketCountry:      scope.Region.CountryCode,
 		DisplayLanguage:    currentDisplayLanguagePreference(),

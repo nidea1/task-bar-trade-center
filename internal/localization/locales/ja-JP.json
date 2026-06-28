@@ -172,6 +172,7 @@
   "menu.restart_admin": "管理者として再起動",
   "menu.status": "状態: %s",
   "menu.update_configs": "構成を更新",
+  "menu.game_scale": "ウィンドウのスケール",
   "notification.action_required": "トレイアイコンを右クリックして操作してください。",
   "notification.admin_restart_failed": "管理者として再起動できませんでした。",
   "notification.configuration": "構成 — %s",

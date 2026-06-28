@@ -79,6 +79,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Fixed duplicate marketable-item notifications when instant chest-open detection and the later inventory save snapshot report the same item.
 - Fixed dark dropdown readability for Common rarity options by using a lighter neutral rarity color.
+- Fixed single-anchor scale calibration profiles being rejected during game layout parsing, allowing scale-specific X and Y offsets to apply before additional X anchors are configured.
 
 ## [0.9.7] - 2026-06-27
 

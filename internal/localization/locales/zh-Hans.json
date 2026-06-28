@@ -172,6 +172,7 @@
   "menu.restart_admin": "以管理员身份重启",
   "menu.status": "状态: %s",
   "menu.update_configs": "更新配置",
+  "menu.game_scale": "窗口缩放",
   "notification.action_required": "右键单击托盘图标以执行操作。",
   "notification.admin_restart_failed": "无法以管理员身份重启。",
   "notification.configuration": "配置 — %s",

@@ -1,8 +1,86 @@
 package overlay
 
-import "github.com/nidea1/task-bar-trade-center/internal/win32"
+import (
+	"math"
+	"sort"
 
-func PlaceByTooltipRect(tooltipRect win32.RECT, screen win32.RECT, clientOrigin win32.POINT, hasClientOrigin bool, activeHeight int32, calibrations []PlacementCalibration, xCalibrations []XCalibration, cfg PlacementConfig) win32.RECT {
+	"github.com/nidea1/task-bar-trade-center/internal/win32"
+)
+
+func PlaceByTooltipRect(
+	tooltipRect win32.RECT,
+	screen win32.RECT,
+	clientOrigin win32.POINT,
+	hasClientOrigin bool,
+	activeHeight int32,
+	calibrations []PlacementCalibration,
+	xCalibrations []XCalibration,
+	cfg PlacementConfig,
+) win32.RECT {
+	return placeByTooltipRect(
+		tooltipRect,
+		screen,
+		clientOrigin,
+		hasClientOrigin,
+		activeHeight,
+		calibrations,
+		xCalibrations,
+		nil,
+		nil,
+		0,
+		0,
+		0,
+		cfg,
+	)
+}
+
+func PlaceByTooltipRectWithPosition(
+	tooltipRect win32.RECT,
+	screen win32.RECT,
+	clientOrigin win32.POINT,
+	hasClientOrigin bool,
+	activeHeight int32,
+	calibrations []PlacementCalibration,
+	xCalibrations []XCalibration,
+	scaleCalibrations []ScaleCalibrationProfile,
+	legacyPositionCalibrations []PositionCalibration,
+	memoryX float32,
+	memoryY float32,
+	scalePercent int32,
+	cfg PlacementConfig,
+) win32.RECT {
+	return placeByTooltipRect(
+		tooltipRect,
+		screen,
+		clientOrigin,
+		hasClientOrigin,
+		activeHeight,
+		calibrations,
+		xCalibrations,
+		scaleCalibrations,
+		legacyPositionCalibrations,
+		memoryX,
+		memoryY,
+		scalePercent,
+		cfg,
+	)
+}
+
+func placeByTooltipRect(
+	tooltipRect win32.RECT,
+	screen win32.RECT,
+	clientOrigin win32.POINT,
+	hasClientOrigin bool,
+	activeHeight int32,
+	calibrations []PlacementCalibration,
+	xCalibrations []XCalibration,
+	scaleCalibrations []ScaleCalibrationProfile,
+	legacyPositionCalibrations []PositionCalibration,
+	memoryX float32,
+	memoryY float32,
+	scalePercent int32,
+	cfg PlacementConfig,
+) win32.RECT {
 	tooltipHeight := tooltipRect.Bottom - tooltipRect.Top
 	if tooltipHeight <= 0 {
 		tooltipHeight = cfg.ReferenceHeight
@@ -18,6 +96,26 @@ func PlaceByTooltipRect(tooltipRect win32.RECT, screen win32.RECT, clientOrigin 
 	width := ClampInt32(placement.PanelWidth, cfg.MinWidth, cfg.MaxWidth)
 	anchorOffsetX := FindClosestXOffset(-localX, xCalibrations)
 	anchorOffsetY := placement.OffsetY
+
+	// New compact profile format has priority. It uses the selected scale,
+	// a profile-level Y offset and interpolated X anchors.
+	if matchedOffset, ok := ResolveScalePositionOffset(
+		memoryX,
+		scalePercent,
+		scaleCalibrations,
+	); ok {
+		anchorOffsetX = matchedOffset.XOffset
+		anchorOffsetY = matchedOffset.YOffset
+	} else if matchedOffset, ok := FindClosestPositionOffsetForScale(
+		memoryX,
+		memoryY,
+		scalePercent,
+		legacyPositionCalibrations,
+	); ok {
+		// Transitional fallback for old cached/remote position_calibrations.
+		anchorOffsetX = matchedOffset.XOffset
+		anchorOffsetY = matchedOffset.YOffset
+	}
 
 	left := tooltipRect.Left + anchorOffsetX
 	top := tooltipRect.Bottom + anchorOffsetY
@@ -87,6 +185,155 @@ func FindClosestXOffset(localX int32, calibrations []XCalibration) int32 {
 		}
 	}
 	return calibrations[bestIndex].Offset
+}
+
+// ResolveScalePositionOffset finds the profile for the user-selected scale and
+// resolves X with piecewise-linear interpolation. Tooltip Y is intentionally
+// not an input because YOffset is constant within a profile.
+func ResolveScalePositionOffset(
+	x float32,
+	scalePercent int32,
+	profiles []ScaleCalibrationProfile,
+) (PositionOffset, bool) {
+	profile, ok := FindScaleCalibrationProfile(scalePercent, profiles)
+	if !ok {
+		return PositionOffset{}, false
+	}
+
+	xOffset, ok := InterpolateXOffset(x, profile.XAnchors)
+	if !ok {
+		return PositionOffset{}, false
+	}
+
+	return PositionOffset{
+		XOffset:      xOffset,
+		YOffset:      profile.YOffset,
+		ScalePercent: profile.ScalePercent,
+	}, true
+}
+
+func FindScaleCalibrationProfile(
+	scalePercent int32,
+	profiles []ScaleCalibrationProfile,
+) (ScaleCalibrationProfile, bool) {
+	for _, profile := range profiles {
+		if profile.ScalePercent == scalePercent {
+			return profile, true
+		}
+	}
+	return ScaleCalibrationProfile{}, false
+}
+
+// InterpolateXOffset resolves an exact anchor or linearly interpolates between
+// the nearest left/right anchors. Values outside the calibrated range are
+// clamped to the closest endpoint instead of being extrapolated.
+func InterpolateXOffset(x float32, anchors []XCalibrationAnchor) (int32, bool) {
+	if len(anchors) == 0 {
+		return 0, false
+	}
+	if len(anchors) == 1 {
+		return anchors[0].Offset, true
+	}
+
+	index := sort.Search(len(anchors), func(index int) bool {
+		return anchors[index].X >= x
+	})
+
+	if index == 0 {
+		return anchors[0].Offset, true
+	}
+	if index >= len(anchors) {
+		return anchors[len(anchors)-1].Offset, true
+	}
+
+	left := anchors[index-1]
+	right := anchors[index]
+	if right.X == x {
+		return right.Offset, true
+	}
+
+	distance := right.X - left.X
+	if math.Abs(float64(distance)) < 0.000001 {
+		return left.Offset, true
+	}
+
+	ratio := (x - left.X) / distance
+	offset := float64(left.Offset) +
+		float64(ratio)*float64(right.Offset-left.Offset)
+	return int32(math.Round(offset)), true
+}
+
+// FindClosestPositionOffset chooses the calibration point with the smallest
+// two-dimensional squared distance. This is retained for legacy layouts.
+func FindClosestPositionOffset(x float32, y float32, calibrations []PositionCalibration) (PositionOffset, bool) {
+	if len(calibrations) == 0 {
+		return PositionOffset{}, false
+	}
+
+	bestIndex := 0
+	bestScore := positionDistanceSquared(x, y, calibrations[0])
+	for index := 1; index < len(calibrations); index++ {
+		score := positionDistanceSquared(x, y, calibrations[index])
+		if score < bestScore {
+			bestIndex = index
+			bestScore = score
+		}
+	}
+
+	best := calibrations[bestIndex]
+	return PositionOffset{
+		XOffset:      best.XOffset,
+		YOffset:      best.YOffset,
+		ScalePercent: calibrationScalePercent(best.Scale),
+	}, true
+}
+
+func positionDistanceSquared(x float32, y float32, calibration PositionCalibration) float64 {
+	dx := float64(x - calibration.X)
+	dy := float64(y - calibration.Y)
+	return dx*dx + dy*dy
+}
+
+// FindClosestPositionOffsetForScale only considers legacy entries for the
+// selected game scale. It never falls through to a different scale.
+func FindClosestPositionOffsetForScale(
+	x float32,
+	y float32,
+	scalePercent int32,
+	calibrations []PositionCalibration,
+) (PositionOffset, bool) {
+	bestIndex := -1
+	bestScore := float64(0)
+
+	for index, calibration := range calibrations {
+		if calibrationScalePercent(calibration.Scale) != scalePercent {
+			continue
+		}
+
+		score := positionDistanceSquared(x, y, calibration)
+		if bestIndex < 0 || score < bestScore {
+			bestIndex = index
+			bestScore = score
+		}
+	}
+
+	if bestIndex < 0 {
+		return PositionOffset{}, false
+	}
+
+	best := calibrations[bestIndex]
+	return PositionOffset{
+		XOffset:      best.XOffset,
+		YOffset:      best.YOffset,
+		ScalePercent: calibrationScalePercent(best.Scale),
+	}, true
+}
+
+func calibrationScalePercent(scale float32) int32 {
+	if scale <= 0 {
+		return 0
+	}
+	return RoundFloat32ToInt32(scale * 100)
 }
 
 func FallbackRect(cursor win32.POINT, screen win32.RECT, activeHeight int32, cfg PlacementConfig) win32.RECT {

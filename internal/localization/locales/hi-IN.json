@@ -172,6 +172,7 @@
   "menu.restart_admin": "व्यवस्थापक के रूप में पुनरारंभ करें",
   "menu.status": "स्थिति: %s",
   "menu.update_configs": "कॉन्फ़िगरेशन अपडेट करें",
+  "menu.game_scale": "विंडो स्केल",
   "notification.action_required": "कार्रवाई करने के लिए ट्रे आइकन पर राइट-क्लिक करें।",
   "notification.admin_restart_failed": "व्यवस्थापक के रूप में पुनरारंभ नहीं किया जा सका।",
   "notification.configuration": "कॉन्फ़िगरेशन — %s",
