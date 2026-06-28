@@ -44,7 +44,8 @@ import {
     FlaskConical,
     HandHeart,
     Keyboard,
-    Settings
+    Settings,
+    Maximize
 } from 'lucide-react';
 
 import { HERO_CLASSES, appIcon } from './constants';
@@ -104,6 +105,7 @@ const defaultDashboardSettings: DashboardSettings = {
     notify_sources: allNotificationSources,
     hotkey_modifiers: 0,
     hotkey_vk: 0x71,
+    game_scale: 100,
 };
 
 type DashboardSettingsInput = {
@@ -120,6 +122,7 @@ type DashboardSettingsInput = {
     notify_sources?: string;
     hotkey_modifiers?: number;
     hotkey_vk?: number;
+    game_scale?: number;
 };
 
 function normalizeNotifySources(value?: string | null): string {
@@ -177,6 +180,7 @@ function normalizeDashboardSettings(settings?: DashboardSettingsInput | null): D
     const sortMode = settings?.sort_mode;
     const bestOwnershipFilter = settings?.best_ownership_filter;
     const bestSortMode = settings?.best_sort_mode;
+    const gameScale = settings?.game_scale;
     return {
         theme_mode: settings?.theme_mode === "light" ? "light" : defaultDashboardSettings.theme_mode,
         price_mode: settings?.price_mode === "instant" ? "instant" : defaultDashboardSettings.price_mode,
@@ -205,6 +209,7 @@ function normalizeDashboardSettings(settings?: DashboardSettingsInput | null): D
         notify_sources: normalizeNotifySources(settings?.notify_sources),
         hotkey_modifiers: settings?.hotkey_modifiers ?? 0,
         hotkey_vk: settings?.hotkey_vk ?? 0x71,
+        game_scale: (gameScale === 100 || gameScale === 125 || gameScale === 150) ? gameScale : defaultDashboardSettings.game_scale,
     };
 }
 
@@ -239,6 +244,7 @@ function App() {
     const [hotkeyVK, setHotkeyVK] = useState<number>(0x71); // default F2
     const [isListeningHotkey, setIsListeningHotkey] = useState<boolean>(false);
     const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
+    const [gameScale, setGameScale] = useState<number>(100);
     const settingsMenuRef = useRef<HTMLDivElement>(null);
     const mountedRef = useRef(false);
     const loadInFlightRef = useRef(false);
@@ -326,6 +332,7 @@ function App() {
                 setNotifySources(normalized.notify_sources);
                 setHotkeyModifiers(normalized.hotkey_modifiers);
                 setHotkeyVK(normalized.hotkey_vk);
+                setGameScale(normalized.game_scale);
             })
             .catch(() => {
                 // Dashboard preferences are non-critical; current defaults remain usable.
@@ -408,10 +415,11 @@ function App() {
             notify_sources: notifySources,
             hotkey_modifiers: hotkeyModifiers,
             hotkey_vk: hotkeyVK,
+            game_scale: gameScale,
         }).catch(() => {
             // Local UI state can continue even if settings persistence fails.
         });
-    }, [themeMode, priceMode, rarityFilter, equipmentFilter, sortMode, bestRarityFilter, bestEquipmentFilter, bestOwnershipFilter, bestSortMode, marketableItemsTab, notifySources, hotkeyModifiers, hotkeyVK]);
+    }, [themeMode, priceMode, rarityFilter, equipmentFilter, sortMode, bestRarityFilter, bestEquipmentFilter, bestOwnershipFilter, bestSortMode, marketableItemsTab, notifySources, hotkeyModifiers, hotkeyVK, gameScale]);
 
     useEffect(() => {
         if (!isListeningHotkey) return;
@@ -527,6 +535,8 @@ function App() {
     const controlCurrencyLabel = t("dashboard.control_currency", localizedFallback(currentLanguage, "Para", "Currency"));
     const controlPriceLabel = t("dashboard.control_price", localizedFallback(currentLanguage, "Fiyat", "Price"));
     const controlThemeLabel = t("dashboard.control_theme", localizedFallback(currentLanguage, "Tema", "Theme"));
+    const controlGameScaleLabel = t("dashboard.control_game_scale", localizedFallback(currentLanguage, "Oyun Pencere Ölçeği", "Game Window Scale"));
+    const gameScaleLabel = `${gameScale / 100}x`;
     const selectedLanguageName = languages.find((lang) => lang.code === currentLanguage)?.name || currentLanguage;
     const selectedLanguageCode = languageDisplayCode(currentLanguage);
     const fullPriceLabel = priceMode === "instant"
@@ -797,6 +807,24 @@ function App() {
                                                         selectedLabel={themeLabel}
                                                         icon={themeMode === "dark" ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5 text-[#ffbe2d]" />}
                                                         title={`${controlThemeLabel}: ${themeLabel}`}
+                                                    />
+                                                </div>
+
+                                                {/* Game Scale */}
+                                                <div className="dashboard-settings-row flex items-center justify-between gap-4">
+                                                    <span className="text-[11px] font-bold text-[#e1d5bf]">{controlGameScaleLabel}:</span>
+                                                    <GameDropdown
+                                                        value={String(gameScale)}
+                                                        options={[
+                                                            { value: "100", label: "1x" },
+                                                            { value: "125", label: "1.25x" },
+                                                            { value: "150", label: "1.5x" },
+                                                        ]}
+                                                        onChange={(val) => setGameScale(Number(val))}
+                                                        className="dashboard-control dashboard-scale-toggle"
+                                                        selectedLabel={gameScaleLabel}
+                                                        icon={<Maximize className="w-3.5 h-3.5" />}
+                                                        title={`${controlGameScaleLabel}: ${gameScaleLabel}`}
                                                     />
                                                 </div>
 

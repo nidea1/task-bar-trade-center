@@ -15,6 +15,7 @@
   "dashboard.buy_orders": "買い注文",
   "dashboard.connection_error": "接続エラー",
   "dashboard.control_currency": "通貨",
+  "dashboard.control_game_scale": "ゲームウィンドウのスケール",
   "dashboard.control_hotkey": "ホットキー",
   "dashboard.control_language": "言語",
   "dashboard.control_price": "価格",

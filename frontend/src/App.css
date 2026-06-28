@@ -2239,3 +2239,4 @@
 .dashboard-settings-row:nth-of-type(4) { z-index: 7; }
 .dashboard-settings-row:nth-of-type(5) { z-index: 6; }
 .dashboard-settings-row:nth-of-type(6) { z-index: 5; }
+.dashboard-settings-row:nth-of-type(7) { z-index: 4; }

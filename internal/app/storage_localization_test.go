@@ -69,6 +69,7 @@ func TestSettingsPersistDashboardSettings(t *testing.T) {
 		NotifySources:       "box,offering",
 		HotkeyModifiers:     0,
 		HotkeyVK:            VK_F2,
+		GameScale:           GameScale100,
 	}
 	setDashboardSettings(want)
 

@@ -132,6 +132,7 @@ type DashboardSettings struct {
 	NotifySources       string `json:"notify_sources"`
 	HotkeyModifiers     int    `json:"hotkey_modifiers"`
 	HotkeyVK            int    `json:"hotkey_vk"`
+	GameScale           int32  `json:"game_scale"`
 }
 
 const (
@@ -165,6 +166,7 @@ func defaultDashboardSettings() DashboardSettings {
 		NotifySources:       notificationSourcesAll,
 		HotkeyModifiers:     0,
 		HotkeyVK:            VK_F2,
+		GameScale:           GameScale100,
 	}
 }
 
@@ -211,6 +213,7 @@ func normalizeDashboardSettings(settings DashboardSettings) DashboardSettings {
 		normalized.HotkeyModifiers = settings.HotkeyModifiers
 		normalized.HotkeyVK = settings.HotkeyVK
 	}
+	normalized.GameScale = normalizeGameScale(settings.GameScale)
 	return normalized
 }
 
@@ -276,6 +279,8 @@ func setDashboardSettings(settings DashboardSettings) DashboardSettings {
 			win32.ProcPostMessageW.Call(activeApp.appHWND, WM_APP_HOTKEY_UPDATE, 0, 0)
 		}
 	}
+
+	selectGameScale(normalized.GameScale)
 
 	saveSettingsToDisk()
 	return normalized

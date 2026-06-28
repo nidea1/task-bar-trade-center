@@ -15,6 +15,7 @@
   "dashboard.buy_orders": "Ostotarjoukset",
   "dashboard.connection_error": "Yhteysvirhe",
   "dashboard.control_currency": "Valuutta",
+  "dashboard.control_game_scale": "Pelin ikkunan mittakaava",
   "dashboard.control_hotkey": "Pikanäppäin",
   "dashboard.control_language": "Kieli",
   "dashboard.control_price": "Hinta",

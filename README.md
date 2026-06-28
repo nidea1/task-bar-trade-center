@@ -24,10 +24,11 @@ The application operates on a hybrid architecture designed for minimal system im
 ## ✨ Features
 
 - **📊 Real-Time Inventory Dashboard:**
-  - **Hotkey Toggle (F2):** Press `F2` system-wide at any time to instantly open or focus the dashboard.
+  - **Customizable Hotkey Toggle:** Reassign the system-wide shortcut key for toggling the dashboard (e.g. `Ctrl + F2`, `Alt + Shift + K`) using the pulsing keyboard capturer UI (previously fixed to `F2`).
+  - **Game Window Scale:** Adjust overlay scale factors (`1x`, `1.25x`, `1.5x`) dynamically from settings to prevent overlaps or layout wrapping at different display DPIs.
   - **Portfolio Valuation:** Tracks total value (Suggested Listing vs. Instant Sell) of your inventory, stash pages, equipped gear, and gold.
   - **All Marketable Items:** A searchable list of all marketable items with locations, count, item grade/type, confidence metrics, and pricing.
-  - **Best to Sell Now:** Uses an algorithm to score and suggest which items are best to sell based on sales volume, spread, and market demand.
+  - **Best to Sell Now:** Uses an algorithm to score and suggest which items are best to sell based on sales volume, spread, and market demand, with advanced dashboard filters for class, type, search query, and equipped state.
   - **Sync & Queue Status:** Visually shows background API sync progress with ETA, backoff countdowns, and queue tracking.
   - **Missing Prices Tracker:** Flags items that haven't been priced yet.
 - **👁️ Cursor-Attached Price Overlay HUD:**
@@ -35,8 +36,9 @@ The application operates on a hybrid architecture designed for minimal system im
   - **Detail Mode:** Shows comprehensive statistics including suggested pricing, weekly averages, daily volume, trend percentages, spreads, buy/sell orders, and a deal assessment tag (e.g. "Undervalued", "Overvalued").
   - **Compact Mode:** A minimal HUD focused on essential price metrics to minimize screen footprint.
   - **Steam Listing Shortcut:** Press the middle mouse button while the overlay is visible to jump directly to the item's Steam Market page.
-- **🔔 Obtained Item Notifications:**
-  - Registers Windows tray notifications to immediately alert you when a marketable item is obtained or dropped, even when the dashboard window is closed.
+- **🔔 Windows Notifications:**
+  - **Obtained Items:** Immediately alerts you when a marketable item is obtained or dropped (with custom high-quality item icons cached directly from Steam), even when the dashboard window is closed.
+  - **🚢 Steam Trade Ship Cooldowns:** Monitors voyage status inside active ports and triggers system tray notifications when a Trade Ship returns, freeing up trade slots.
 - **🌐 Localization:**
   - Supports 17+ languages (English, German, French, Italian, Spanish, Dutch, Portuguese, Finnish, Japanese, Korean, Simplified Chinese, Hindi, Indonesian, Thai, Vietnamese, Polish, and Turkish).
 - **⚙️ Tray Shell Companion:**

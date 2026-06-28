@@ -15,6 +15,7 @@
   "dashboard.buy_orders": "Buy orders",
   "dashboard.connection_error": "Connection Error",
   "dashboard.control_currency": "Currency",
+  "dashboard.control_game_scale": "Game Window Scale",
   "dashboard.control_hotkey": "Hotkey",
   "dashboard.control_language": "Language",
   "dashboard.control_price": "Price",

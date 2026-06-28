@@ -6,7 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-06-28
+
 ### Added
+- Added Game scale option setting (`Oyun Pencere Ölçeği`) to the settings popover with options: `1x`, `1.25x`, and `1.5x`.
+- Localized the game scale setting name across all 18 supported languages.
 - Added a customizable hotkey feature to let users reassign the system-wide shortcut key for toggling the dashboard (previously fixed to F2).
 - Added a pulsing keyboard capturer UI inside settings to record custom key combos (e.g. `Ctrl + F2`, `Alt + Shift + K`) while ignoring standalone modifiers.
 - Added Go Wails bindings `DisableDashboardHotkey` and `EnableDashboardHotkey` using Windows message dispatching (`WM_APP_HOTKEY_DISABLE`/`WM_APP_HOTKEY_ENABLE`) to temporarily unregister active hotkeys during UI keyboard capturing so key presses are not swallowed by the OS.

@@ -15,6 +15,7 @@
   "dashboard.buy_orders": "买单",
   "dashboard.connection_error": "连接错误",
   "dashboard.control_currency": "货币",
+  "dashboard.control_game_scale": "游戏窗口缩放",
   "dashboard.control_hotkey": "热键",
   "dashboard.control_language": "语言",
   "dashboard.control_price": "价格",

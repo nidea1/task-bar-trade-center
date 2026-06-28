@@ -15,6 +15,7 @@
   "dashboard.buy_orders": "คำสั่งซื้อ",
   "dashboard.connection_error": "การเชื่อมต่อล้มเหลว",
   "dashboard.control_currency": "สกุลเงิน",
+  "dashboard.control_game_scale": "สเกลหน้าต่างเกม",
   "dashboard.control_hotkey": "ปุ่มลัด",
   "dashboard.control_language": "ภาษา",
   "dashboard.control_price": "ราคา",

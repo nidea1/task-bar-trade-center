@@ -203,6 +203,7 @@ func loadSettingsFromDisk() {
 	}
 	activeApp.minRarityNotifyLevel.Store(int32(rarityLevel(minRarity)))
 	activeApp.dashboardSettingsMu.Lock()
+	settings.Dashboard.GameScale = normalizeGameScale(settings.GameScalePercent)
 	activeApp.dashboardSettings = normalizeDashboardSettings(settings.Dashboard)
 	activeApp.dashboardSettingsMu.Unlock()
 
@@ -223,6 +224,9 @@ func saveSettingsToDisk() {
 	}
 
 	scope := market.CurrentScope()
+	dashSettings := currentDashboardSettings()
+	dashSettings.GameScale = currentGameScale()
+
 	settings := AppSettings{
 		OverlayModeSetting: activeApp.overlayMode.Load(),
 		GameScalePercent:   currentGameScale(),
@@ -230,7 +234,7 @@ func saveSettingsToDisk() {
 		MarketCountry:      scope.Region.CountryCode,
 		DisplayLanguage:    currentDisplayLanguagePreference(),
 		MinRarityNotify:    rarityGrade(int(activeApp.minRarityNotifyLevel.Load())),
-		Dashboard:          currentDashboardSettings(),
+		Dashboard:          dashSettings,
 	}
 
 	if err := filestore.WriteJSON(activeApp.settingsFilePath, settings); err != nil {

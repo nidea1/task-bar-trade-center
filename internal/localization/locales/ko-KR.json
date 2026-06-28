@@ -15,6 +15,7 @@
   "dashboard.buy_orders": "구매 주문",
   "dashboard.connection_error": "연결 오류",
   "dashboard.control_currency": "통화",
+  "dashboard.control_game_scale": "게임 창 배율",
   "dashboard.control_hotkey": "단축키",
   "dashboard.control_language": "언어",
   "dashboard.control_price": "가격",

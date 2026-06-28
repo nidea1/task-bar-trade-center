@@ -20,6 +20,7 @@ export interface DashboardSettings {
     notify_sources: string;
     hotkey_modifiers: number;
     hotkey_vk: number;
+    game_scale: number;
 }
 
 export interface RarityMeta {
