@@ -117,11 +117,12 @@ func processNewMarketableInventoryItems(newItems []marketableInventoryItem) {
 	uncachedItems := make([]marketableInventoryItem, 0, len(newItems))
 
 	for _, item := range newItems {
-		if item.hasPrice {
-			logPrintf("[NOTIFY] Item %s (ID: %d) has cached price: %s. Notifying immediately.\n", item.name, item.itemID, item.price)
+		fillMarketableInventoryItemDetails(&item)
+		if isPriceFresh(item.itemID) && isIconAvailable(item.itemID) {
+			logPrintf("[NOTIFY] Item %s (ID: %d) has cached fresh price: %s and icon. Notifying immediately.\n", item.name, item.itemID, item.price)
 			cachedItems = append(cachedItems, item)
 		} else {
-			logPrintf("[NOTIFY] Item %s (ID: %d) has no cached price. Spawning async fetch.\n", item.name, item.itemID)
+			logPrintf("[NOTIFY] Item %s (ID: %d) has stale/no price or no icon. Spawning async fetch.\n", item.name, item.itemID)
 			uncachedItems = append(uncachedItems, item)
 		}
 	}
@@ -132,31 +133,57 @@ func processNewMarketableInventoryItems(newItems []marketableInventoryItem) {
 
 	if len(uncachedItems) > 0 {
 		go func(items []marketableInventoryItem) {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
-			logPrintf("[NOTIFY] Starting async price fetch for %d item(s)\n", len(items))
+			logPrintf("[NOTIFY] Starting async price/icon fetch for %d item(s)\n", len(items))
 			queue := currentInventoryPriceQueue()
 			for i := range items {
+				itemID := items[i].itemID
 				if ctx.Err() != nil {
-					logPrintf("[NOTIFY] Price fetch context error for item ID %d: %v\n", items[i].itemID, ctx.Err())
+					logPrintf("[NOTIFY] Price fetch context error for item ID %d: %v\n", itemID, ctx.Err())
 					break
 				}
-				if queue != nil {
-					backoffUntil := queue.BackoffUntil()
-					if !backoffUntil.IsZero() && time.Now().Before(backoffUntil) {
-						logPrintf("[NOTIFY] Skipping price fetch for item ID %d because queue is in backoff until %s\n", items[i].itemID, backoffUntil.Format(time.RFC3339))
-						fillMarketableInventoryItemDetails(&items[i])
-						continue
-					}
-				}
-				logPrintf("[NOTIFY] Fetching price for item ID %d...\n", items[i].itemID)
-				err := fetchUncachedItemPrice(ctx, items[i].itemID)
-				if err != nil {
-					logPrintf("[NOTIFY] Price fetch failed for item ID %d: %v\n", items[i].itemID, err)
+
+				if !isPriceFresh(itemID) {
 					if queue != nil {
-						queue.TriggerBackoff(items[i].itemID, err)
+						backoffUntil := queue.BackoffUntil()
+						if !backoffUntil.IsZero() && time.Now().Before(backoffUntil) {
+							logPrintf("[NOTIFY] Skipping price fetch for item ID %d because queue is in backoff until %s\n", itemID, backoffUntil.Format(time.RFC3339))
+							fillMarketableInventoryItemDetails(&items[i])
+							continue
+						}
+					}
+					logPrintf("[NOTIFY] Fetching price for item ID %d...\n", itemID)
+					err := fetchUncachedItemPrice(ctx, itemID)
+					if err != nil {
+						logPrintf("[NOTIFY] Price fetch failed for item ID %d: %v\n", itemID, err)
+						if queue != nil {
+							queue.TriggerBackoff(itemID, err)
+						}
 					}
 				}
+
+				if !isIconAvailable(itemID) {
+					config, ok := activeApp.itemMap[itemID]
+					if ok {
+						marketHashName := buildMarketHashName(config)
+						var iconPath string
+						if path, ok := marketIconPath(marketHashName); ok {
+							iconPath = path
+						} else {
+							scope := market.CurrentScope()
+							data, exists := marketCacheEntry(scope, marketHashName)
+							if exists && data.Analysis.IconURL != "" {
+								iconPath = data.Analysis.IconURL
+							}
+						}
+						if iconPath != "" {
+							logPrintf("[NOTIFY] Preparing icon for item ID %d (path: %s)...\n", itemID, iconPath)
+							cachedNotificationIcon(iconPath)
+						}
+					}
+				}
+
 				fillMarketableInventoryItemDetails(&items[i])
 				logPrintf("[NOTIFY] Fetch completed for item ID %d. price=%s hasPrice=%t\n", items[i].itemID, items[i].price, items[i].hasPrice)
 			}
@@ -176,9 +203,13 @@ func notifyMarketableInventoryItems(items []marketableInventoryItem) {
 		if title == "" || title == "notification.item_acquired_title" {
 			title = fmt.Sprintf("%s Acquired", item.name)
 		}
+		icon := inventoryNotificationItemIcon(item.itemID)
+		if icon == 0 {
+			icon = activeApp.appIconSmall
+		}
 		queueRawTrayNotificationWithIcon(
 			fmt.Sprintf("%s\n%s", title, tr("notification.marketable_item_acquired_body", item.rarity, item.price)),
-			inventoryNotificationItemIcon(item.itemID),
+			icon,
 		)
 		return
 	}
@@ -196,6 +227,55 @@ func fillMarketableInventoryItemDetails(item *marketableInventoryItem) {
 	item.name = inventoryNotificationItemName(item.itemID)
 	item.rarity = inventoryNotificationItemRarity(item.itemID)
 	item.price, item.hasPrice = inventoryNotificationItemPrice(item.itemID)
+}
+
+func isPriceFresh(itemID int) bool {
+	config, ok := activeApp.itemMap[itemID]
+	if !ok {
+		return false
+	}
+	scope := market.CurrentScope()
+	data, exists := marketCacheEntry(scope, buildMarketHashName(config))
+	if !exists || data.Analysis.UpdatedAt.IsZero() {
+		return false
+	}
+	return time.Since(data.Analysis.UpdatedAt) <= 5*time.Minute
+}
+
+func isIconAvailable(itemID int) bool {
+	config, ok := activeApp.itemMap[itemID]
+	if !ok {
+		return true
+	}
+	marketHashName := buildMarketHashName(config)
+	var iconPath string
+	if path, ok := marketIconPath(marketHashName); ok {
+		iconPath = path
+	} else {
+		scope := market.CurrentScope()
+		data, exists := marketCacheEntry(scope, marketHashName)
+		if !exists || data.Analysis.IconURL == "" {
+			return true // No icon URL specified, treat as available so we don't block
+		}
+		iconPath = data.Analysis.IconURL
+	}
+
+	if iconPath == "" {
+		return true
+	}
+
+	activeApp.inventoryMu.Lock()
+	var inCache bool
+	if activeApp.notificationIconCache != nil {
+		_, inCache = activeApp.notificationIconCache[iconPath]
+	}
+	activeApp.inventoryMu.Unlock()
+	if inCache {
+		return true
+	}
+
+	_, existsOnDisk := existingNotificationIconFile(iconPath)
+	return existsOnDisk
 }
 
 func inventoryNotificationItemName(itemID int) string {

@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-06-28
+
+### Fixed
+- Postpone marketable inventory item notifications if price information is stale (older than 5 minutes) or if the item's icon is not yet downloaded, resolving it asynchronously.
+- Added a fallback to the application's small icon when a custom item icon is unavailable, ensuring notifications are never displayed without an icon.
+
 ## [0.11.0] - 2026-06-28
 
 ### Added

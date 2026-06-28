@@ -271,3 +271,197 @@ func TestNotificationRarityFilter(t *testing.T) {
 		t.Error("LEGENDARY item should notify when filter is LEGENDARY")
 	}
 }
+
+func TestProcessNewMarketableInventoryItems_StalePrice(t *testing.T) {
+	originalApp := activeApp
+	originalPublisher := publishTrayNotification
+	originalFetcher := fetchUncachedItemPrice
+	originalPreference := currentDisplayLanguagePreference()
+	originalScope := market.CurrentScope()
+
+	scope := market.CurrentScope()
+	ruby := catalog.ItemConfig{ID: 100, Name: map[string]string{"en-US": "Ruby"}, Grade: "COMMON", Marketable: true}
+
+	activeApp = &App{
+		appHWND:       1,
+		trayIconAdded: true,
+		allItemMap: map[int]catalog.ItemConfig{
+			100: ruby,
+		},
+		itemMap: map[int]catalog.ItemConfig{
+			100: ruby,
+		},
+		priceCache: map[string]market.MarketData{
+			market.CacheKey(scope, buildMarketHashName(ruby)): {
+				Analysis: market.MarketAnalysis{
+					// Update time is 6 minutes ago (stale!)
+					UpdatedAt:      time.Now().Add(-6 * time.Minute),
+					PricePrefix:    "$",
+					SuggestedPrice: 5.0,
+					HasSuggested:   true,
+				},
+			},
+		},
+	}
+	applyDisplayLanguagePreference("en-US")
+
+	var notifications []string
+	publishTrayNotification = func(title string, message string, _ uintptr) {
+		notifications = append(notifications, title+": "+message)
+	}
+
+	// Mock fetchUncachedItemPrice to simulate a successful API fetch that refreshes the price.
+	fetchUncachedItemPriceCalled := false
+	fetchUncachedItemPrice = func(_ context.Context, itemID int) error {
+		if itemID == 100 {
+			fetchUncachedItemPriceCalled = true
+			activeApp.priceCacheMu.Lock()
+			activeApp.priceCache[market.CacheKey(scope, buildMarketHashName(ruby))] = market.MarketData{
+				Analysis: market.MarketAnalysis{
+					UpdatedAt:      time.Now(),
+					PricePrefix:    "$",
+					SuggestedPrice: 6.50, // Updated price
+					HasSuggested:   true,
+				},
+			}
+			activeApp.priceCacheMu.Unlock()
+		}
+		return nil
+	}
+	clearPendingTrayNotifications()
+
+	t.Cleanup(func() {
+		activeApp = originalApp
+		publishTrayNotification = originalPublisher
+		fetchUncachedItemPrice = originalFetcher
+		applyDisplayLanguagePreference(originalPreference)
+		market.SetScope(originalScope.Currency.Code, originalScope.Region.CountryCode)
+		clearPendingTrayNotifications()
+	})
+
+	items := []marketableInventoryItem{
+		{itemID: 100, name: "Ruby", rarity: "Common", price: "$5.00", hasPrice: true},
+	}
+
+	processNewMarketableInventoryItems(items)
+	flushTrayNotifications()
+
+	// Ruby has stale price, so it should NOT notify immediately.
+	if len(notifications) != 0 {
+		t.Fatalf("notifications count immediately = %d, want 0 (since Ruby is stale and fetching)", len(notifications))
+	}
+
+	// Wait for the background goroutine to fetch and notify Ruby.
+	start := time.Now()
+	for time.Since(start) < 5*time.Second {
+		flushTrayNotifications()
+		if len(notifications) >= 1 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	if !fetchUncachedItemPriceCalled {
+		t.Fatal("expected fetchUncachedItemPrice to be called for stale item")
+	}
+	if len(notifications) != 1 {
+		t.Fatalf("notifications count after price resolution = %d, want 1", len(notifications))
+	}
+	if !strings.Contains(notifications[0], "Ruby") || !strings.Contains(notifications[0], "$6.50") {
+		t.Fatalf("notification 0 = %q, want Ruby notification with updated price $6.50", notifications[0])
+	}
+}
+
+func TestProcessNewMarketableInventoryItems_MissingIcon(t *testing.T) {
+	originalApp := activeApp
+	originalPublisher := publishTrayNotification
+	originalFetcher := fetchUncachedItemPrice
+	originalPreference := currentDisplayLanguagePreference()
+	originalScope := market.CurrentScope()
+
+	scope := market.CurrentScope()
+	ruby := catalog.ItemConfig{ID: 100, Name: map[string]string{"en-US": "Ruby"}, Grade: "COMMON", Marketable: true}
+
+	activeApp = &App{
+		appHWND:       1,
+		trayIconAdded: true,
+		allItemMap: map[int]catalog.ItemConfig{
+			100: ruby,
+		},
+		itemMap: map[int]catalog.ItemConfig{
+			100: ruby,
+		},
+		priceCache: map[string]market.MarketData{
+			market.CacheKey(scope, buildMarketHashName(ruby)): {
+				Analysis: market.MarketAnalysis{
+					UpdatedAt:      time.Now(), // Fresh price!
+					PricePrefix:    "$",
+					SuggestedPrice: 5.0,
+					HasSuggested:   true,
+					IconURL:        "ruby-icon-url", // We have an IconURL but it's not downloaded/cached
+				},
+			},
+		},
+		notificationIconCache: make(map[string]uintptr),
+	}
+	applyDisplayLanguagePreference("en-US")
+
+	var notifications []string
+	var receivedIcon uintptr
+	publishTrayNotification = func(title string, message string, icon uintptr) {
+		notifications = append(notifications, title+": "+message)
+		receivedIcon = icon
+	}
+
+	// Mock fetchUncachedItemPrice to make sure it is NOT called (since price is fresh)
+	fetchUncachedItemPriceCalled := false
+	fetchUncachedItemPrice = func(_ context.Context, itemID int) error {
+		fetchUncachedItemPriceCalled = true
+		return nil
+	}
+	clearPendingTrayNotifications()
+
+	activeApp.appIconSmall = 42
+
+	t.Cleanup(func() {
+		activeApp = originalApp
+		publishTrayNotification = originalPublisher
+		fetchUncachedItemPrice = originalFetcher
+		applyDisplayLanguagePreference(originalPreference)
+		market.SetScope(originalScope.Currency.Code, originalScope.Region.CountryCode)
+		clearPendingTrayNotifications()
+	})
+
+	items := []marketableInventoryItem{
+		{itemID: 100, name: "Ruby", rarity: "Common", price: "$5.00", hasPrice: true},
+	}
+
+	processNewMarketableInventoryItems(items)
+	flushTrayNotifications()
+
+	// Since icon is missing/not cached, it should NOT notify immediately!
+	if len(notifications) != 0 {
+		t.Fatalf("notifications count immediately = %d, want 0 (since Ruby icon is missing and downloading)", len(notifications))
+	}
+
+	// Wait for the background goroutine to complete
+	start := time.Now()
+	for time.Since(start) < 5*time.Second {
+		flushTrayNotifications()
+		if len(notifications) >= 1 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	if fetchUncachedItemPriceCalled {
+		t.Fatal("expected fetchUncachedItemPrice NOT to be called since price is fresh")
+	}
+	if len(notifications) != 1 {
+		t.Fatalf("notifications count after completion = %d, want 1", len(notifications))
+	}
+	if receivedIcon != 42 {
+		t.Fatalf("receivedIcon = %v, want 42 (fallback to appIconSmall)", receivedIcon)
+	}
+}
+
