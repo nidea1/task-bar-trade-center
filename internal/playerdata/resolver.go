@@ -201,6 +201,9 @@ func (resolver *Resolver) readObject(memory Memory, object uintptr, now time.Tim
 	if trade := readListInfo(memory, readPtr(memory, object+playerTradeSlots), 100); trade.ok {
 		tradeSlots = resolver.readTradeSlots(memory, trade)
 	}
+	if runtimeTradeSlots := resolver.readRuntimeTradeSlots(memory, now); len(runtimeTradeSlots) > 0 {
+		tradeSlots = runtimeTradeSlots
+	}
 
 	return InventorySnapshot{ReadAt: now, Gold: gold, StashPageCount: stashPageCount, Items: owned, TradeSlots: tradeSlots}, true
 }

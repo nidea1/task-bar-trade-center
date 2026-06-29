@@ -6,6 +6,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.3] - 2026-06-29
+
+### Added
+- Added an in-dashboard update prompt with "Update Now" and "Update Later" actions when a new application version is available.
+- Localized the new dashboard update prompt across all 18 supported languages.
+
+### Changed
+- Updated Trade Ship cooldown detection to prefer live `TradingStashSlot` timestamps over stale save-slot timestamps, fixing early voyage-complete notifications.
+- Opening an available update now brings the dashboard forward instead of relying only on the tray install action.
+
+### Fixed
+- Suppressed marketable-item notifications from cube decoration, engraving, inscription, and extraction logs.
+- Suppressed stale Trade Ship completion notifications when an already-expired cooldown is first observed.
+- Avoided briefly showing the "Waiting for TaskBarHero" status when the user chooses to close TBTC after TaskBarHero exits.
+
 ## [0.11.2] - 2026-06-29
 
 ### Fixed

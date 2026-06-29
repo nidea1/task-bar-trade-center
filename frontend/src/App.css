@@ -775,6 +775,100 @@
   box-shadow: 0 0 10px rgba(255, 190, 45, 0.45);
 }
 
+.update-prompt-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(3, 3, 4, 0.72);
+}
+
+.update-prompt-panel {
+  width: min(420px, 100%);
+  max-height: calc(100vh - 36px);
+}
+
+.update-prompt-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.update-prompt-header-icon {
+  width: 26px;
+  height: 26px;
+  color: #ffbe2d;
+  flex-shrink: 0;
+  stroke-width: 2.2;
+}
+
+.update-prompt-title {
+  margin: 0;
+  color: #ffbe2d;
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.update-prompt-version {
+  margin: 0.2rem 0 0;
+  color: #e1d5bf;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.update-prompt-body {
+  padding: 1rem;
+  color: #cdbf9f;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.update-prompt-body p {
+  margin: 0;
+}
+
+.update-prompt-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.update-prompt-actions .game-button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0 0.75rem;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.update-prompt-secondary {
+  color: #caa66a;
+  border-color: #5f4d36;
+}
+
+.update-prompt-button-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  stroke-width: 2.35;
+}
+
 .pricing-refresh-eta {
   margin-left: 0.65rem;
   padding-left: 0.65rem;

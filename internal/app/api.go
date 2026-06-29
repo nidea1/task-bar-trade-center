@@ -350,6 +350,10 @@ func GetDashboardFooterInfo() DashboardFooterInfo {
 	}
 }
 
+func InstallAvailableUpdate() bool {
+	return installAvailableUpdate()
+}
+
 func GetDashboardSettings() DashboardSettings {
 	return currentDashboardSettings()
 }

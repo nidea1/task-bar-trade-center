@@ -11,6 +11,7 @@ import {
     SetDisplayLanguage,
     SetMarketScope,
     GetDashboardFooterInfo,
+    InstallAvailableUpdate,
     GetDashboardSettings,
     GetMinRarityNotify,
     SetDashboardSettings,
@@ -45,7 +46,10 @@ import {
     HandHeart,
     Keyboard,
     Settings,
-    Maximize
+    Maximize,
+    AlertTriangle,
+    Clock,
+    Download
 } from 'lucide-react';
 
 import { HERO_CLASSES, appIcon } from './constants';
@@ -90,6 +94,7 @@ import DashboardFooter from './components/DashboardFooter';
 const notificationSourceOrder: NotificationSource[] = ["box", "craft", "synthesis", "offering"];
 const allNotificationSources = notificationSourceOrder.join(",");
 const noNotificationSources = "none";
+const updateStatusDownloading = 5;
 
 const defaultDashboardSettings: DashboardSettings = {
     theme_mode: "dark",
@@ -225,6 +230,8 @@ function App() {
     const [currentLanguage, setCurrentLanguage] = useState<string>("en-US");
     const [currentMarketScope, setCurrentMarketScope] = useState<{ currency_code: string; country_code: string } | null>(null);
     const [footerInfo, setFooterInfo] = useState<DashboardFooterInfo | null>(null);
+    const [dismissedUpdatePromptKey, setDismissedUpdatePromptKey] = useState("");
+    const [installingUpdate, setInstallingUpdate] = useState(false);
     const [minRarityNotify, setMinRarityNotifyState] = useState<string>("COMMON");
     const [themeMode, setThemeMode] = useState<ThemeMode>(() => readStoredThemeMode());
     const [priceMode, setPriceMode] = useState<PriceMode>("suggested");
@@ -348,12 +355,17 @@ function App() {
             setState(nextState as unknown as DashboardState);
             setError("");
         });
+        const unsubscribeFooter = EventsOn("dashboard-footer-updated", (info: unknown) => {
+            if (!mountedRef.current) return;
+            setFooterInfo(info as DashboardFooterInfo);
+        });
 
         return () => {
             mountedRef.current = false;
             window.clearInterval(timer);
             window.clearInterval(footerTimer);
             unsubscribe();
+            unsubscribeFooter();
         };
     }, []);
 
@@ -463,6 +475,12 @@ function App() {
             setActiveRefreshKind(null);
         }
     }, [state?.refresh?.refreshing, refreshing, forceRefreshing]);
+
+    useEffect(() => {
+        if (footerInfo && footerInfo.update_status !== updateStatusDownloading) {
+            setInstallingUpdate(false);
+        }
+    }, [footerInfo?.update_status]);
 
     const handleMinRarityNotifyChange = (grade: string) => {
         setMinRarityNotifyState(grade);
@@ -675,6 +693,35 @@ function App() {
     const normalRefreshBusy = refreshing || (refreshQueueRunning && displayedRefreshKind === "smart");
     const forceRefreshBusy = forceRefreshing || (refreshQueueRunning && displayedRefreshKind === "force");
     const isWaitingForInventory = !state?.updated_at;
+    const updatePromptKey = footerInfo?.update_available
+        ? (footerInfo.release_url || footerInfo.update_text || "available")
+        : "";
+    const showUpdatePrompt = !!footerInfo?.update_available
+        && updatePromptKey !== dismissedUpdatePromptKey
+        && !installingUpdate;
+    const dismissUpdatePrompt = () => {
+        setDismissedUpdatePromptKey(updatePromptKey);
+    };
+    const installUpdateNow = () => {
+        setInstallingUpdate(true);
+        InstallAvailableUpdate()
+            .then((started: boolean) => {
+                if (!mountedRef.current) return;
+                if (!started) {
+                    setInstallingUpdate(false);
+                    setError(t(
+                        "dialog.update_available.install_failed",
+                        localizedFallback(currentLanguage, "Güncelleme başlatılamadı.", "Could not start the update.")
+                    ));
+                    loadFooterInfo();
+                }
+            })
+            .catch((err: unknown) => {
+                if (!mountedRef.current) return;
+                setInstallingUpdate(false);
+                setError(String(err));
+            });
+    };
 
     return (
         <main lang={currentLanguage.split('-')[0].toLowerCase()} className={`dashboard-shell theme-${themeMode} h-screen bg-[#030304] text-[#e1d5bf] flex flex-col select-none overflow-hidden`}>
@@ -1113,6 +1160,43 @@ function App() {
                     </>
                 )}
             </div>
+            {showUpdatePrompt && (
+                <div className="update-prompt-backdrop no-drag" role="dialog" aria-modal="true" aria-labelledby="update-prompt-title">
+                    <div className="update-prompt-panel game-panel">
+                        <div className="game-header update-prompt-header">
+                            <AlertTriangle className="update-prompt-header-icon" />
+                            <div className="min-w-0">
+                                <h2 id="update-prompt-title" className="update-prompt-title">
+                                    {t("dialog.update_available.title", localizedFallback(currentLanguage, "Güncelleme var", "Update available"))}
+                                </h2>
+                                <p className="update-prompt-version" title={footerInfo?.update_text || ""}>{footerInfo?.update_text}</p>
+                            </div>
+                        </div>
+                        <div className="update-prompt-body">
+                            <p>
+                                {t(
+                                    "dialog.update_available.dashboard_body",
+                                    localizedFallback(
+                                        currentLanguage,
+                                        "Yeni TBTC sürümü hazır. Şimdi yükleyebilir ya da bu sürümle devam edip daha sonra tray menüsünden güncelleyebilirsin.",
+                                        "A new TBTC version is ready. Install it now or keep using this version and update later from the tray menu."
+                                    )
+                                )}
+                            </p>
+                            <div className="update-prompt-actions">
+                                <button type="button" className="game-button update-prompt-secondary" onClick={dismissUpdatePrompt}>
+                                    <Clock className="update-prompt-button-icon" />
+                                    <span>{t("dialog.update_available.later", localizedFallback(currentLanguage, "Sonra Güncelle", "Update Later"))}</span>
+                                </button>
+                                <button type="button" className="game-button update-prompt-primary" onClick={installUpdateNow}>
+                                    <Download className="update-prompt-button-icon" />
+                                    <span>{t("dialog.update_available.now", localizedFallback(currentLanguage, "Şimdi Güncelle", "Update Now"))}</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
             <DashboardFooter
                 info={footerInfo}
                 isRefreshing={isCurrentlyRefreshing}

@@ -74,6 +74,10 @@ func setUpdateState(status int32, detail, downloadURL, releaseURL string) {
 	}
 	appStateDetails.Unlock()
 	requestStatusRefresh()
+	callDashboardFooterUpdated(GetDashboardFooterInfo())
+	if previous != status && status == UpdateStatusAvailable {
+		callOpenDashboard()
+	}
 	if previous != status && activeApp.trayIconAdded && updateNeedsAction(status) {
 		queueTrayNotification(tr("notification.update", updateStatusText()), true)
 	}

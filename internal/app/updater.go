@@ -78,9 +78,8 @@ func isNewerVersion(current, latest string) bool {
 	return updatecore.IsNewerVersion(current, latest)
 }
 
-// checkForUpdates checks for updates on GitHub.
-// if silent is true, it only prompts if an update is available.
-// if silent is false, it prompts for update or shows "Up to date" or error dialog.
+// checkForUpdates checks for updates on GitHub and records the result for tray
+// and dashboard UI.
 func checkForUpdates(silent bool) {
 	setUpdateState(UpdateStatusChecking, "", "", "")
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -106,40 +105,19 @@ func checkForUpdates(silent bool) {
 	}
 
 	setUpdateState(UpdateStatusAvailable, tr("update.available", release.TagName), exeAsset.BrowserDownloadURL, release.HTMLURL)
-	promptAvailableUpdate()
 }
 
-func promptAvailableUpdate() {
-	if activeApp.updateStatus.Load() != UpdateStatusAvailable {
-		return
-	}
-	if askInstallUpdateOnUIThread() {
-		installAvailableUpdate()
-	}
-}
-
-func askInstallUpdateOnUIThread() bool {
-	if activeApp.appHWND == 0 {
-		return showInstallUpdatePrompt()
-	}
-	result, _, _ := win32.ProcSendMessageW.Call(activeApp.appHWND, WM_APP_UPDATE_PROMPT, 0, 0)
-	return result != 0
-}
-
-func showInstallUpdatePrompt() bool {
-	return showYesNoMessageBox(updateStatusText(), tr("dialog.update_available.body"))
-}
-
-func installAvailableUpdate() {
+func installAvailableUpdate() bool {
 	downloadURL, releaseURL := updateActionURLs()
 	if downloadURL == "" {
-		return
+		return false
 	}
 	if activeApp.updateStatus.Load() != UpdateStatusAvailable {
-		return
+		return false
 	}
 	setUpdateState(UpdateStatusDownloading, "", downloadURL, releaseURL)
 	go performUpdate(downloadURL, releaseURL)
+	return true
 }
 
 func performUpdate(downloadURL, releasePageURL string) {

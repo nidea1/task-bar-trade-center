@@ -198,11 +198,6 @@ func appWndProc(hWnd uintptr, msg uint32, wParam uintptr, lParam uintptr) uintpt
 			return 1
 		}
 		return 0
-	case WM_APP_UPDATE_PROMPT:
-		if showInstallUpdatePrompt() {
-			return 1
-		}
-		return 0
 	case WM_APP_OPEN_TRAY_MENU:
 		showTrayMenu()
 		return 0

@@ -235,8 +235,9 @@ func openInventoryDashboard() {
 }
 
 var (
-	notifiedTradeSlots   = make(map[int]time.Time)
-	notifiedTradeSlotsMu sync.Mutex
+	observedTradeSlots = make(map[int]time.Time)
+	notifiedTradeSlots = make(map[int]time.Time)
+	tradeSlotsNotifyMu sync.Mutex
 )
 
 func monitorInventoryNotifications(processHandle uintptr) {
@@ -278,32 +279,56 @@ func checkTradeSlotCooldowns() {
 	now := time.Now()
 	for _, slot := range snapshot.TradeSlots {
 		if slot.State != 1 || slot.CooldownUntil.IsZero() {
+			forgetTradeSlotCooldown(slot.Index)
 			continue
 		}
 
-		if now.After(slot.CooldownUntil) {
-			notifiedTradeSlotsMu.Lock()
-			lastNotified, exists := notifiedTradeSlots[slot.Index]
-			alreadyNotified := exists && lastNotified.Equal(slot.CooldownUntil)
-			if !alreadyNotified {
-				notifiedTradeSlots[slot.Index] = slot.CooldownUntil
-				notifiedTradeSlotsMu.Unlock()
-
-				// Trigger notification
-				title := tr("notification.trade_ship_title")
-				body := tr("notification.trade_ship_body", slot.Index+1)
-				if title == "" || title == "notification.trade_ship_title" {
-					title = "Steam Trade Ship"
-				}
-				if body == "" || body == "notification.trade_ship_body" {
-					body = fmt.Sprintf("Slot %d Voyage Completed!", slot.Index+1)
-				}
-				queueRawTrayNotification(fmt.Sprintf("%s\n%s", title, body))
-			} else {
-				notifiedTradeSlotsMu.Unlock()
-			}
+		if !shouldNotifyTradeSlotCooldown(slot.Index, slot.CooldownUntil, now) {
+			continue
 		}
+
+		title := tr("notification.trade_ship_title")
+		body := tr("notification.trade_ship_body", slot.Index+1)
+		if title == "" || title == "notification.trade_ship_title" {
+			title = "Steam Trade Ship"
+		}
+		if body == "" || body == "notification.trade_ship_body" {
+			body = fmt.Sprintf("Slot %d Voyage Completed!", slot.Index+1)
+		}
+		queueRawTrayNotification(fmt.Sprintf("%s\n%s", title, body))
 	}
+}
+
+func shouldNotifyTradeSlotCooldown(index int, cooldownUntil time.Time, now time.Time) bool {
+	tradeSlotsNotifyMu.Lock()
+	defer tradeSlotsNotifyMu.Unlock()
+
+	if !now.After(cooldownUntil) {
+		observedTradeSlots[index] = cooldownUntil
+		return false
+	}
+
+	if lastNotified, exists := notifiedTradeSlots[index]; exists && lastNotified.Equal(cooldownUntil) {
+		return false
+	}
+
+	lastObserved, observed := observedTradeSlots[index]
+	if !observed || !lastObserved.Equal(cooldownUntil) {
+		observedTradeSlots[index] = cooldownUntil
+		notifiedTradeSlots[index] = cooldownUntil
+		logPrintf("[NOTIFY] Trade Ship slot %d cooldown %s was already due on first observation. Suppressing startup/stale notification.\n", index+1, cooldownUntil.Format(time.RFC3339))
+		return false
+	}
+
+	notifiedTradeSlots[index] = cooldownUntil
+	return true
+}
+
+func forgetTradeSlotCooldown(index int) {
+	tradeSlotsNotifyMu.Lock()
+	delete(observedTradeSlots, index)
+	delete(notifiedTradeSlots, index)
+	tradeSlotsNotifyMu.Unlock()
 }
 
 var lastPollErr error
@@ -735,6 +760,8 @@ func inventoryInteractionResultSource(className string) (string, bool) {
 		return notificationSourceCraft, true
 	case "CraftResultLog", "CraftResult", "CubeResultLog", "CubeResult":
 		return notificationSourceCraft, true
+	case "CubeDecorationLog", "CubeEngravingLog", "CubeInscriptionLog", "CubeExtractionLog":
+		return "", false
 	case "OfferingResultLog", "OfferingResult", "OfferingLog", "Offering":
 		return notificationSourceOffering, true
 	}
@@ -742,6 +769,8 @@ func inventoryInteractionResultSource(className string) (string, bool) {
 	switch {
 	case strings.Contains(lowerClassName, "synthesis"):
 		return notificationSourceSynthesis, true
+	case strings.Contains(lowerClassName, "cubedecoration"), strings.Contains(lowerClassName, "cubeengraving"), strings.Contains(lowerClassName, "cubeinscription"), strings.Contains(lowerClassName, "cubeextraction"):
+		return "", false
 	case strings.Contains(lowerClassName, "craft"), strings.Contains(lowerClassName, "cube"):
 		return notificationSourceCraft, true
 	case strings.Contains(lowerClassName, "offering"):

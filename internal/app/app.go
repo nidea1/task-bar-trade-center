@@ -262,7 +262,7 @@ func handleGameClosed() bool {
 	if shouldClose {
 		activeApp.shutdownRequested.Store(true)
 	}
-	resetGameProcess()
+	resetGameProcess(!shouldClose)
 	if !shouldClose {
 		return false
 	}
@@ -278,7 +278,7 @@ func askGameClosedOnUIThread() bool {
 	return result != 0
 }
 
-func resetGameProcess() {
+func resetGameProcess(setWaitingStatus bool) {
 	activeApp.gameReady.Store(false)
 	activeApp.activeItemID.Store(0)
 	setCurrentItemName("")
@@ -296,7 +296,9 @@ func resetGameProcess() {
 	activeApp.tooltipXAOBResolver.Reset()
 	activeApp.tooltipYAOBResolver.Reset()
 	activeApp.tooltipHeightAOBResolver.Reset()
-	setAppStatus(AppStatusWaitingForGame)
+	if setWaitingStatus {
+		setAppStatus(AppStatusWaitingForGame)
+	}
 }
 
 func marketableItemExists(itemID int32) bool {

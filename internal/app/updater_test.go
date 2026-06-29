@@ -82,20 +82,25 @@ func TestCheckForUpdates_RecordsAvailableUpdateAndKeepsInstallerForLater(t *test
 	// Backup and restore globals
 	oldURL := githubReleaseURL
 	githubReleaseURL = ts.URL
-	oldYesNo := showYesNoMessageBoxMock
 	oldInfo := showInfoMessageBoxMock
+	callbacks.RLock()
+	oldCallbacks := callbacks.value
+	callbacks.RUnlock()
 	defer func() {
 		githubReleaseURL = oldURL
-		showYesNoMessageBoxMock = oldYesNo
 		showInfoMessageBoxMock = oldInfo
+		SetCallbacks(oldCallbacks)
 	}()
-	var promptTitle string
-	var promptMessage string
-	showYesNoMessageBoxMock = func(title, message string) bool {
-		promptTitle = title
-		promptMessage = message
-		return false
-	}
+	var dashboardOpened bool
+	var footerInfo DashboardFooterInfo
+	SetCallbacks(Callbacks{
+		OpenDashboard: func() {
+			dashboardOpened = true
+		},
+		DashboardFooterUpdated: func(info DashboardFooterInfo) {
+			footerInfo = info
+		},
+	})
 	showInfoMessageBoxMock = func(title, message string) {
 		t.Fatalf("unexpected update dialog: %s - %s", title, message)
 	}
@@ -109,8 +114,11 @@ func TestCheckForUpdates_RecordsAvailableUpdateAndKeepsInstallerForLater(t *test
 	if downloadURL != "https://example.com/tbtc.exe" || releaseURL != mockRelease.HTMLURL {
 		t.Fatalf("update URLs = %q, %q", downloadURL, releaseURL)
 	}
-	if promptTitle == "" || promptMessage == "" {
-		t.Fatal("available update did not prompt the user")
+	if !dashboardOpened {
+		t.Fatal("available update did not open the dashboard")
+	}
+	if !footerInfo.UpdateAvailable || footerInfo.ReleaseURL != mockRelease.HTMLURL {
+		t.Fatalf("footer update info = %+v, want available update with release URL", footerInfo)
 	}
 }
 
@@ -285,6 +293,7 @@ func TestHandleGameClosedUsesRequestAppShutdown(t *testing.T) {
 		activeApp.shutdownRequested.Store(originalShutdownRequested)
 	})
 	activeApp.shutdownRequested.Store(false)
+	activeApp.appStatus.Store(AppStatusReady)
 
 	// Set activeApp.appHWND to 0 so requestAppShutdown is a safe no-op
 	activeApp.appHWND = 0
@@ -295,5 +304,8 @@ func TestHandleGameClosedUsesRequestAppShutdown(t *testing.T) {
 
 	if !handleGameClosed() {
 		t.Fatal("handleGameClosed should return true when user confirms exit")
+	}
+	if activeApp.appStatus.Load() == AppStatusWaitingForGame {
+		t.Fatal("handleGameClosed should not show waiting-for-game status when the app is closing")
 	}
 }

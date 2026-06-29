@@ -1,10 +1,19 @@
 package playerdata
 
 import (
+	"encoding/binary"
+	"sort"
 	"time"
 
 	"github.com/nidea1/task-bar-trade-center/internal/il2cpp"
 	"github.com/nidea1/task-bar-trade-center/internal/tbhmem"
+)
+
+const (
+	runtimeTradeSlotIndex         = 0x80
+	runtimeTradeSlotCountdownText = 0xE0
+	runtimeTradeSlotCooldownUntil = 0xE8
+	runtimeTradeSlotCache         = 0x100
 )
 
 func (resolver *Resolver) readItemSaveDataList(memory Memory, list listInfo) (map[uint64]int, int) {
@@ -254,4 +263,80 @@ func (resolver *Resolver) readTradeSlots(memory Memory, list listInfo) []TradeSh
 		})
 	}
 	return slots
+}
+
+func (resolver *Resolver) readRuntimeTradeSlots(memory Memory, now time.Time) []TradeShipSlot {
+	slotClasses, ok := il2cpp.ResolveClassByName(memory, "TradingStashSlot")
+	if !ok || len(slotClasses) == 0 {
+		return nil
+	}
+	cacheClasses, ok := il2cpp.ResolveClassByName(memory, "TradingStashCache")
+	if !ok || len(cacheClasses) == 0 {
+		return nil
+	}
+	cacheClassSet := make(map[uintptr]struct{}, len(cacheClasses))
+	for _, classPtr := range cacheClasses {
+		cacheClassSet[classPtr] = struct{}{}
+	}
+
+	byIndex := make(map[int]TradeShipSlot)
+	for _, classPtr := range slotClasses {
+		ptrBytes := make([]byte, 8)
+		binary.LittleEndian.PutUint64(ptrBytes, uint64(classPtr))
+		refs, _ := memory.ScanPattern(ptrBytes, 50000)
+		for _, object := range refs {
+			if readPtr(memory, object) != classPtr {
+				continue
+			}
+			indexVal, ok := memory.ReadInt32(object + runtimeTradeSlotIndex)
+			if !ok || indexVal < 0 || indexVal > 99 {
+				continue
+			}
+			cachePtr := readPtr(memory, object+runtimeTradeSlotCache)
+			cacheClass := readPtr(memory, cachePtr)
+			if _, ok := cacheClassSet[cacheClass]; !ok {
+				continue
+			}
+			textPtr := readPtr(memory, object+runtimeTradeSlotCountdownText)
+			if textPtr == 0 || !tbhmem.PlausibleAddress(textPtr) {
+				continue
+			}
+			rawUntil, ok := memory.ReadUint64(object + runtimeTradeSlotCooldownUntil)
+			if !ok {
+				continue
+			}
+			cooldownUntil, ok := dotnetDateTime(rawUntil)
+			if !ok || cooldownUntil.Before(now.Add(-24*time.Hour)) || cooldownUntil.After(now.Add(7*24*time.Hour)) {
+				continue
+			}
+
+			slot := TradeShipSlot{Index: int(indexVal), State: 1, CooldownUntil: cooldownUntil}
+			if existing, exists := byIndex[slot.Index]; !exists || slot.CooldownUntil.After(existing.CooldownUntil) {
+				byIndex[slot.Index] = slot
+			}
+		}
+	}
+	if len(byIndex) == 0 {
+		return nil
+	}
+	slots := make([]TradeShipSlot, 0, len(byIndex))
+	for _, slot := range byIndex {
+		slots = append(slots, slot)
+	}
+	sort.Slice(slots, func(i, j int) bool {
+		return slots[i].Index < slots[j].Index
+	})
+	return slots
+}
+
+func dotnetDateTime(value uint64) (time.Time, bool) {
+	const ticksAtUnixEpoch = uint64(621355968000000000)
+	const ticksPerSecond = uint64(10000000)
+
+	ticks := value & 0x3FFFFFFFFFFFFFFF
+	if ticks < ticksAtUnixEpoch {
+		return time.Time{}, false
+	}
+	unixSecs := int64((ticks - ticksAtUnixEpoch) / ticksPerSecond)
+	return time.Unix(unixSecs, 0).UTC(), true
 }

@@ -2,6 +2,7 @@ package app
 
 import (
 	"testing"
+	"time"
 )
 
 func TestInventoryInteractionResultSource(t *testing.T) {
@@ -16,6 +17,12 @@ func TestInventoryInteractionResultSource(t *testing.T) {
 		{name: "CraftingResult", source: "craft", ok: true},
 		{name: "CubeResultLog", source: "craft", ok: true},
 		{name: "SomeCubeRewardLog", source: "craft", ok: true},
+		{name: "CubeDecorationLog", ok: false},
+		{name: "CubeEngravingLog", ok: false},
+		{name: "CubeInscriptionLog", ok: false},
+		{name: "CubeExtractionLog", ok: false},
+		{name: "SomeCubeDecorationRewardLog", ok: false},
+		{name: "SomeCubeExtractionRewardLog", ok: false},
 		{name: "OfferingResultLog", source: "offering", ok: true},
 		{name: "OfferingResult", source: "offering", ok: true},
 		{name: "BoxOpenLog", ok: false},
@@ -53,6 +60,47 @@ func TestItemIDFromItemNameKey(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTradeSlotCooldownNotificationRequiresFutureObservation(t *testing.T) {
+	resetTradeSlotNotificationStateForTest(t)
+
+	now := time.Date(2026, 6, 29, 12, 0, 0, 0, time.UTC)
+	alreadyDue := now.Add(-time.Minute)
+	if shouldNotifyTradeSlotCooldown(0, alreadyDue, now) {
+		t.Fatal("first observation of an already-due cooldown should not notify")
+	}
+	if shouldNotifyTradeSlotCooldown(0, alreadyDue, now.Add(time.Second)) {
+		t.Fatal("already suppressed cooldown should not notify later")
+	}
+
+	future := now.Add(time.Minute)
+	if shouldNotifyTradeSlotCooldown(1, future, now) {
+		t.Fatal("future cooldown should not notify before it is due")
+	}
+	if !shouldNotifyTradeSlotCooldown(1, future, future.Add(time.Second)) {
+		t.Fatal("previously observed future cooldown should notify after it is due")
+	}
+	if shouldNotifyTradeSlotCooldown(1, future, future.Add(2*time.Second)) {
+		t.Fatal("same due cooldown should notify only once")
+	}
+}
+
+func resetTradeSlotNotificationStateForTest(t *testing.T) {
+	t.Helper()
+	tradeSlotsNotifyMu.Lock()
+	originalObserved := observedTradeSlots
+	originalNotified := notifiedTradeSlots
+	observedTradeSlots = make(map[int]time.Time)
+	notifiedTradeSlots = make(map[int]time.Time)
+	tradeSlotsNotifyMu.Unlock()
+
+	t.Cleanup(func() {
+		tradeSlotsNotifyMu.Lock()
+		observedTradeSlots = originalObserved
+		notifiedTradeSlots = originalNotified
+		tradeSlotsNotifyMu.Unlock()
+	})
 }
 
 func TestNormalizeNotificationSources(t *testing.T) {

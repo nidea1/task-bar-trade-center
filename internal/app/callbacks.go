@@ -7,9 +7,10 @@ import (
 )
 
 type Callbacks struct {
-	OpenDashboard    func()
-	Quit             func()
-	DashboardUpdated func(inventory.DashboardState)
+	OpenDashboard          func()
+	Quit                   func()
+	DashboardUpdated       func(inventory.DashboardState)
+	DashboardFooterUpdated func(DashboardFooterInfo)
 }
 
 var callbacks = struct {
@@ -47,5 +48,14 @@ func callDashboardUpdated(state inventory.DashboardState) {
 	callbacks.RUnlock()
 	if fn != nil {
 		go fn(state)
+	}
+}
+
+func callDashboardFooterUpdated(info DashboardFooterInfo) {
+	callbacks.RLock()
+	fn := callbacks.value.DashboardFooterUpdated
+	callbacks.RUnlock()
+	if fn != nil {
+		fn(info)
 	}
 }
