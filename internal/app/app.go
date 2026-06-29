@@ -199,6 +199,7 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 				logPrintf("Memory read failed. The AOB pattern or pointer/offset chain may be outdated.\n")
 				lastReadFailed = true
 			}
+			cancelHoveredPriceFetch()
 			activeApp.activeItemID.Store(0)
 			if EnablePriceHUD && activeApp.showOverlay.Load() {
 				activeApp.showOverlay.Store(false)
@@ -219,6 +220,7 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 			activeApp.activeItemID.Store(currentItemID)
 			if currentItemID > 0 {
 				if config, exists := activeApp.itemMap[int(currentItemID)]; exists {
+					scope := market.CurrentScope()
 					lang := currentDisplayLanguage()
 					name := config.Name[lang]
 					if name == "" {
@@ -228,13 +230,20 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 					logCurrentTooltipCalibration()
 					logPrintf("Mouse is over item: %s (ID: %d)\n", getCurrentItemName(), currentItemID)
 					logPrintf("Item ID read mode: %s\n", readMode)
+					cacheState := cachedPriceMissing
 					if EnablePriceHUD {
 						activeApp.showOverlay.Store(true)
-						setCurrentPriceText(tr("hud.loading"))
+						cacheState = showCachedPriceOverlay(config, scope)
+						if cacheState == cachedPriceMissing {
+							setCurrentPriceText(tr("hud.loading"))
+						}
 						redrawOverlay()
 					}
-					go fetchPriceAndUpdate(config)
+					if cacheState != cachedPriceFresh {
+						scheduleHoveredPriceFetch(config, currentItemID, scope)
+					}
 				} else {
+					cancelHoveredPriceFetch()
 					activeApp.activeItemID.Store(0)
 					if EnablePriceHUD {
 						activeApp.showOverlay.Store(false)
@@ -243,6 +252,7 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 					logPrintf("Read item ID is not in the marketable list: %d\n", currentItemID)
 				}
 			} else {
+				cancelHoveredPriceFetch()
 				activeApp.activeItemID.Store(0)
 				if EnablePriceHUD {
 					activeApp.showOverlay.Store(false)
@@ -280,6 +290,7 @@ func askGameClosedOnUIThread() bool {
 
 func resetGameProcess(setWaitingStatus bool) {
 	activeApp.gameReady.Store(false)
+	cancelHoveredPriceFetch()
 	activeApp.activeItemID.Store(0)
 	setCurrentItemName("")
 	activeApp.showOverlay.Store(false)

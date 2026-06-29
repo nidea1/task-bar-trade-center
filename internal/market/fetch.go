@@ -20,13 +20,62 @@ const (
 	steamRequestJitter  = 0.15
 )
 
-var steamRequestLimiter = struct {
-	sync.Mutex
+type RequestPriority int
+
+const (
+	RequestPriorityNormal RequestPriority = iota
+	RequestPriorityHigh
+)
+
+func (priority RequestPriority) String() string {
+	if priority == RequestPriorityHigh {
+		return "high"
+	}
+	return "normal"
+}
+
+type SteamRequestMetric struct {
+	Endpoint        string
+	Priority        RequestPriority
+	LimiterWait     time.Duration
+	RequestDuration time.Duration
+	StatusCode      int
+	RetryAfter      string
+	Error           string
+}
+
+type steamRateLimiter struct {
+	mu            sync.Mutex
+	cond          *sync.Cond
 	lastStartedAt time.Time
+	waitingHigh   int
+}
+
+func newSteamRateLimiter() *steamRateLimiter {
+	limiter := &steamRateLimiter{}
+	limiter.cond = sync.NewCond(&limiter.mu)
+	return limiter
+}
+
+var steamRequestLimiter = newSteamRateLimiter()
+
+var steamRequestMetricLogger = struct {
+	sync.RWMutex
+	log func(SteamRequestMetric)
 }{}
 
+func SetSteamRequestMetricLogger(logger func(SteamRequestMetric)) {
+	steamRequestMetricLogger.Lock()
+	steamRequestMetricLogger.log = logger
+	steamRequestMetricLogger.Unlock()
+}
+
 func FetchData(config catalog.ItemConfig, marketHashName string, now time.Time, scope MarketScope) (MarketData, error) {
-	data, err := fetchDataForScope(config, marketHashName, now, scope)
+	return FetchDataWithPriority(config, marketHashName, now, scope, RequestPriorityNormal)
+}
+
+func FetchDataWithPriority(config catalog.ItemConfig, marketHashName string, now time.Time, scope MarketScope, priority RequestPriority) (MarketData, error) {
+	data, err := fetchDataForScope(config, marketHashName, now, scope, priority)
 	if err != nil {
 		return data, err
 	}
@@ -35,7 +84,7 @@ func FetchData(config catalog.ItemConfig, marketHashName string, now time.Time, 
 	}
 
 	data.Analysis.USDDataFallbackAttempted = true
-	usdData, usdErr := fetchDataForScope(config, marketHashName, now, defaultMarketScope())
+	usdData, usdErr := fetchDataForScope(config, marketHashName, now, defaultMarketScope(), priority)
 	if usdErr != nil {
 		if se, ok := usdErr.(*SteamError); ok && se.StatusCode == 429 {
 			return data, usdErr
@@ -115,7 +164,7 @@ func PriceOverviewURL(marketHashName string, scope MarketScope) string {
 	)
 }
 
-func fetchDataForScope(config catalog.ItemConfig, marketHashName string, now time.Time, scope MarketScope) (MarketData, error) {
+func fetchDataForScope(config catalog.ItemConfig, marketHashName string, now time.Time, scope MarketScope, priority RequestPriority) (MarketData, error) {
 	client := &http.Client{Timeout: steamRequestTimeout}
 	referer := ListingURLForScope(config, scope)
 	var requestErrors []string
@@ -125,7 +174,7 @@ func fetchDataForScope(config catalog.ItemConfig, marketHashName string, now tim
 	var history []MarketSalePoint
 
 	var iconURL string
-	listingBody, _, err := steamGet(client, referer, "")
+	listingBody, _, err := steamGetWithPriority(client, referer, "", priority)
 	if err != nil {
 		if se, ok := err.(*SteamError); ok && se.StatusCode == 429 {
 			return MarketData{}, err
@@ -144,7 +193,7 @@ func fetchDataForScope(config catalog.ItemConfig, marketHashName string, now tim
 		if !hasOrderBook {
 			itemNameID := parseItemNameID(listingBody)
 			if itemNameID != "" {
-				body, _, err := fetchItemOrdersHistogram(client, itemNameID, referer, scope)
+				body, _, err := fetchItemOrdersHistogram(client, itemNameID, referer, scope, priority)
 				if err != nil {
 					if se, ok := err.(*SteamError); ok && se.StatusCode == 429 {
 						return MarketData{}, err
@@ -161,7 +210,7 @@ func fetchDataForScope(config catalog.ItemConfig, marketHashName string, now tim
 	}
 
 	if len(history) == 0 {
-		body, _, err := fetchSaleHistory(client, marketHashName, referer, scope)
+		body, _, err := fetchSaleHistory(client, marketHashName, referer, scope, priority)
 		if err != nil {
 			if se, ok := err.(*SteamError); ok && se.StatusCode == 429 {
 				return MarketData{}, err
@@ -181,7 +230,7 @@ func fetchDataForScope(config catalog.ItemConfig, marketHashName string, now tim
 		return data, nil
 	}
 
-	body, _, err := fetchPriceOverview(client, marketHashName, scope)
+	body, _, err := fetchPriceOverview(client, marketHashName, scope, priority)
 	if err != nil {
 		if se, ok := err.(*SteamError); ok && se.StatusCode == 429 {
 			return MarketData{}, err
@@ -200,16 +249,16 @@ func fetchDataForScope(config catalog.ItemConfig, marketHashName string, now tim
 	return MarketData{}, fmt.Errorf("%s", strings.Join(requestErrors, "; "))
 }
 
-func fetchItemOrdersHistogram(client *http.Client, itemNameID string, referer string, scope MarketScope) ([]byte, int, error) {
-	return steamGet(client, ItemOrdersHistogramURL(itemNameID, scope), referer)
+func fetchItemOrdersHistogram(client *http.Client, itemNameID string, referer string, scope MarketScope, priority RequestPriority) ([]byte, int, error) {
+	return steamGetWithPriority(client, ItemOrdersHistogramURL(itemNameID, scope), referer, priority)
 }
 
-func fetchSaleHistory(client *http.Client, marketHashName string, referer string, scope MarketScope) ([]byte, int, error) {
-	return steamGet(client, PriceHistoryURL(marketHashName, scope), referer)
+func fetchSaleHistory(client *http.Client, marketHashName string, referer string, scope MarketScope, priority RequestPriority) ([]byte, int, error) {
+	return steamGetWithPriority(client, PriceHistoryURL(marketHashName, scope), referer, priority)
 }
 
-func fetchPriceOverview(client *http.Client, marketHashName string, scope MarketScope) ([]byte, int, error) {
-	return steamGet(client, PriceOverviewURL(marketHashName, scope), "")
+func fetchPriceOverview(client *http.Client, marketHashName string, scope MarketScope, priority RequestPriority) ([]byte, int, error) {
+	return steamGetWithPriority(client, PriceOverviewURL(marketHashName, scope), "", priority)
 }
 
 type SteamError struct {
@@ -240,6 +289,10 @@ func getEndpointFromURL(targetURL string) string {
 }
 
 func steamGet(client *http.Client, targetURL string, referer string) ([]byte, int, error) {
+	return steamGetWithPriority(client, targetURL, referer, RequestPriorityNormal)
+}
+
+func steamGetWithPriority(client *http.Client, targetURL string, referer string, priority RequestPriority) ([]byte, int, error) {
 	req, err := http.NewRequest(http.MethodGet, targetURL, nil)
 	if err != nil {
 		return nil, 0, err
@@ -251,39 +304,108 @@ func steamGet(client *http.Client, targetURL string, referer string) ([]byte, in
 		req.Header.Set("Referer", referer)
 	}
 
-	waitForSteamRequestTurn()
+	waitStartedAt := time.Now()
+	waitForSteamRequestTurn(priority)
+	waitDuration := time.Since(waitStartedAt)
+
+	requestStartedAt := time.Now()
 	resp, err := client.Do(req)
 	if err != nil {
+		emitSteamRequestMetric(SteamRequestMetric{
+			Endpoint:        getEndpointFromURL(targetURL),
+			Priority:        priority,
+			LimiterWait:     waitDuration,
+			RequestDuration: time.Since(requestStartedAt),
+			Error:           err.Error(),
+		})
 		return nil, 0, err
 	}
 	defer resp.Body.Close()
 
 	body, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
+		emitSteamRequestMetric(SteamRequestMetric{
+			Endpoint:        getEndpointFromURL(targetURL),
+			Priority:        priority,
+			LimiterWait:     waitDuration,
+			RequestDuration: time.Since(requestStartedAt),
+			StatusCode:      resp.StatusCode,
+			RetryAfter:      resp.Header.Get("Retry-After"),
+			Error:           readErr.Error(),
+		})
 		return body, resp.StatusCode, readErr
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return body, resp.StatusCode, &SteamError{
+		steamErr := &SteamError{
 			StatusCode: resp.StatusCode,
 			Status:     resp.Status,
 			Endpoint:   getEndpointFromURL(targetURL),
 			RetryAfter: resp.Header.Get("Retry-After"),
 		}
+		emitSteamRequestMetric(SteamRequestMetric{
+			Endpoint:        steamErr.Endpoint,
+			Priority:        priority,
+			LimiterWait:     waitDuration,
+			RequestDuration: time.Since(requestStartedAt),
+			StatusCode:      resp.StatusCode,
+			RetryAfter:      steamErr.RetryAfter,
+			Error:           steamErr.Error(),
+		})
+		return body, resp.StatusCode, steamErr
 	}
+	emitSteamRequestMetric(SteamRequestMetric{
+		Endpoint:        getEndpointFromURL(targetURL),
+		Priority:        priority,
+		LimiterWait:     waitDuration,
+		RequestDuration: time.Since(requestStartedAt),
+		StatusCode:      resp.StatusCode,
+		RetryAfter:      resp.Header.Get("Retry-After"),
+	})
 	return body, resp.StatusCode, nil
 }
 
-func waitForSteamRequestTurn() {
-	steamRequestLimiter.Lock()
-	defer steamRequestLimiter.Unlock()
-
-	if !steamRequestLimiter.lastStartedAt.IsZero() {
-		delay := jitteredSteamRequestSpacing()
-		if wait := time.Until(steamRequestLimiter.lastStartedAt.Add(delay)); wait > 0 {
-			time.Sleep(wait)
-		}
+func emitSteamRequestMetric(metric SteamRequestMetric) {
+	steamRequestMetricLogger.RLock()
+	logger := steamRequestMetricLogger.log
+	steamRequestMetricLogger.RUnlock()
+	if logger != nil {
+		logger(metric)
 	}
-	steamRequestLimiter.lastStartedAt = time.Now()
+}
+
+func waitForSteamRequestTurn(priority RequestPriority) {
+	highPriority := priority == RequestPriorityHigh
+	steamRequestLimiter.mu.Lock()
+	if highPriority {
+		steamRequestLimiter.waitingHigh++
+	}
+
+	for {
+		if !highPriority && steamRequestLimiter.waitingHigh > 0 {
+			steamRequestLimiter.cond.Wait()
+			continue
+		}
+
+		wait := time.Duration(0)
+		if !steamRequestLimiter.lastStartedAt.IsZero() {
+			delay := jitteredSteamRequestSpacing()
+			wait = time.Until(steamRequestLimiter.lastStartedAt.Add(delay))
+		}
+		if wait <= 0 {
+			steamRequestLimiter.lastStartedAt = time.Now()
+			if highPriority {
+				steamRequestLimiter.waitingHigh--
+			}
+			steamRequestLimiter.cond.Broadcast()
+			steamRequestLimiter.mu.Unlock()
+			return
+		}
+
+		timer := time.NewTimer(wait)
+		steamRequestLimiter.mu.Unlock()
+		<-timer.C
+		steamRequestLimiter.mu.Lock()
+	}
 }
 
 func jitteredSteamRequestSpacing() time.Duration {

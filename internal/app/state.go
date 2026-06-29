@@ -90,12 +90,15 @@ type App struct {
 	overlayUpdatePending  atomic.Bool
 	overlayPaintLogged    bool
 	lastTooltipDebugLog   time.Time
+	tooltipFetchVersion   atomic.Uint64
 	currentPriceText      string
 	currentMarketAnalysis market.MarketAnalysis
 	currentOverlayHasData bool
 	currentItemName       string
 	activeItemID          atomic.Int32
 	currentPriceTextMutex sync.RWMutex
+	marketFetchMu         sync.Mutex
+	marketFetchInFlight   map[string]*marketFetchCall
 
 	// Inventory integration
 	inventoryMu                    sync.Mutex

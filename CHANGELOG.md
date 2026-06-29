@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.4] - 2026-06-29
+
+### Added
+- Added market tooltip latency metrics that log tooltip cache state, in-flight fetch joins, Steam request limiter wait time, endpoint request duration, status, retry-after, and errors.
+
+### Changed
+- Optimized tooltip market price loading by showing stale cached prices immediately while refreshing in the background.
+- Debounced hover-triggered Steam market fetches by 500 ms to avoid fetching prices for items the user only passes over briefly.
+- Deduplicated in-flight market fetches for the same market scope and item so overlapping tooltip, inventory, and refresh requests share one Steam request chain.
+- Prioritized active tooltip market requests over background inventory price refreshes.
+
 ## [0.11.3] - 2026-06-29
 
 ### Added

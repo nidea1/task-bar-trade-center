@@ -543,7 +543,11 @@ func fetchInventoryMarketPrice(_ context.Context, itemID int) error {
 	scope := market.CurrentScope()
 	marketHashName := buildMarketHashName(config)
 	now := time.Now()
-	data, err := fetchMarketData(config, marketHashName, now, scope)
+	priority := market.RequestPriorityNormal
+	if activeApp.showOverlay.Load() && activeApp.activeItemID.Load() == int32(itemID) {
+		priority = market.RequestPriorityHigh
+	}
+	data, err := fetchMarketDataWithPriority(config, marketHashName, now, scope, priority)
 	if err != nil {
 		return err
 	}
@@ -555,6 +559,7 @@ func fetchInventoryMarketPrice(_ context.Context, itemID int) error {
 	activeApp.priceCache[market.CacheKey(scope, marketHashName)] = data
 	schedulePriceCacheWriteLocked()
 	activeApp.priceCacheMu.Unlock()
+	updatePriceOverlay(itemID, scope, data.Analysis)
 	requestInventoryDashboardRebuild("price-refreshed")
 	return nil
 }

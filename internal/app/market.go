@@ -9,31 +9,67 @@ import (
 	"github.com/nidea1/task-bar-trade-center/internal/market"
 )
 
+type marketFetchCall struct {
+	done chan struct{}
+	data market.MarketData
+	err  error
+}
+
+type cachedPriceOverlayState int
+
+const (
+	cachedPriceMissing cachedPriceOverlayState = iota
+	cachedPriceFresh
+	cachedPriceNeedsRefresh
+)
+
+var fetchMarketDataFromSteam = market.FetchDataWithPriority
+
 func fetchPriceAndUpdate(config catalog.ItemConfig) {
-	fetchPriceAndUpdateWithScope(config, true, market.CurrentScope())
+	fetchPriceAndUpdateWithOptions(config, true, market.CurrentScope(), market.RequestPriorityHigh, true)
 }
 
 func refreshPriceAndUpdate(config catalog.ItemConfig) {
-	fetchPriceAndUpdateWithScope(config, false, market.CurrentScope())
+	fetchPriceAndUpdateWithOptions(config, false, market.CurrentScope(), market.RequestPriorityHigh, true)
 }
 
 func fetchPriceAndUpdateWithCache(config catalog.ItemConfig, useCache bool) {
-	fetchPriceAndUpdateWithScope(config, useCache, market.CurrentScope())
+	fetchPriceAndUpdateWithOptions(config, useCache, market.CurrentScope(), market.RequestPriorityHigh, true)
 }
 
 func fetchPriceAndUpdateWithScope(config catalog.ItemConfig, useCache bool, scope market.MarketScope) {
+	fetchPriceAndUpdateWithOptions(config, useCache, scope, market.RequestPriorityNormal, true)
+}
+
+func fetchPriceAndUpdateWithOptions(config catalog.ItemConfig, useCache bool, scope market.MarketScope, priority market.RequestPriority, showExistingCache bool) {
 	marketHashName := buildMarketHashName(config)
 	cacheKey := market.CacheKey(scope, marketHashName)
 	now := time.Now()
 
 	existingCache, hasExistingCache := marketCacheEntry(scope, marketHashName)
-	if useCache && hasExistingCache && market.IsFreshCache(existingCache, now) && !market.RequiresUSDFallbackRefresh(scope, existingCache.Analysis) {
-		logMarketPrice(config, scope, marketHashName, existingCache.Analysis, "cache")
-		updatePriceOverlay(config.ID, scope, existingCache.Analysis)
-		return
+	if useCache && hasExistingCache {
+		needsRefresh := !market.IsFreshCache(existingCache, now) || market.RequiresUSDFallbackRefresh(scope, existingCache.Analysis)
+		if showExistingCache {
+			source := "cache"
+			cacheState := "fresh"
+			if needsRefresh {
+				source = "stale-cache"
+				cacheState = "stale"
+			}
+			logTooltipCacheMetric(config, scope, marketHashName, cacheState, needsRefresh, cachedAnalysisAge(existingCache, now))
+			if analysis, ok := market.StaleAnalysis(existingCache, true); ok {
+				logMarketPrice(config, scope, marketHashName, analysis, source)
+				updatePriceOverlay(config.ID, scope, analysis)
+			}
+		}
+		if !needsRefresh {
+			return
+		}
+	} else if useCache && showExistingCache {
+		logTooltipCacheMetric(config, scope, marketHashName, "miss", true, -1)
 	}
 
-	data, err := fetchMarketData(config, marketHashName, now, scope)
+	data, err := fetchMarketDataWithPriority(config, marketHashName, now, scope, priority)
 	if err != nil {
 		if analysis, ok := market.StaleAnalysis(existingCache, hasExistingCache); ok {
 			logMarketPrice(config, scope, marketHashName, analysis, "stale-cache")
@@ -69,7 +105,38 @@ func fetchPriceAndUpdateWithScope(config catalog.ItemConfig, useCache bool, scop
 }
 
 func fetchMarketData(config catalog.ItemConfig, marketHashName string, now time.Time, scope market.MarketScope) (market.MarketData, error) {
-	return market.FetchData(config, marketHashName, now, scope)
+	return fetchMarketDataWithPriority(config, marketHashName, now, scope, market.RequestPriorityNormal)
+}
+
+func fetchMarketDataWithPriority(config catalog.ItemConfig, marketHashName string, now time.Time, scope market.MarketScope, priority market.RequestPriority) (market.MarketData, error) {
+	cacheKey := market.CacheKey(scope, marketHashName)
+
+	activeApp.marketFetchMu.Lock()
+	if activeApp.marketFetchInFlight == nil {
+		activeApp.marketFetchInFlight = make(map[string]*marketFetchCall)
+	}
+	if call := activeApp.marketFetchInFlight[cacheKey]; call != nil {
+		activeApp.marketFetchMu.Unlock()
+		waitStartedAt := time.Now()
+		<-call.done
+		logMarketFetchMetric(config, scope, marketHashName, priority, true, time.Since(waitStartedAt), call.err)
+		return call.data, call.err
+	}
+
+	call := &marketFetchCall{done: make(chan struct{})}
+	activeApp.marketFetchInFlight[cacheKey] = call
+	activeApp.marketFetchMu.Unlock()
+
+	fetchStartedAt := time.Now()
+	call.data, call.err = fetchMarketDataFromSteam(config, marketHashName, now, scope, priority)
+	logMarketFetchMetric(config, scope, marketHashName, priority, false, time.Since(fetchStartedAt), call.err)
+
+	activeApp.marketFetchMu.Lock()
+	delete(activeApp.marketFetchInFlight, cacheKey)
+	close(call.done)
+	activeApp.marketFetchMu.Unlock()
+
+	return call.data, call.err
 }
 
 func marketCacheEntry(scope market.MarketScope, marketHashName string) (market.MarketData, bool) {
@@ -77,6 +144,39 @@ func marketCacheEntry(scope market.MarketScope, marketHashName string) (market.M
 	defer activeApp.priceCacheMu.RUnlock()
 	data, exists := activeApp.priceCache[market.CacheKey(scope, marketHashName)]
 	return data, exists
+}
+
+func showCachedPriceOverlay(config catalog.ItemConfig, scope market.MarketScope) cachedPriceOverlayState {
+	marketHashName := buildMarketHashName(config)
+	existingCache, hasExistingCache := marketCacheEntry(scope, marketHashName)
+	analysis, ok := market.StaleAnalysis(existingCache, hasExistingCache)
+	if !ok {
+		logTooltipCacheMetric(config, scope, marketHashName, "miss", true, -1)
+		return cachedPriceMissing
+	}
+
+	now := time.Now()
+	needsRefresh := !market.IsFreshCache(existingCache, now) || market.RequiresUSDFallbackRefresh(scope, existingCache.Analysis)
+	source := "cache"
+	cacheState := "fresh"
+	if needsRefresh {
+		source = "stale-cache"
+		cacheState = "stale"
+	}
+	logTooltipCacheMetric(config, scope, marketHashName, cacheState, needsRefresh, cachedAnalysisAge(existingCache, now))
+	logMarketPrice(config, scope, marketHashName, analysis, source)
+	updatePriceOverlay(config.ID, scope, analysis)
+	if needsRefresh {
+		return cachedPriceNeedsRefresh
+	}
+	return cachedPriceFresh
+}
+
+func cachedAnalysisAge(data market.MarketData, now time.Time) time.Duration {
+	if data.Analysis.UpdatedAt.IsZero() {
+		return -1
+	}
+	return now.Sub(data.Analysis.UpdatedAt)
 }
 
 func retainCachedIconURL(data market.MarketData, existing market.MarketData, exists bool) market.MarketData {
