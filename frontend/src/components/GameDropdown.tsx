@@ -35,9 +35,10 @@ export function GameDropdown({
     const optionStyle = (option: DropdownOption): React.CSSProperties | undefined => {
         if (!option.color) return undefined;
         return {
-            color: option.color,
-            borderLeftColor: option.value === value ? option.color : "transparent"
-        };
+            '--raw-option-color': option.color,
+            color: 'var(--option-color, var(--raw-option-color))',
+            borderLeftColor: option.value === value ? 'var(--option-color, var(--raw-option-color))' : 'transparent'
+        } as React.CSSProperties;
     };
 
     useEffect(() => {
@@ -91,6 +92,7 @@ export function GameDropdown({
                         {options.map((opt) => (
                             <button
                                 key={opt.value}
+                                data-has-color={!!opt.color}
                                 onClick={() => {
                                     onChange(opt.value);
                                     setIsOpen(false);

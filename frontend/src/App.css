@@ -2240,3 +2240,57 @@
 .dashboard-settings-row:nth-of-type(5) { z-index: 6; }
 .dashboard-settings-row:nth-of-type(6) { z-index: 5; }
 .dashboard-settings-row:nth-of-type(7) { z-index: 4; }
+
+/* Light mode overrides for Dashboard settings and dropdown selectors */
+.theme-light .dashboard-settings-popover {
+  background: rgba(255, 255, 255, 0.98) !important;
+  border-color: #cbd5df !important;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12) !important;
+}
+
+.theme-light .dashboard-settings-toggle.is-active {
+  background-color: rgba(184, 137, 69, 0.12) !important;
+  border-color: #a15c07 !important;
+  color: #a15c07 !important;
+  box-shadow: 0 0 8px rgba(184, 137, 69, 0.2) !important;
+}
+
+.theme-light .dashboard-hotkey-toggle.is-listening {
+  border-color: #a15c07 !important;
+  color: #a15c07 !important;
+}
+
+.theme-light .border-b-\[\#463d30\]\/60 {
+  border-bottom-color: rgba(200, 176, 142, 0.4) !important;
+}
+
+.theme-light .border-t-\[\#463d30\]\/40 {
+  border-top-color: rgba(200, 176, 142, 0.25) !important;
+}
+
+.theme-light .border-\[\#463d30\]\/40 {
+  border-color: rgba(200, 176, 142, 0.25) !important;
+}
+
+.theme-light .border-\[\#ffbe2d\]\/60 {
+  border-color: rgba(161, 92, 7, 0.6) !important;
+}
+
+.theme-light .text-\[\#caa66a\] {
+  color: #7a3e05 !important;
+}
+
+.theme-light .hover\:bg-\[\#1a1620\]:hover {
+  background-color: #f2eadf !important;
+}
+
+.theme-light .game-dropdown-menu button {
+  --option-color: color-mix(in srgb, var(--raw-option-color) 75%, #111827);
+}
+
+.theme-light .game-dropdown-menu button[data-has-color="true"],
+.theme-light .game-dropdown-menu button[data-has-color="true"]:hover {
+  color: var(--option-color, var(--raw-option-color)) !important;
+}
+
+

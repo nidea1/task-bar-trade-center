@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.2] - 2026-06-29
+
+### Fixed
+- Fixed readability of the dashboard settings popover in light mode by adjusting its background, borders, shadow, dividers, checkbox active/hover states, and source group headers for better contrast.
+- Fixed dropdown rarity selection options (unselected and hover states) in light mode to display their respective rarity colors (using a color-mixed darkened variant) instead of being overridden by general text color styles.
+
 ## [0.11.1] - 2026-06-28
 
 ### Fixed
