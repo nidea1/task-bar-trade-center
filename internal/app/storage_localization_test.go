@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"github.com/nidea1/task-bar-trade-center/internal/market"
+	filestore "github.com/nidea1/task-bar-trade-center/internal/storage"
 	"os"
 	"path/filepath"
 	"testing"
@@ -41,6 +42,65 @@ func TestSettingsPersistLanguage(t *testing.T) {
 	loadSettingsFromDisk()
 	if currentDisplayLanguage() != "tr-TR" {
 		t.Fatalf("loaded language = %q", currentDisplayLanguage())
+	}
+}
+
+func TestSettingsDoesNotPersistSystemLanguagePreference(t *testing.T) {
+	originalPath := activeApp.settingsFilePath
+	originalPreference := currentDisplayLanguagePreference()
+	originalWindowsLocaleName := windowsLocaleName
+	t.Cleanup(func() {
+		activeApp.settingsFilePath = originalPath
+		applyDisplayLanguagePreference(originalPreference)
+		windowsLocaleName = originalWindowsLocaleName
+	})
+
+	windowsLocaleName = func() string { return "tr-TR" }
+	activeApp.settingsFilePath = filepath.Join(t.TempDir(), "settings.json")
+
+	loadSettingsFromDisk()
+
+	var disk AppSettings
+	raw, err := os.ReadFile(activeApp.settingsFilePath)
+	if err != nil {
+		t.Fatalf("read settings: %v", err)
+	}
+	if err := json.Unmarshal(raw, &disk); err != nil {
+		t.Fatalf("unmarshal settings: %v", err)
+	}
+	if disk.DisplayLanguage != "tr-TR" {
+		t.Fatalf("display language = %q, want tr-TR", disk.DisplayLanguage)
+	}
+}
+
+func TestSettingsMigratesSystemLanguagePreference(t *testing.T) {
+	originalPath := activeApp.settingsFilePath
+	originalPreference := currentDisplayLanguagePreference()
+	originalWindowsLocaleName := windowsLocaleName
+	t.Cleanup(func() {
+		activeApp.settingsFilePath = originalPath
+		applyDisplayLanguagePreference(originalPreference)
+		windowsLocaleName = originalWindowsLocaleName
+	})
+
+	windowsLocaleName = func() string { return "tr-TR" }
+	activeApp.settingsFilePath = filepath.Join(t.TempDir(), "settings.json")
+	if err := filestore.WriteJSON(activeApp.settingsFilePath, AppSettings{DisplayLanguage: displayLanguageSystem}); err != nil {
+		t.Fatalf("write settings: %v", err)
+	}
+
+	loadSettingsFromDisk()
+
+	var disk AppSettings
+	raw, err := os.ReadFile(activeApp.settingsFilePath)
+	if err != nil {
+		t.Fatalf("read settings: %v", err)
+	}
+	if err := json.Unmarshal(raw, &disk); err != nil {
+		t.Fatalf("unmarshal settings: %v", err)
+	}
+	if disk.DisplayLanguage != "tr-TR" {
+		t.Fatalf("display language = %q, want tr-TR", disk.DisplayLanguage)
 	}
 }
 

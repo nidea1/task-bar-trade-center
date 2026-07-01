@@ -23,6 +23,7 @@ func initAppStorage() {
 	activeApp.priceCacheFilePath = paths.PriceCacheFilePath
 	activeApp.iconMetadataFilePath = paths.IconMetadataFilePath
 	activeApp.inventoryStateFilePath = paths.InventoryStateFilePath
+	activeApp.inventoryResolverCacheFilePath = paths.InventoryResolverCacheFilePath
 	activeApp.settingsFilePath = paths.SettingsFilePath
 	activeApp.gameLayoutCacheFilePath = paths.GameLayoutCacheFilePath
 	activeApp.appLogFile = file
@@ -196,6 +197,7 @@ func loadSettingsFromDisk() {
 	scope := market.ScopeFromSettings(settings.MarketCurrencyCode, settings.MarketCountry)
 	market.SetScope(scope.Currency.Code, scope.Region.CountryCode)
 	applyDisplayLanguagePreference(settings.DisplayLanguage)
+	shouldMigrateLanguage := settings.DisplayLanguage == "" || settings.DisplayLanguage == displayLanguageSystem || !supportedDisplayLanguage(settings.DisplayLanguage)
 
 	minRarity := settings.MinRarityNotify
 	if minRarity == "" {
@@ -216,6 +218,9 @@ func loadSettingsFromDisk() {
 		minRarity,
 		currentDashboardSettings(),
 	)
+	if shouldMigrateLanguage {
+		saveSettingsToDisk()
+	}
 }
 
 func saveSettingsToDisk() {
@@ -232,7 +237,7 @@ func saveSettingsToDisk() {
 		GameScalePercent:   currentGameScale(),
 		MarketCurrencyCode: scope.Currency.Code,
 		MarketCountry:      scope.Region.CountryCode,
-		DisplayLanguage:    currentDisplayLanguagePreference(),
+		DisplayLanguage:    persistedDisplayLanguagePreference(),
 		MinRarityNotify:    rarityGrade(int(activeApp.minRarityNotifyLevel.Load())),
 		Dashboard:          dashSettings,
 	}
@@ -242,4 +247,12 @@ func saveSettingsToDisk() {
 	} else {
 		fmt.Println("Settings saved to disk.")
 	}
+}
+
+func persistedDisplayLanguagePreference() string {
+	preference := currentDisplayLanguagePreference()
+	if preference == "" || preference == displayLanguageSystem || !supportedDisplayLanguage(preference) {
+		return currentDisplayLanguage()
+	}
+	return preference
 }

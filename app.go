@@ -33,12 +33,22 @@ func (a *App) startup(ctx context.Context) {
 		DashboardFooterUpdated: func(info core.DashboardFooterInfo) {
 			runtime.EventsEmit(ctx, "dashboard-footer-updated", info)
 		},
+		RuntimeStateUpdated: func(info core.RuntimeStateInfo) {
+			runtime.EventsEmit(ctx, "runtime-state-updated", info)
+		},
 	})
 	a.mu.Lock()
 	a.core = appCore
 	a.mu.Unlock()
 	core.ApplyDashboardWindowIcon()
 	go appCore.Run()
+}
+
+func (a *App) domReady(ctx context.Context) {
+	a.mu.Lock()
+	a.ctx = ctx
+	a.mu.Unlock()
+	a.showDashboard()
 }
 
 func (a *App) shutdown(context.Context) {
@@ -133,6 +143,13 @@ func (a *App) GetDashboardFooterInfo() (core.DashboardFooterInfo, error) {
 		return appCore.GetDashboardFooterInfo(), nil
 	}
 	return core.DashboardFooterInfo{}, nil
+}
+
+func (a *App) GetRuntimeState() (core.RuntimeStateInfo, error) {
+	if appCore := a.coreApp(); appCore != nil {
+		return appCore.GetRuntimeState(), nil
+	}
+	return core.RuntimeStateInfo{}, nil
 }
 
 func (a *App) InstallAvailableUpdate() (bool, error) {

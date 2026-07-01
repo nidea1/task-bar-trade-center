@@ -13,6 +13,8 @@ import {
     GetDashboardFooterInfo,
     InstallAvailableUpdate,
     GetDashboardSettings,
+    GetRuntimeState,
+    GetTranslations,
     GetMinRarityNotify,
     SetDashboardSettings,
     SetMinRarityNotify,
@@ -63,7 +65,8 @@ import {
     NotificationSource,
     DashboardSettings,
     DashboardState,
-    DashboardFooterInfo
+    DashboardFooterInfo,
+    RuntimeStateInfo
 } from './types';
 import {
     readStoredThemeMode,
@@ -90,6 +93,7 @@ import MetricCard from './components/MetricCard';
 import MarketableItemsTabsPanel from './components/MarketableItemsTabsPanel';
 import MissingPricesPanel from './components/MissingPricesPanel';
 import DashboardFooter from './components/DashboardFooter';
+import PreparingScreen from './components/PreparingScreen';
 
 const notificationSourceOrder: NotificationSource[] = ["box", "craft", "synthesis", "offering"];
 const allNotificationSources = notificationSourceOrder.join(",");
@@ -218,8 +222,14 @@ function normalizeDashboardSettings(settings?: DashboardSettingsInput | null): D
     };
 }
 
+function dashboardSettingsKey(settings: DashboardSettings): string {
+    return JSON.stringify(settings);
+}
+
 function App() {
     const [state, setState] = useState<DashboardState | null>(null);
+    const [runtimeState, setRuntimeState] = useState<RuntimeStateInfo | null>(null);
+    const [translations, setTranslations] = useState<Record<string, string>>({});
     const [error, setError] = useState<string>("");
     const [refreshing, setRefreshing] = useState(false);
     const [forceRefreshing, setForceRefreshing] = useState(false);
@@ -256,9 +266,13 @@ function App() {
     const mountedRef = useRef(false);
     const loadInFlightRef = useRef(false);
     const dashboardSettingsLoadedRef = useRef(false);
+    const dashboardSettingsSnapshotRef = useRef("");
     const notifySourceMenuRef = useRef<HTMLDivElement>(null);
 
     const t = (key: string, fallback?: string) => {
+        if (translations[key]) {
+            return translations[key];
+        }
         if (state?.translations && state.translations[key]) {
             return state.translations[key];
         }
@@ -296,10 +310,32 @@ function App() {
             });
     };
 
+    const loadRuntimeState = () => {
+        return GetRuntimeState()
+            .then((info: RuntimeStateInfo | null) => {
+                if (mountedRef.current) setRuntimeState(info);
+            })
+            .catch(() => {
+                // The dashboard can continue polling inventory state if runtime state is temporarily unavailable.
+            });
+    };
+
+    const loadTranslations = () => {
+        return GetTranslations()
+            .then((nextTranslations: Record<string, string> | null | undefined) => {
+                if (mountedRef.current) setTranslations(nextTranslations || {});
+            })
+            .catch(() => {
+                // Fallback strings keep the preparing screen usable.
+            });
+    };
+
     useEffect(() => {
         mountedRef.current = true;
         load();
         const timer = window.setInterval(load, 3000);
+        loadRuntimeState();
+        loadTranslations();
         loadFooterInfo();
         const footerTimer = window.setInterval(loadFooterInfo, 15000);
 
@@ -326,6 +362,11 @@ function App() {
                 const nextThemeMode = normalized.theme_mode === "dark" && storedThemeMode === "light"
                     ? storedThemeMode
                     : normalized.theme_mode;
+                const hydratedSettings: DashboardSettings = {
+                    ...normalized,
+                    theme_mode: nextThemeMode,
+                };
+                dashboardSettingsSnapshotRef.current = dashboardSettingsKey(hydratedSettings);
                 setThemeMode(nextThemeMode);
                 setPriceMode(normalized.price_mode);
                 setRarityFilter(normalized.rarity_filter);
@@ -340,14 +381,10 @@ function App() {
                 setHotkeyModifiers(normalized.hotkey_modifiers);
                 setHotkeyVK(normalized.hotkey_vk);
                 setGameScale(normalized.game_scale);
+                dashboardSettingsLoadedRef.current = true;
             })
             .catch(() => {
                 // Dashboard preferences are non-critical; current defaults remain usable.
-            })
-            .finally(() => {
-                if (mountedRef.current) {
-                    dashboardSettingsLoadedRef.current = true;
-                }
             });
 
         const unsubscribe = EventsOn("inventory-dashboard-updated", (nextState: unknown) => {
@@ -359,6 +396,10 @@ function App() {
             if (!mountedRef.current) return;
             setFooterInfo(info as DashboardFooterInfo);
         });
+        const unsubscribeRuntime = EventsOn("runtime-state-updated", (info: unknown) => {
+            if (!mountedRef.current) return;
+            setRuntimeState(info as RuntimeStateInfo);
+        });
 
         return () => {
             mountedRef.current = false;
@@ -366,6 +407,7 @@ function App() {
             window.clearInterval(footerTimer);
             unsubscribe();
             unsubscribeFooter();
+            unsubscribeRuntime();
         };
     }, []);
 
@@ -413,7 +455,7 @@ function App() {
 
     useEffect(() => {
         if (!dashboardSettingsLoadedRef.current) return;
-        SetDashboardSettings({
+        const nextSettings: DashboardSettings = {
             theme_mode: themeMode,
             price_mode: priceMode,
             rarity_filter: rarityFilter,
@@ -428,6 +470,11 @@ function App() {
             hotkey_modifiers: hotkeyModifiers,
             hotkey_vk: hotkeyVK,
             game_scale: gameScale,
+        };
+        const nextKey = dashboardSettingsKey(nextSettings);
+        if (nextKey === dashboardSettingsSnapshotRef.current) return;
+        SetDashboardSettings(nextSettings).then((saved) => {
+            dashboardSettingsSnapshotRef.current = dashboardSettingsKey(normalizeDashboardSettings(saved as DashboardSettingsInput));
         }).catch(() => {
             // Local UI state can continue even if settings persistence fails.
         });
@@ -675,6 +722,7 @@ function App() {
         SetDisplayLanguage(code).then(() => {
             if (!mountedRef.current) return;
             setCurrentLanguage(code);
+            loadTranslations();
             load();
         });
     };
@@ -688,11 +736,12 @@ function App() {
     };
 
     const refreshQueueRunning = !!state?.refresh?.refreshing;
+    const runtimeReady = runtimeState?.ready === true;
     const displayedRefreshKind = activeRefreshKind || "smart";
     const isCurrentlyRefreshing = refreshQueueRunning || refreshing || forceRefreshing;
     const normalRefreshBusy = refreshing || (refreshQueueRunning && displayedRefreshKind === "smart");
     const forceRefreshBusy = forceRefreshing || (refreshQueueRunning && displayedRefreshKind === "force");
-    const isWaitingForInventory = !state?.updated_at;
+    const isWaitingForInventory = !runtimeReady || !state?.updated_at;
     const updatePromptKey = footerInfo?.update_available
         ? (footerInfo.release_url || footerInfo.update_text || "available")
         : "";
@@ -753,6 +802,14 @@ function App() {
 
             {/* ═══ Main Content Area (Scrollable) ═══ */}
             <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+                {!runtimeReady ? (
+                    <PreparingScreen
+                        runtimeState={runtimeState}
+                        currentLanguage={currentLanguage}
+                        t={t}
+                    />
+                ) : (
+                    <>
 
                 {/* ═══ Top Dashboard Header Panel ═══ */}
                 <header className="game-panel !overflow-visible">
@@ -775,7 +832,7 @@ function App() {
                         <div className="dashboard-controls no-drag">
                             <div className="dashboard-selector-row flex items-center gap-2 relative">
                                 <button
-                                    disabled={isCurrentlyRefreshing}
+                                    disabled={!runtimeReady || isCurrentlyRefreshing}
                                     onClick={() => refreshPrices(false)}
                                     className="dashboard-refresh-button themed-tooltip-host game-button flex items-center justify-center gap-2 px-4 py-1.5 font-medium text-xs uppercase cursor-pointer shrink-0"
                                     data-tooltip={smartRefreshTooltip}
@@ -785,7 +842,7 @@ function App() {
                                     {normalRefreshBusy ? t("dashboard.refreshing", "Refreshing...") : smartRefreshLabel}
                                 </button>
                                 <button
-                                    disabled={isCurrentlyRefreshing}
+                                    disabled={!runtimeReady || isCurrentlyRefreshing}
                                     onClick={() => refreshPrices(true)}
                                     className="dashboard-refresh-button dashboard-force-refresh-button themed-tooltip-host game-button flex items-center justify-center gap-2 px-4 py-1.5 font-medium text-xs uppercase cursor-pointer shrink-0"
                                     data-tooltip={forceRefreshTooltip}
@@ -1012,7 +1069,7 @@ function App() {
                 </header>
 
                 {/* ═══ Error Notifications ═══ */}
-                {error && (
+                {runtimeReady && error && (
                     <div className="game-alert-error flex items-start gap-3 p-4 rounded">
                         <Archive className="w-5 h-5 shrink-0 mt-0.5 text-[#f05046]" />
                         <div>
@@ -1023,7 +1080,7 @@ function App() {
                 )}
 
                 {/* ═══ Syncing Status Bar ═══ */}
-                {state?.refresh?.refreshing && (
+                {runtimeReady && state?.refresh?.refreshing && (
                     <div className="game-panel p-3 bg-[#08080a] flex items-center gap-2.5 text-xs text-[#ffbe2d] animate-pulse">
                         <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#ffbe2d]" />
                         <span>
@@ -1041,7 +1098,7 @@ function App() {
                     </div>
                 )}
 
-                {state?.refresh?.last_error && (
+                {runtimeReady && state?.refresh?.last_error && (
                     <div className="game-alert-warning flex items-start gap-3 p-4 rounded">
                         <Shield className="w-5 h-5 shrink-0 mt-0.5 text-[#ffbe2d]" />
                         <div>
@@ -1159,6 +1216,8 @@ function App() {
                         </section>
                     </>
                 )}
+                    </>
+                )}
             </div>
             {showUpdatePrompt && (
                 <div className="update-prompt-backdrop no-drag" role="dialog" aria-modal="true" aria-labelledby="update-prompt-title">
@@ -1199,7 +1258,7 @@ function App() {
             )}
             <DashboardFooter
                 info={footerInfo}
-                isRefreshing={isCurrentlyRefreshing}
+                isRefreshing={!runtimeReady || isCurrentlyRefreshing}
                 currentLanguage={currentLanguage}
                 t={t}
                 syncTimeText={syncTimeText}

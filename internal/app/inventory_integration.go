@@ -27,11 +27,11 @@ const (
 	inventoryNotificationIdleInterval   = 5 * time.Second
 	inventoryDashboardRebuildThrottle   = 1500 * time.Millisecond
 	directInventoryNotificationWindow   = 30 * time.Minute
+	inventorySnapshotResolveBackoff     = 5 * time.Second
 )
 
 func refreshInventoryDashboardState(reason string) {
 	if !activeApp.inventoryDashboardBuildMu.TryLock() {
-		logPrintf("[INVENTORY] dashboard refresh skipped (%s): refresh already running\n", reason)
 		return
 	}
 	defer activeApp.inventoryDashboardBuildMu.Unlock()
@@ -99,6 +99,18 @@ func readInventoryDashboardState() (inventory.DashboardState, error) {
 	if err != nil {
 		return inventory.DashboardState{}, err
 	}
+	return buildInventoryDashboardState(snapshot), nil
+}
+
+func readInventoryDashboardStateCore() (inventory.DashboardState, error) {
+	snapshot, err := readInventorySnapshotCore()
+	if err != nil {
+		return inventory.DashboardState{}, err
+	}
+	return buildInventoryDashboardState(snapshot), nil
+}
+
+func buildInventoryDashboardState(snapshot playerdata.InventorySnapshot) inventory.DashboardState {
 	storeInventorySnapshot(snapshot)
 
 	scope := market.CurrentScope()
@@ -111,24 +123,137 @@ func readInventoryDashboardState() (inventory.DashboardState, error) {
 		Now:          time.Now(),
 	})
 	state.Translations = currentTranslations()
-	return state, nil
+	return state
 }
 
 func readInventorySnapshot() (playerdata.InventorySnapshot, error) {
+	return readInventorySnapshotWithRuntime(true)
+}
+
+func readInventorySnapshotCore() (playerdata.InventorySnapshot, error) {
+	return readInventorySnapshotWithRuntime(false)
+}
+
+func readInventorySnapshotWithRuntime(includeRuntimeTradeSlots bool) (playerdata.InventorySnapshot, error) {
 	if !canReadInventorySnapshot() {
 		return playerdata.InventorySnapshot{}, fmt.Errorf("game process is not attached")
 	}
-	memory := tbhmem.FromHandle(activeApp.gameProcessID, activeApp.gameProcessHandle)
+
+	processID := activeApp.gameProcessID
+	processHandle := activeApp.gameProcessHandle
+	gameAssemblyBase := activeApp.gameAssemblyBase
+	now := time.Now()
+	activeApp.inventorySnapshotMu.Lock()
+	if activeApp.inventorySnapshotBackoffUntil.After(now) {
+		errText := activeApp.inventorySnapshotLastErr
+		if errText == "" {
+			errText = "PlayerSaveData could not be resolved"
+		}
+		backoffUntil := activeApp.inventorySnapshotBackoffUntil
+		activeApp.inventorySnapshotMu.Unlock()
+		return playerdata.InventorySnapshot{}, fmt.Errorf("%s; retry after %s", errText, backoffUntil.Format(time.RFC3339))
+	}
+	if call := activeApp.inventorySnapshotInFlight; call != nil {
+		activeApp.inventorySnapshotMu.Unlock()
+		<-call.done
+		if activeApp.gameProcessID != call.processID || activeApp.gameProcessHandle != call.processHandle {
+			return playerdata.InventorySnapshot{}, fmt.Errorf("game process changed during inventory snapshot")
+		}
+		return call.snapshot, call.err
+	}
+	call := &inventorySnapshotCall{done: make(chan struct{}), processID: processID, processHandle: processHandle}
+	activeApp.inventorySnapshotInFlight = call
+	activeApp.inventorySnapshotMu.Unlock()
+
+	call.snapshot, call.err = readInventorySnapshotUncoordinated(includeRuntimeTradeSlots, processID, processHandle, gameAssemblyBase)
+	staleProcess := activeApp.gameProcessID != processID || activeApp.gameProcessHandle != processHandle
+	if staleProcess && call.err == nil {
+		call.err = fmt.Errorf("game process changed during inventory snapshot")
+	}
+
+	activeApp.inventorySnapshotMu.Lock()
+	if activeApp.inventorySnapshotInFlight == call {
+		activeApp.inventorySnapshotInFlight = nil
+	}
+	if staleProcess {
+		activeApp.inventorySnapshotMu.Unlock()
+		close(call.done)
+		return playerdata.InventorySnapshot{}, call.err
+	}
+	if call.err != nil {
+		activeApp.inventorySnapshotLastErr = call.err.Error()
+		activeApp.inventorySnapshotBackoffUntil = time.Now().Add(inventorySnapshotResolveBackoff)
+	} else {
+		activeApp.inventorySnapshotLastErr = ""
+		activeApp.inventorySnapshotBackoffUntil = time.Time{}
+	}
+	close(call.done)
+	activeApp.inventorySnapshotMu.Unlock()
+
+	return call.snapshot, call.err
+}
+
+func readInventorySnapshotUncoordinated(includeRuntimeTradeSlots bool, processID uint32, processHandle uintptr, gameAssemblyBase uintptr) (playerdata.InventorySnapshot, error) {
+	memory := tbhmem.FromHandle(processID, processHandle)
 	if memory == nil {
 		return playerdata.InventorySnapshot{}, fmt.Errorf("game process handle is unavailable")
 	}
-
+	loggingMemory := inventoryScanMemory{Process: memory, reason: "inventory-snapshot"}
 	resolver := currentInventoryResolver()
-	snapshot, ok := resolver.ReadSnapshot(memory, time.Now())
+	startedAt := time.Now()
+	var snapshot playerdata.InventorySnapshot
+	var ok bool
+	if includeRuntimeTradeSlots {
+		snapshot, ok = resolver.ReadSnapshot(loggingMemory, startedAt)
+	} else {
+		snapshot, ok = resolver.ReadSnapshotCore(loggingMemory, startedAt)
+	}
+	status := "ok"
 	if !ok {
+		status = "failed"
+		logPrintf("[INVENTORY:resolve] snapshot include_runtime_trade_slots=%t duration=%s status=%s\n", includeRuntimeTradeSlots, time.Since(startedAt), status)
 		return playerdata.InventorySnapshot{}, fmt.Errorf("PlayerSaveData could not be resolved")
 	}
+	saveInventoryResolverCache(processHandle, gameAssemblyBase, resolver)
+	logPrintf("[INVENTORY:resolve] snapshot include_runtime_trade_slots=%t duration=%s status=%s items=%d trade_slots=%d\n", includeRuntimeTradeSlots, time.Since(startedAt), status, len(snapshot.Items), len(snapshot.TradeSlots))
 	return snapshot, nil
+}
+
+type inventoryScanMemory struct {
+	*tbhmem.Process
+	reason string
+}
+
+func (memory inventoryScanMemory) ScanPattern(pattern []byte, maxResults int) ([]uintptr, uint64) {
+	startedAt := time.Now()
+	results, scanned := memory.Process.ScanPattern(pattern, maxResults)
+	logPrintf("[MEMSCAN] reason=%s pattern_len=%d max_results=%d results=%d scanned_bytes=%d duration=%s\n",
+		memory.reason,
+		len(pattern),
+		maxResults,
+		len(results),
+		scanned,
+		time.Since(startedAt),
+	)
+	return results, scanned
+}
+
+func (memory inventoryScanMemory) ScanPatterns(patterns [][]byte, maxResults int) ([][]uintptr, uint64) {
+	startedAt := time.Now()
+	results, scanned := memory.Process.ScanPatterns(patterns, maxResults)
+	resultCount := 0
+	for _, matches := range results {
+		resultCount += len(matches)
+	}
+	logPrintf("[MEMSCAN] reason=%s pattern_count=%d max_results=%d results=%d scanned_bytes=%d duration=%s\n",
+		memory.reason,
+		len(patterns),
+		maxResults,
+		resultCount,
+		scanned,
+		time.Since(startedAt),
+	)
+	return results, scanned
 }
 
 func storeInventorySnapshot(snapshot playerdata.InventorySnapshot) {
@@ -230,7 +355,9 @@ func writeInventoryDashboardState(state inventory.DashboardState) error {
 }
 
 func openInventoryDashboard() {
-	go refreshInventoryDashboardState("open-dashboard")
+	if runtimeReady() {
+		go refreshInventoryDashboardState("open-dashboard")
+	}
 	callOpenDashboard()
 }
 
@@ -414,6 +541,10 @@ func inventorySnapshotChanged(a, b *playerdata.InventorySnapshot) bool {
 }
 
 func refreshInventoryPricesFromDashboard() {
+	if !runtimeReady() {
+		logPrintln("[INVENTORY] price refresh skipped: runtime is still preparing.")
+		return
+	}
 	state, err := readInventoryDashboardState()
 	if err != nil {
 		logPrintf("[INVENTORY] cannot queue price refresh: %v\n", err)
@@ -425,6 +556,10 @@ func refreshInventoryPricesFromDashboard() {
 }
 
 func forceRefreshInventoryPricesFromDashboard() {
+	if !runtimeReady() {
+		logPrintln("[INVENTORY] force price refresh skipped: runtime is still preparing.")
+		return
+	}
 	state, err := readInventoryDashboardState()
 	if err != nil {
 		logPrintf("[INVENTORY] cannot queue force price refresh: %v\n", err)

@@ -70,6 +70,10 @@ func (app *App) GetDashboardFooterInfo() DashboardFooterInfo {
 	return GetDashboardFooterInfo()
 }
 
+func (app *App) GetRuntimeState() RuntimeStateInfo {
+	return GetRuntimeState()
+}
+
 func (app *App) InstallAvailableUpdate() bool {
 	return InstallAvailableUpdate()
 }

@@ -14,52 +14,67 @@ import (
 	"github.com/nidea1/task-bar-trade-center/internal/win32"
 )
 
+type inventorySnapshotCall struct {
+	done          chan struct{}
+	processID     uint32
+	processHandle uintptr
+	snapshot      playerdata.InventorySnapshot
+	err           error
+}
+
 type App struct {
 	// Callbacks
 	callbacks Callbacks
 
 	// Storage paths
-	appDataDir              string
-	logFilePath             string
-	priceCacheFilePath      string
-	iconMetadataFilePath    string
-	inventoryStateFilePath  string
-	settingsFilePath        string
-	gameLayoutCacheFilePath string
-	appLogFile              *os.File
+	appDataDir                     string
+	logFilePath                    string
+	priceCacheFilePath             string
+	iconMetadataFilePath           string
+	inventoryStateFilePath         string
+	inventoryResolverCacheFilePath string
+	settingsFilePath               string
+	gameLayoutCacheFilePath        string
+	appLogFile                     *os.File
 
 	// Windows HWNDs and hooks
-	appHWND             uintptr
-	appIconLarge        uintptr
-	appIconSmall        uintptr
-	trayIconAdded       bool
-	mouseHook           uintptr
-	mouseHookCallback   uintptr
-	overlayHWND         uintptr
-	overlayOriginX      int32
-	overlayOriginY      int32
-	overlayWidth        atomic.Int32
-	overlayHeight       atomic.Int32
-	showOverlay         atomic.Bool
-	overlayMode         atomic.Int32
-	lastOverlayRect     win32.RECT
-	hasLastOverlayRect  bool
-	dashboardSettingsMu sync.RWMutex
-	dashboardSettings   DashboardSettings
+	appHWND              uintptr
+	appIconLarge         uintptr
+	appIconSmall         uintptr
+	trayIconAdded        bool
+	mouseHook            uintptr
+	mouseHookCallback    uintptr
+	overlayHWND          uintptr
+	overlayOriginX       int32
+	overlayOriginY       int32
+	overlayWidth         atomic.Int32
+	overlayHeight        atomic.Int32
+	showOverlay          atomic.Bool
+	overlayMode          atomic.Int32
+	lastOverlayRect      win32.RECT
+	lastOverlayRectAt    time.Time
+	hasLastOverlayRect   bool
+	overlayWindowRect    win32.RECT
+	hasOverlayWindowRect bool
+	dashboardSettingsMu  sync.RWMutex
+	dashboardSettings    DashboardSettings
 
 	appStatus            atomic.Int32
 	configurationStatus  atomic.Int32
 	updateStatus         atomic.Int32
+	runtimeStateMu       sync.RWMutex
+	runtimeState         RuntimeStateInfo
 	appInitialized       atomic.Bool
 	shutdownRequested    atomic.Bool
 	minRarityNotifyLevel atomic.Int32
 
 	// Game process info
-	gameProcessID     uint32
-	gameWindowHWND    uintptr
-	gameProcessHandle uintptr
-	gameAssemblyBase  uintptr
-	gameReady         atomic.Bool
+	gameProcessID           uint32
+	gameWindowHWND          uintptr
+	gameProcessHandle       uintptr
+	gameAssemblyBase        uintptr
+	gameAssemblyFingerprint string
+	gameReady               atomic.Bool
 
 	// Caches and databases
 	allItemMap   map[int]catalog.ItemConfig
@@ -87,18 +102,23 @@ type App struct {
 	tooltipHeightAOBResolver game.TooltipAOBResolver
 
 	// Overlay window and draw state
-	overlayUpdatePending  atomic.Bool
-	overlayPaintLogged    bool
-	lastTooltipDebugLog   time.Time
-	tooltipFetchVersion   atomic.Uint64
-	currentPriceText      string
-	currentMarketAnalysis market.MarketAnalysis
-	currentOverlayHasData bool
-	currentItemName       string
-	activeItemID          atomic.Int32
-	currentPriceTextMutex sync.RWMutex
-	marketFetchMu         sync.Mutex
-	marketFetchInFlight   map[string]*marketFetchCall
+	overlayUpdatePending         atomic.Bool
+	overlayPaintLogged           bool
+	overlayRedrawMu              sync.Mutex
+	lastOverlayRedrawAt          time.Time
+	overlayWindowVisible         bool
+	overlayContentVersion        atomic.Uint64
+	overlayPaintedContentVersion uint64
+	lastTooltipDebugLog          time.Time
+	tooltipFetchVersion          atomic.Uint64
+	currentPriceText             string
+	currentMarketAnalysis        market.MarketAnalysis
+	currentOverlayHasData        bool
+	currentItemName              string
+	activeItemID                 atomic.Int32
+	currentPriceTextMutex        sync.RWMutex
+	marketFetchMu                sync.Mutex
+	marketFetchInFlight          map[string]*marketFetchCall
 
 	// Inventory integration
 	inventoryMu                    sync.Mutex
@@ -106,6 +126,10 @@ type App struct {
 	inventoryDashboardRebuildMu    sync.Mutex
 	inventoryDashboardRebuildTimer *time.Timer
 	pendingInventoryRebuildReason  string
+	inventorySnapshotMu            sync.Mutex
+	inventorySnapshotInFlight      *inventorySnapshotCall
+	inventorySnapshotBackoffUntil  time.Time
+	inventorySnapshotLastErr       string
 	inventoryResolver              *playerdata.Resolver
 	lastSnapshot                   *playerdata.InventorySnapshot
 	inventoryDashboardState        inventory.DashboardState
@@ -138,6 +162,7 @@ func setCurrentPriceText(val string) {
 	defer activeApp.currentPriceTextMutex.Unlock()
 	activeApp.currentPriceText = val
 	activeApp.currentOverlayHasData = false
+	activeApp.overlayContentVersion.Add(1)
 }
 
 func setCurrentMarketAnalysis(analysis market.MarketAnalysis) {
@@ -145,6 +170,7 @@ func setCurrentMarketAnalysis(analysis market.MarketAnalysis) {
 	defer activeApp.currentPriceTextMutex.Unlock()
 	activeApp.currentMarketAnalysis = analysis
 	activeApp.currentOverlayHasData = true
+	activeApp.overlayContentVersion.Add(1)
 }
 
 func getCurrentMarketAnalysis() (market.MarketAnalysis, bool) {
@@ -175,4 +201,5 @@ func setCurrentItemName(val string) {
 	activeApp.currentPriceTextMutex.Lock()
 	defer activeApp.currentPriceTextMutex.Unlock()
 	activeApp.currentItemName = val
+	activeApp.overlayContentVersion.Add(1)
 }

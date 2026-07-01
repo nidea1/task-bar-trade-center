@@ -17,6 +17,23 @@ func logSteamRequestMetric(metric market.SteamRequestMetric) {
 	if errorText == "" {
 		errorText = "-"
 	}
+	if metric.Endpoint == "pricehistory" && errorText != "-" && metric.URL != "" {
+		logPrintf(
+			"[MARKET:metric] steam_request endpoint=%s priority=%s limiter_wait_ms=%d request_ms=%d status=%d retry_after=%q error=%q url=%q appid=%q market_hash_name=%q response_body=%q\n",
+			metric.Endpoint,
+			metric.Priority.String(),
+			durationMillis(metric.LimiterWait),
+			durationMillis(metric.RequestDuration),
+			status,
+			metric.RetryAfter,
+			errorText,
+			metric.URL,
+			metric.AppID,
+			metric.MarketHashName,
+			metric.ResponseBody,
+		)
+		return
+	}
 	logPrintf(
 		"[MARKET:metric] steam_request endpoint=%s priority=%s limiter_wait_ms=%d request_ms=%d status=%d retry_after=%q error=%q\n",
 		metric.Endpoint,

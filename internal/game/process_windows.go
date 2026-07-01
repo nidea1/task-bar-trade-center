@@ -110,6 +110,21 @@ func IsWindowVisible(hwnd uintptr) bool {
 }
 
 func ModuleBaseAddress(processHandle uintptr, moduleName string) uintptr {
+	module := moduleHandle(processHandle, moduleName)
+	return module
+}
+
+func ModuleFilePath(processHandle uintptr, moduleName string) string {
+	module := moduleHandle(processHandle, moduleName)
+	if module == 0 {
+		return ""
+	}
+	var path [1024]uint16
+	win32.ProcGetModuleFileNameExW.Call(processHandle, module, uintptr(unsafe.Pointer(&path[0])), uintptr(len(path)))
+	return syscall.UTF16ToString(path[:])
+}
+
+func moduleHandle(processHandle uintptr, moduleName string) uintptr {
 	var modules [1024]uintptr
 	var cbNeeded uint32
 

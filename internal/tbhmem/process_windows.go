@@ -214,6 +214,36 @@ func (process *Process) ScanPattern(pattern []byte, maxResults int) ([]uintptr, 
 	return results, scanned
 }
 
+func (process *Process) ScanPatterns(patterns [][]byte, maxResults int) ([][]uintptr, uint64) {
+	results := make([][]uintptr, len(patterns))
+	if len(patterns) == 0 || maxResults == 0 {
+		return results, 0
+	}
+	minAddr, maxAddr := applicationAddressRange()
+	var scanned uint64
+	for address := minAddr; address < maxAddr; {
+		var mbi memoryBasicInformation
+		ret, _, _ := procVirtualQueryEx.Call(process.Handle, address, uintptr(unsafe.Pointer(&mbi)), unsafe.Sizeof(mbi))
+		if ret == 0 {
+			break
+		}
+		next := mbi.BaseAddress + mbi.RegionSize
+		if next <= address {
+			break
+		}
+		if isReadableCommitted(mbi) {
+			matches, bytesRead := process.scanRegionPatterns(mbi.BaseAddress, mbi.RegionSize, patterns, maxResults, results)
+			results = matches
+			scanned += bytesRead
+			if allPatternLimitsReached(results, maxResults) {
+				return results, scanned
+			}
+		}
+		address = next
+	}
+	return results, scanned
+}
+
 func (process *Process) scanRegion(base uintptr, size uintptr, pattern []byte, remaining int) ([]uintptr, uint64) {
 	if len(pattern) == 0 || remaining == 0 {
 		return nil, 0
@@ -260,6 +290,73 @@ func (process *Process) scanRegion(base uintptr, size uintptr, pattern []byte, r
 		offset += chunkSize
 	}
 	return results, scanned
+}
+
+func (process *Process) scanRegionPatterns(base uintptr, size uintptr, patterns [][]byte, maxResults int, results [][]uintptr) ([][]uintptr, uint64) {
+	if len(patterns) == 0 || maxResults == 0 {
+		return results, 0
+	}
+	var scanned uint64
+	tails := make([][]byte, len(patterns))
+	for offset := uintptr(0); offset < size; {
+		chunkSize := uintptr(maxScanChunkBytes)
+		if size-offset < chunkSize {
+			chunkSize = size - offset
+		}
+		chunk := make([]byte, int(chunkSize))
+		if !process.ReadBytes(base+offset, chunk) {
+			offset += chunkSize
+			for index := range tails {
+				tails[index] = tails[index][:0]
+			}
+			continue
+		}
+		scanned += uint64(len(chunk))
+		for patternIndex, pattern := range patterns {
+			if len(pattern) == 0 || len(results[patternIndex]) >= maxResults {
+				continue
+			}
+			tail := tails[patternIndex]
+			combined := make([]byte, len(tail)+len(chunk))
+			copy(combined, tail)
+			copy(combined[len(tail):], chunk)
+			combinedBase := base + offset - uintptr(len(tail))
+			searchFrom := 0
+			for {
+				index := bytes.Index(combined[searchFrom:], pattern)
+				if index < 0 {
+					break
+				}
+				matchOffset := searchFrom + index
+				if matchOffset+len(pattern) > len(tail) {
+					results[patternIndex] = append(results[patternIndex], combinedBase+uintptr(matchOffset))
+					if len(results[patternIndex]) >= maxResults {
+						break
+					}
+				}
+				searchFrom = matchOffset + 1
+			}
+			tailLen := len(pattern) - 1
+			if tailLen > len(combined) {
+				tailLen = len(combined)
+			}
+			tails[patternIndex] = append(tails[patternIndex][:0], combined[len(combined)-tailLen:]...)
+		}
+		offset += chunkSize
+	}
+	return results, scanned
+}
+
+func allPatternLimitsReached(results [][]uintptr, maxResults int) bool {
+	if maxResults <= 0 {
+		return false
+	}
+	for _, matches := range results {
+		if len(matches) < maxResults {
+			return false
+		}
+	}
+	return true
 }
 
 func PlausibleAddress(address uintptr) bool {

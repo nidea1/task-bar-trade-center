@@ -6,6 +6,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.5] - 2026-07-01
+
+### Added
+
+* Added an inventory resolver cache that stores resolved `GameAssembly.dll`-based class addresses and automatically invalidates them when the module path, size, or modification time changes.
+* Added multi-pattern memory scanning for supported inventory resolver searches to avoid rescanning the same memory regions for each pattern.
+* Added detailed `pricehistory` diagnostic logging with the minimal request URL, application ID, market hash name, HTTP status, and a response body limited to 1 KB.
+* Added regression coverage for scoped market pricing, price history conversion, USD detail fallback, display-language migration, inventory resolver caching, and market endpoint fallback behavior.
+
+### Changed
+
+* Changed Steam `pricehistory` requests to use only `appid` and `market_hash_name`, without country or currency parameters.
+* Reordered market data requests to prefer scoped listing and order book data, followed by scoped `priceoverview`, before using `pricehistory` as a final signal source.
+* Changed market fallback behavior so valid local-scope prices can be displayed without waiting for a synchronous USD fallback.
+* Changed USD fallback merging to preserve valid local prices while converting and filling only missing order book and history details.
+* Normalized base price history values into the selected currency when a valid exchange rate is available.
+* Preserved price history volume and trend signals while excluding unconverted history prices from suggested-price calculations when an exchange rate is unavailable.
+* Changed initial inventory resolution to wait for up to 60 seconds before opening the dashboard, then continue resolving and publish the snapshot in the background.
+* Reduced unnecessary overlay window repositioning, repainting, and tooltip-height logging when only minor rectangle changes are detected.
+* Changed system-language preference handling to persist the resolved language code instead of storing `sys`.
+* Improved frontend settings hydration to avoid overwriting persisted dashboard preferences during startup or application updates.
+
+### Fixed
+
+* Fixed Steam `pricehistory` HTTP 400 and other non-success responses blocking otherwise valid local market prices.
+* Fixed unnecessary `pricehistory` requests when scoped listing, order book, or `priceoverview` data already provides a usable price.
+* Fixed incomplete UK/GBP market analysis by merging missing USD market details after converting them into the selected currency.
+* Fixed unconverted base-history prices affecting suggested-price calculations when no exchange rate is available.
+* Fixed dashboard preferences being reset during frontend hydration, builds, or application updates.
+* Fixed application startup remaining blocked indefinitely while the first inventory snapshot was being resolved.
+* Fixed legacy settings containing `display_language: "sys"` by migrating them to the currently resolved display language.
+* Fixed excessive overlay repositioning, repainting, and repetitive tooltip-height logging during small tooltip rectangle changes.
+
+### Acknowledgements
+
+* Special thanks to `raigoo_` for repeatedly testing development builds and providing detailed feedback that helped identify, reproduce, and verify several of these fixes.
+
 ## [0.11.4] - 2026-06-29
 
 ### Added

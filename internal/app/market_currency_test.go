@@ -151,7 +151,7 @@ func TestMarketScopeURLBuilders(t *testing.T) {
 			}
 			assertMarketURLScope(t, priceOverviewURL("Minor Ruby", scope), scope, tt.wantID)
 			assertMarketURLScope(t, itemOrdersHistogramURL("12345", scope), scope, tt.wantID)
-			assertMarketURLScope(t, priceHistoryURL("Minor Ruby", scope), scope, tt.wantID)
+			assertMarketURLHasNoScope(t, priceHistoryURL("Minor Ruby"))
 			assertMarketURLScope(t, steamMarketListingURLForScope(catalog.ItemConfig{Name: map[string]string{"en-US": "Minor Ruby"}}, scope), scope, tt.wantID)
 		})
 	}
@@ -169,6 +169,27 @@ func assertMarketURLScope(t *testing.T, rawURL string, scope market.MarketScope,
 	}
 	if got := query.Get("currency"); got != wantCurrencyID {
 		t.Fatalf("currency = %q, want %q", got, wantCurrencyID)
+	}
+}
+
+func assertMarketURLHasNoScope(t *testing.T, rawURL string) {
+	t.Helper()
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		t.Fatalf("parse URL %q: %v", rawURL, err)
+	}
+	query := parsed.Query()
+	if got := query.Get("country"); got != "" {
+		t.Fatalf("country = %q, want empty", got)
+	}
+	if got := query.Get("currency"); got != "" {
+		t.Fatalf("currency = %q, want empty", got)
+	}
+	if got := query.Get("appid"); got == "" {
+		t.Fatal("appid query parameter is missing")
+	}
+	if got := query.Get("market_hash_name"); got == "" {
+		t.Fatal("market_hash_name query parameter is missing")
 	}
 }
 

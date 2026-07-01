@@ -20,6 +20,10 @@ type Memory interface {
 	ScanPattern(pattern []byte, maxResults int) ([]uintptr, uint64)
 }
 
+type multiPatternMemory interface {
+	ScanPatterns(patterns [][]byte, maxResults int) ([][]uintptr, uint64)
+}
+
 func ResolveClassByName(memory Memory, name string) ([]uintptr, bool) {
 	stringAddresses, _ := memory.ScanPattern([]byte(name+"\x00"), 64)
 	if len(stringAddresses) == 0 {
@@ -31,10 +35,13 @@ func ResolveClassByName(memory Memory, name string) ([]uintptr, bool) {
 
 	seen := make(map[uintptr]struct{})
 	classes := make([]uintptr, 0, 1)
+	stringRefPatterns := make([][]byte, 0, len(stringAddresses))
 	for _, stringAddress := range stringAddresses {
-		ptrBytes := make([]byte, 8)
-		binary.LittleEndian.PutUint64(ptrBytes, uint64(stringAddress))
-		refs, _ := memory.ScanPattern(ptrBytes, 5000)
+		stringRefPatterns = append(stringRefPatterns, uintptrPattern(stringAddress))
+	}
+	stringRefs := scanPatternBatch(memory, stringRefPatterns, 5000)
+	for index, refs := range stringRefs {
+		stringAddress := stringAddresses[index]
 		for _, ref := range refs {
 			if ref < ClassNameOffset {
 				continue
@@ -50,6 +57,24 @@ func ResolveClassByName(memory Memory, name string) ([]uintptr, bool) {
 		}
 	}
 	return classes, len(classes) > 0
+}
+
+func scanPatternBatch(memory Memory, patterns [][]byte, maxResults int) [][]uintptr {
+	if scanner, ok := memory.(multiPatternMemory); ok && len(patterns) > 1 {
+		results, _ := scanner.ScanPatterns(patterns, maxResults)
+		return results
+	}
+	results := make([][]uintptr, len(patterns))
+	for index, pattern := range patterns {
+		results[index], _ = memory.ScanPattern(pattern, maxResults)
+	}
+	return results
+}
+
+func uintptrPattern(value uintptr) []byte {
+	ptrBytes := make([]byte, 8)
+	binary.LittleEndian.PutUint64(ptrBytes, uint64(value))
+	return ptrBytes
 }
 
 func validateClass(memory Memory, classPtr uintptr, stringAddress uintptr) bool {

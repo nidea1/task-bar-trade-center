@@ -9,8 +9,7 @@ import (
 )
 
 const (
-	stashSlotsPerPage  = 100
-	cachedObjectMaxAge = 5 * time.Minute
+	stashSlotsPerPage = 100
 
 	playerCurrencies = 0x48
 	playerHeroes     = 0x50
@@ -41,10 +40,20 @@ type Memory interface {
 	ScanPattern(pattern []byte, maxResults int) ([]uintptr, uint64)
 }
 
+type multiPatternMemory interface {
+	ScanPatterns(patterns [][]byte, maxResults int) ([][]uintptr, uint64)
+}
+
 type Resolver struct {
 	metadata               map[int]ItemMetadata
 	cachedObject           uintptr
 	cachedObjectResolvedAt time.Time
+	classCache             map[string][]uintptr
+}
+
+type ResolverCache struct {
+	CachedObject uintptr
+	ClassCache   map[string][]uintptr
 }
 
 type listInfo struct {
@@ -70,22 +79,30 @@ func NewResolver(metadata map[int]ItemMetadata) *Resolver {
 }
 
 func (resolver *Resolver) ReadSnapshot(memory Memory, now time.Time) (InventorySnapshot, bool) {
+	return resolver.readSnapshot(memory, now, true)
+}
+
+func (resolver *Resolver) ReadSnapshotCore(memory Memory, now time.Time) (InventorySnapshot, bool) {
+	return resolver.readSnapshot(memory, now, false)
+}
+
+func (resolver *Resolver) readSnapshot(memory Memory, now time.Time, includeRuntimeTradeSlots bool) (InventorySnapshot, bool) {
 	if now.IsZero() {
 		now = time.Now()
 	}
-	if resolver.cachedObject != 0 && now.Sub(resolver.cachedObjectResolvedAt) < cachedObjectMaxAge {
-		if snapshot, ok := resolver.readObject(memory, resolver.cachedObject, now); ok {
+	if resolver.cachedObject != 0 {
+		if snapshot, ok := resolver.readObject(memory, resolver.cachedObject, now, includeRuntimeTradeSlots); ok {
 			return snapshot, true
 		}
 		resolver.cachedObject = 0
 	}
 
-	if snapshot, ok := resolver.resolveAndReadObject(memory, now); ok {
+	if snapshot, ok := resolver.resolveAndReadObject(memory, now, includeRuntimeTradeSlots); ok {
 		return snapshot, true
 	}
 
 	if resolver.cachedObject != 0 {
-		if snapshot, ok := resolver.readObject(memory, resolver.cachedObject, now); ok {
+		if snapshot, ok := resolver.readObject(memory, resolver.cachedObject, now, includeRuntimeTradeSlots); ok {
 			return snapshot, true
 		}
 		resolver.cachedObject = 0
@@ -93,17 +110,14 @@ func (resolver *Resolver) ReadSnapshot(memory Memory, now time.Time) (InventoryS
 	return InventorySnapshot{}, false
 }
 
-func (resolver *Resolver) resolveAndReadObject(memory Memory, now time.Time) (InventorySnapshot, bool) {
-	classes, ok := il2cpp.ResolveClassByName(memory, "PlayerSaveData")
+func (resolver *Resolver) resolveAndReadObject(memory Memory, now time.Time, includeRuntimeTradeSlots bool) (InventorySnapshot, bool) {
+	classes, ok := resolver.resolveClassByName(memory, "PlayerSaveData")
 	if !ok {
 		return InventorySnapshot{}, false
 	}
 
 	var best candidate
-	for _, classPtr := range classes {
-		ptrBytes := make([]byte, 8)
-		binary.LittleEndian.PutUint64(ptrBytes, uint64(classPtr))
-		refs, _ := memory.ScanPattern(ptrBytes, maxClassRefs)
+	for _, refs := range resolver.scanClassReferences(memory, classes) {
 		for _, ref := range refs {
 			if ref < il2cpp.ObjectClassOffset {
 				continue
@@ -120,7 +134,70 @@ func (resolver *Resolver) resolveAndReadObject(memory Memory, now time.Time) (In
 	}
 	resolver.cachedObject = best.object
 	resolver.cachedObjectResolvedAt = now
-	return resolver.readObject(memory, best.object, now)
+	return resolver.readObject(memory, best.object, now, includeRuntimeTradeSlots)
+}
+
+func (resolver *Resolver) scanClassReferences(memory Memory, classes []uintptr) [][]uintptr {
+	patterns := make([][]byte, 0, len(classes))
+	for _, classPtr := range classes {
+		ptrBytes := make([]byte, 8)
+		binary.LittleEndian.PutUint64(ptrBytes, uint64(classPtr))
+		patterns = append(patterns, ptrBytes)
+	}
+	if scanner, ok := memory.(multiPatternMemory); ok && len(patterns) > 1 {
+		refs, _ := scanner.ScanPatterns(patterns, maxClassRefs)
+		return refs
+	}
+	refs := make([][]uintptr, len(patterns))
+	for index, pattern := range patterns {
+		refs[index], _ = memory.ScanPattern(pattern, maxClassRefs)
+	}
+	return refs
+}
+
+func (resolver *Resolver) resolveClassByName(memory Memory, name string) ([]uintptr, bool) {
+	if resolver.classCache == nil {
+		resolver.classCache = make(map[string][]uintptr)
+	}
+	if cached, exists := resolver.classCache[name]; exists {
+		return append([]uintptr(nil), cached...), len(cached) > 0
+	}
+	classes, ok := il2cpp.ResolveClassByName(memory, name)
+	if !ok || len(classes) == 0 {
+		return nil, false
+	}
+	resolver.classCache[name] = append([]uintptr(nil), classes...)
+	return classes, true
+}
+
+func (resolver *Resolver) ExportCache() ResolverCache {
+	cache := ResolverCache{
+		CachedObject: resolver.cachedObject,
+		ClassCache:   make(map[string][]uintptr, len(resolver.classCache)),
+	}
+	for name, addresses := range resolver.classCache {
+		cache.ClassCache[name] = append([]uintptr(nil), addresses...)
+	}
+	return cache
+}
+
+func (resolver *Resolver) ImportCache(cache ResolverCache) {
+	resolver.cachedObject = cache.CachedObject
+	if cache.CachedObject != 0 {
+		resolver.cachedObjectResolvedAt = time.Now()
+	}
+	if len(cache.ClassCache) == 0 {
+		return
+	}
+	if resolver.classCache == nil {
+		resolver.classCache = make(map[string][]uintptr, len(cache.ClassCache))
+	}
+	for name, addresses := range cache.ClassCache {
+		if len(addresses) == 0 {
+			continue
+		}
+		resolver.classCache[name] = append([]uintptr(nil), addresses...)
+	}
 }
 
 func betterCandidate(next candidate, best candidate) bool {
@@ -166,7 +243,7 @@ func (resolver *Resolver) validateObject(memory Memory, object uintptr) (candida
 	return candidate{object: object, score: score, gold: gold}, score > validItems
 }
 
-func (resolver *Resolver) readObject(memory Memory, object uintptr, now time.Time) (InventorySnapshot, bool) {
+func (resolver *Resolver) readObject(memory Memory, object uintptr, now time.Time, includeRuntimeTradeSlots bool) (InventorySnapshot, bool) {
 	items := readListInfo(memory, readPtr(memory, object+playerItems), 200000)
 	if !items.ok {
 		return InventorySnapshot{}, false
@@ -201,8 +278,10 @@ func (resolver *Resolver) readObject(memory Memory, object uintptr, now time.Tim
 	if trade := readListInfo(memory, readPtr(memory, object+playerTradeSlots), 100); trade.ok {
 		tradeSlots = resolver.readTradeSlots(memory, trade)
 	}
-	if runtimeTradeSlots := resolver.readRuntimeTradeSlots(memory, now); len(runtimeTradeSlots) > 0 {
-		tradeSlots = runtimeTradeSlots
+	if includeRuntimeTradeSlots {
+		if runtimeTradeSlots := resolver.readRuntimeTradeSlots(memory, now); len(runtimeTradeSlots) > 0 {
+			tradeSlots = runtimeTradeSlots
+		}
 	}
 
 	return InventorySnapshot{ReadAt: now, Gold: gold, StashPageCount: stashPageCount, Items: owned, TradeSlots: tradeSlots}, true

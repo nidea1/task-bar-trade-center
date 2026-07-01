@@ -1,6 +1,7 @@
 package app
 
 import (
+	"time"
 	"unsafe"
 
 	"github.com/nidea1/task-bar-trade-center/internal/game"
@@ -8,24 +9,33 @@ import (
 	"github.com/nidea1/task-bar-trade-center/internal/win32"
 )
 
+const lastOverlayRectFallbackTTL = 750 * time.Millisecond
+
 func marketOverlayRect() (win32.RECT, bool) {
 	if tooltipSnapshot, ok := readTooltipSnapshotFromMemory(); ok {
-		activeApp.lastOverlayRect = placeOverlayByTooltipSnapshot(tooltipSnapshot)
-		activeApp.hasLastOverlayRect = true
+		rememberLastOverlayRect(placeOverlayByTooltipSnapshot(tooltipSnapshot))
 		return activeApp.lastOverlayRect, true
 	}
 	if !activeApp.showOverlay.Load() {
 		return win32.RECT{}, false
 	}
-	if cursor, ok := cursorScreenPosition(); ok {
-		activeApp.lastOverlayRect = fallbackOverlayRect(cursor)
-		activeApp.hasLastOverlayRect = true
+	if activeApp.hasLastOverlayRect && time.Since(activeApp.lastOverlayRectAt) <= lastOverlayRectFallbackTTL {
 		return activeApp.lastOverlayRect, true
 	}
-	if activeApp.hasLastOverlayRect {
+	if cursor, ok := cursorScreenPosition(); ok {
+		rememberLastOverlayRect(fallbackOverlayRect(cursor))
+		return activeApp.lastOverlayRect, true
+	}
+	if activeApp.hasLastOverlayRect && time.Since(activeApp.lastOverlayRectAt) <= lastOverlayRectFallbackTTL {
 		return activeApp.lastOverlayRect, true
 	}
 	return win32.RECT{}, false
+}
+
+func rememberLastOverlayRect(rect win32.RECT) {
+	activeApp.lastOverlayRect = rect
+	activeApp.lastOverlayRectAt = time.Now()
+	activeApp.hasLastOverlayRect = true
 }
 
 var cursorScreenPosition = func() (win32.POINT, bool) {

@@ -229,16 +229,27 @@ var (
 )
 
 func getExchangeRate(currencyCode string) float64 {
+	if rate, ok := configuredExchangeRate(currencyCode); ok {
+		return rate
+	}
+	return 1.0
+}
+
+func configuredExchangeRate(currencyCode string) (float64, bool) {
+	currencyCode = strings.ToUpper(strings.TrimSpace(currencyCode))
+	if currencyCode == "" {
+		return 0, false
+	}
 	exchangeRateMu.RLock()
 	rate, exists := exchangeRateCache[currencyCode]
 	exchangeRateMu.RUnlock()
-	if exists {
-		return rate
+	if exists && rate > 0 {
+		return rate, true
 	}
-	if fallbackRate, ok := fallbackExchangeRates[currencyCode]; ok {
-		return fallbackRate
+	if fallbackRate, ok := fallbackExchangeRates[currencyCode]; ok && fallbackRate > 0 {
+		return fallbackRate, true
 	}
-	return 1.0
+	return 0, false
 }
 
 func setExchangeRate(currencyCode string, rate float64) {

@@ -5,13 +5,24 @@ import (
 
 	"fmt"
 	"syscall"
+	"time"
 	"unsafe"
 )
+
+const overlayRedrawMinInterval = 75 * time.Millisecond
 
 func redrawOverlay() {
 	if !EnablePriceHUD || activeApp.overlayHWND == 0 {
 		return
 	}
+	now := time.Now()
+	activeApp.overlayRedrawMu.Lock()
+	if now.Sub(activeApp.lastOverlayRedrawAt) < overlayRedrawMinInterval {
+		activeApp.overlayRedrawMu.Unlock()
+		return
+	}
+	activeApp.lastOverlayRedrawAt = now
+	activeApp.overlayRedrawMu.Unlock()
 	if !activeApp.overlayUpdatePending.CompareAndSwap(false, true) {
 		return
 	}
@@ -60,12 +71,16 @@ func wndProc(hWnd uintptr, msg uint32, wParam uintptr, lParam uintptr) uintptr {
 		activeApp.overlayUpdatePending.Store(false)
 		if !activeApp.showOverlay.Load() {
 			activeApp.hasLastOverlayRect = false
+			activeApp.hasOverlayWindowRect = false
+			activeApp.overlayWindowVisible = false
 			win32.ProcShowWindow.Call(hWnd, SW_HIDE)
 			return 0
 		}
 
 		rect, ok := marketOverlayRect()
 		if !ok {
+			activeApp.hasOverlayWindowRect = false
+			activeApp.overlayWindowVisible = false
 			win32.ProcShowWindow.Call(hWnd, SW_HIDE)
 			return 0
 		}
@@ -77,18 +92,34 @@ func wndProc(hWnd uintptr, msg uint32, wParam uintptr, lParam uintptr) uintptr {
 
 		activeApp.overlayWidth.Store(width)
 		activeApp.overlayHeight.Store(height)
-		win32.ProcSetWindowPos.Call(
-			hWnd,
-			^uintptr(0),
-			uintptr(int(rect.Left)),
-			uintptr(int(rect.Top)),
-			uintptr(int(width)),
-			uintptr(int(height)),
-			SWP_NOACTIVATE|SWP_SHOWWINDOW,
-		)
-		win32.ProcShowWindow.Call(hWnd, SW_SHOWNA)
-		win32.ProcInvalidateRect.Call(hWnd, 0, 1)
-		win32.ProcUpdateWindow.Call(hWnd)
+		contentVersion := activeApp.overlayContentVersion.Load()
+		moved := !activeApp.hasOverlayWindowRect || !rectsClose(activeApp.overlayWindowRect, rect, 3)
+		contentChanged := activeApp.overlayPaintedContentVersion != contentVersion
+		if !moved && !contentChanged && activeApp.overlayWindowVisible {
+			return 0
+		}
+		if moved {
+			win32.ProcSetWindowPos.Call(
+				hWnd,
+				^uintptr(0),
+				uintptr(int(rect.Left)),
+				uintptr(int(rect.Top)),
+				uintptr(int(width)),
+				uintptr(int(height)),
+				SWP_NOACTIVATE|SWP_SHOWWINDOW,
+			)
+			activeApp.overlayWindowRect = rect
+			activeApp.hasOverlayWindowRect = true
+		}
+		if !activeApp.overlayWindowVisible {
+			win32.ProcShowWindow.Call(hWnd, SW_SHOWNA)
+			activeApp.overlayWindowVisible = true
+		}
+		if contentChanged || moved {
+			activeApp.overlayPaintedContentVersion = contentVersion
+			win32.ProcInvalidateRect.Call(hWnd, 0, 1)
+			win32.ProcUpdateWindow.Call(hWnd)
+		}
 		return 0
 	case WM_PAINT:
 		var ps win32.PAINTSTRUCT
@@ -124,6 +155,13 @@ func wndProc(hWnd uintptr, msg uint32, wParam uintptr, lParam uintptr) uintptr {
 		return 0
 	}
 	return winDefWindowProc(hWnd, msg, wParam, lParam)
+}
+
+func rectsClose(a win32.RECT, b win32.RECT, tolerance int32) bool {
+	return absInt32(a.Left-b.Left) <= tolerance &&
+		absInt32(a.Top-b.Top) <= tolerance &&
+		absInt32(a.Right-b.Right) <= tolerance &&
+		absInt32(a.Bottom-b.Bottom) <= tolerance
 }
 
 func winDefWindowProc(hWnd uintptr, msg uint32, wParam uintptr, lParam uintptr) uintptr {

@@ -126,6 +126,8 @@ func appStatusText() string {
 		return tr("status.waiting_game")
 	case AppStatusWaitingForGameAssembly:
 		return tr("status.attaching")
+	case AppStatusPreparing:
+		return trFallback("status.preparing", "Preparing...")
 	case AppStatusReady:
 		return tr("status.ready")
 	case AppStatusAttachFailed:

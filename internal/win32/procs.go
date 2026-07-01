@@ -8,6 +8,7 @@ var (
 	ProcReadProcessMemory        = Kernel32.NewProc("ReadProcessMemory")
 	ProcEnumProcessModules       = Kernel32.NewProc("K32EnumProcessModules")
 	ProcGetModuleBaseNameW       = Kernel32.NewProc("K32GetModuleBaseNameW")
+	ProcGetModuleFileNameExW     = Kernel32.NewProc("K32GetModuleFileNameExW")
 	ProcGetModuleHandleW         = Kernel32.NewProc("GetModuleHandleW")
 	ProcCreateToolhelp32Snapshot = Kernel32.NewProc("CreateToolhelp32Snapshot")
 	ProcProcess32FirstW          = Kernel32.NewProc("Process32FirstW")

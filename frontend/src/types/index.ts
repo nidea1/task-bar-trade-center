@@ -5,6 +5,24 @@ export type BestSortMode = "score_desc" | "score_asc" | "price_desc" | "price_as
 export type BestOwnershipFilter = "all" | "equipped" | "unequipped";
 export type MarketableItemsTab = "best" | "all";
 export type NotificationSource = "box" | "craft" | "synthesis" | "offering";
+export type RuntimeStepState = "pending" | "running" | "ok" | "degraded" | "failed" | string;
+
+export interface RuntimeStepInfo {
+    id: string;
+    label: string;
+    state: RuntimeStepState;
+    message?: string;
+}
+
+export interface RuntimeStateInfo {
+    ready: boolean;
+    preparing: boolean;
+    phase: string;
+    message: string;
+    app_status: number;
+    app_status_text: string;
+    steps: RuntimeStepInfo[];
+}
 
 export interface DashboardSettings {
     theme_mode: ThemeMode;

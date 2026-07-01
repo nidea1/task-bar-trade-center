@@ -7,7 +7,7 @@ const (
 	AppProcessName           = "tbtc"
 	DashboardWindowClassName = AppProcessName + "DashboardWindow"
 	AppCreatorName           = "nidea1"
-	AppVersion               = "0.11.4"
+	AppVersion               = "0.11.5"
 	GameProcessName          = "TaskBarHero.exe"
 
 	EnablePriceHUD           = true
@@ -165,6 +165,7 @@ const (
 	AppStatusStarting = iota
 	AppStatusWaitingForGame
 	AppStatusWaitingForGameAssembly
+	AppStatusPreparing
 	AppStatusReady
 	AppStatusAttachFailed
 	AppStatusGameLayoutIncompatible

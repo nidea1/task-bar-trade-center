@@ -11,6 +11,7 @@ type Callbacks struct {
 	Quit                   func()
 	DashboardUpdated       func(inventory.DashboardState)
 	DashboardFooterUpdated func(DashboardFooterInfo)
+	RuntimeStateUpdated    func(RuntimeStateInfo)
 }
 
 var callbacks = struct {
@@ -54,6 +55,15 @@ func callDashboardUpdated(state inventory.DashboardState) {
 func callDashboardFooterUpdated(info DashboardFooterInfo) {
 	callbacks.RLock()
 	fn := callbacks.value.DashboardFooterUpdated
+	callbacks.RUnlock()
+	if fn != nil {
+		fn(info)
+	}
+}
+
+func callRuntimeStateUpdated(info RuntimeStateInfo) {
+	callbacks.RLock()
+	fn := callbacks.value.RuntimeStateUpdated
 	callbacks.RUnlock()
 	if fn != nil {
 		fn(info)

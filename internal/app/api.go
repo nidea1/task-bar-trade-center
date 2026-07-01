@@ -29,13 +29,16 @@ func GetInventoryDashboard() (inventory.DashboardState, error) {
 	if cached.UpdatedAt != "" {
 		return withCurrentDashboardRuntimeFields(cached), nil
 	}
-	if canReadInventorySnapshot() {
+	if runtimeReady() && canReadInventorySnapshot() {
 		go refreshInventoryDashboardState("dashboard-cache-miss")
 	}
 	return currentInventoryDashboardShellState(), nil
 }
 
 func RefreshInventoryPrices() (inventory.RefreshStatus, error) {
+	if !runtimeReady() {
+		return currentInventoryRefreshStatus(), fmt.Errorf("runtime is still preparing")
+	}
 	state, err := readInventoryDashboardStateLocked()
 	if err != nil {
 		return currentInventoryRefreshStatus(), err
@@ -51,6 +54,9 @@ func RefreshInventoryPrices() (inventory.RefreshStatus, error) {
 }
 
 func ForceRefreshInventoryPrices() (inventory.RefreshStatus, error) {
+	if !runtimeReady() {
+		return currentInventoryRefreshStatus(), fmt.Errorf("runtime is still preparing")
+	}
 	state, err := readInventoryDashboardStateLocked()
 	if err != nil {
 		return currentInventoryRefreshStatus(), err

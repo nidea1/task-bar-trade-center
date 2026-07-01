@@ -1,6 +1,8 @@
 package app
 
 import (
+	"fmt"
+
 	"github.com/nidea1/task-bar-trade-center/internal/win32"
 
 	"syscall"
@@ -28,6 +30,17 @@ func init() {
 
 func tr(key string, args ...any) string {
 	return localeService.T(key, args...)
+}
+
+func trFallback(key string, fallback string, args ...any) string {
+	value := tr(key, args...)
+	if value != "" && value != key {
+		return value
+	}
+	if len(args) > 0 {
+		return fmt.Sprintf(fallback, args...)
+	}
+	return fallback
 }
 
 func currentDisplayLanguage() string {

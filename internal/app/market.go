@@ -208,8 +208,8 @@ func steamMarketListingURLForScope(config catalog.ItemConfig, scope market.Marke
 	return market.ListingURLForScope(config, scope)
 }
 
-func priceHistoryURL(marketHashName string, scope market.MarketScope) string {
-	return market.PriceHistoryURL(marketHashName, scope)
+func priceHistoryURL(marketHashName string) string {
+	return market.PriceHistoryURL(marketHashName)
 }
 
 func itemOrdersHistogramURL(itemNameID string, scope market.MarketScope) string {

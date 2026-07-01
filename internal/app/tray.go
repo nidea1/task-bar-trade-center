@@ -109,6 +109,7 @@ func setAppStatus(status int32) {
 	previous := activeApp.appStatus.Swap(status)
 	requestTrayTooltipUpdate()
 	requestStatusRefresh()
+	callRuntimeStateUpdated(currentRuntimeState())
 	notifyRuntimeStateChange(previous, status)
 }
 

@@ -266,11 +266,11 @@ func (resolver *Resolver) readTradeSlots(memory Memory, list listInfo) []TradeSh
 }
 
 func (resolver *Resolver) readRuntimeTradeSlots(memory Memory, now time.Time) []TradeShipSlot {
-	slotClasses, ok := il2cpp.ResolveClassByName(memory, "TradingStashSlot")
+	slotClasses, ok := resolver.resolveClassByName(memory, "TradingStashSlot")
 	if !ok || len(slotClasses) == 0 {
 		return nil
 	}
-	cacheClasses, ok := il2cpp.ResolveClassByName(memory, "TradingStashCache")
+	cacheClasses, ok := resolver.resolveClassByName(memory, "TradingStashCache")
 	if !ok || len(cacheClasses) == 0 {
 		return nil
 	}

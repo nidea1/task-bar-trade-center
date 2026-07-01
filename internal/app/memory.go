@@ -150,7 +150,7 @@ func logCurrentTooltipCalibration() {
 
 func logTooltipDebug(format string, args ...interface{}) {
 	now := time.Now()
-	if now.Sub(activeApp.lastTooltipDebugLog) < time.Second {
+	if now.Sub(activeApp.lastTooltipDebugLog) < 5*time.Second {
 		return
 	}
 	activeApp.lastTooltipDebugLog = now
@@ -159,7 +159,7 @@ func logTooltipDebug(format string, args ...interface{}) {
 
 func logTooltipDebugLines(lines ...string) {
 	now := time.Now()
-	if now.Sub(activeApp.lastTooltipDebugLog) < time.Second {
+	if now.Sub(activeApp.lastTooltipDebugLog) < 5*time.Second {
 		return
 	}
 	activeApp.lastTooltipDebugLog = now

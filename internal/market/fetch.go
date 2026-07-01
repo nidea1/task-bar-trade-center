@@ -42,6 +42,10 @@ type SteamRequestMetric struct {
 	StatusCode      int
 	RetryAfter      string
 	Error           string
+	URL             string
+	AppID           string
+	MarketHashName  string
+	ResponseBody    string
 }
 
 type steamRateLimiter struct {
@@ -135,11 +139,9 @@ func ListingURLForScope(config catalog.ItemConfig, scope MarketScope) string {
 	)
 }
 
-func PriceHistoryURL(marketHashName string, scope MarketScope) string {
+func PriceHistoryURL(marketHashName string) string {
 	return fmt.Sprintf(
-		"https://steamcommunity.com/market/pricehistory/?country=%s&currency=%d&appid=%d&market_hash_name=%s",
-		url.QueryEscape(scope.Region.CountryCode),
-		scope.Currency.SteamCurrencyID,
+		"https://steamcommunity.com/market/pricehistory/?appid=%d&market_hash_name=%s",
 		SteamAppID,
 		url.QueryEscape(marketHashName),
 	)
@@ -209,25 +211,12 @@ func fetchDataForScope(config catalog.ItemConfig, marketHashName string, now tim
 		}
 	}
 
-	if len(history) == 0 {
-		body, _, err := fetchSaleHistory(client, marketHashName, referer, scope, priority)
-		if err != nil {
-			if se, ok := err.(*SteamError); ok && se.StatusCode == 429 {
-				return MarketData{}, err
-			}
-			requestErrors = append(requestErrors, "pricehistory: "+err.Error())
-		} else {
-			history = parseSaleHistoryResponse(body)
-			if len(history) == 0 {
-				requestErrors = append(requestErrors, "pricehistory: response did not contain sale data")
-			}
-		}
-	}
-
-	if hasOrderBook || len(history) > 0 {
-		data := marketDataFromSources(marketHashName, orderBook, hasOrderBook, history, now, scope.Currency)
+	if len(history) > 0 || hasOrderBook {
+		data := marketDataFromBaseHistory(marketHashName, orderBook, hasOrderBook, history, now, scope.Currency)
 		data.Analysis.IconURL = iconURL
-		return data, nil
+		if len(history) > 0 || data.Analysis.HasSuggested {
+			return data, nil
+		}
 	}
 
 	body, _, err := fetchPriceOverview(client, marketHashName, scope, priority)
@@ -243,6 +232,23 @@ func fetchDataForScope(config catalog.ItemConfig, marketHashName string, now tim
 		requestErrors = append(requestErrors, "priceoverview: response did not contain price data")
 	}
 
+	if len(history) == 0 {
+		body, _, err := fetchSaleHistory(client, marketHashName, referer, priority)
+		if err != nil {
+			requestErrors = append(requestErrors, "pricehistory: "+err.Error())
+		} else {
+			history = parseSaleHistoryResponse(body)
+			if len(history) == 0 {
+				requestErrors = append(requestErrors, "pricehistory: response did not contain sale data")
+			}
+		}
+	}
+	if hasOrderBook || len(history) > 0 {
+		data := marketDataFromBaseHistory(marketHashName, orderBook, hasOrderBook, history, now, scope.Currency)
+		data.Analysis.IconURL = iconURL
+		return data, nil
+	}
+
 	if len(requestErrors) == 0 {
 		return MarketData{}, fmt.Errorf("no market data available")
 	}
@@ -253,8 +259,8 @@ func fetchItemOrdersHistogram(client *http.Client, itemNameID string, referer st
 	return steamGetWithPriority(client, ItemOrdersHistogramURL(itemNameID, scope), referer, priority)
 }
 
-func fetchSaleHistory(client *http.Client, marketHashName string, referer string, scope MarketScope, priority RequestPriority) ([]byte, int, error) {
-	return steamGetWithPriority(client, PriceHistoryURL(marketHashName, scope), referer, priority)
+func fetchSaleHistory(client *http.Client, marketHashName string, referer string, priority RequestPriority) ([]byte, int, error) {
+	return steamGetWithPriority(client, PriceHistoryURL(marketHashName), referer, priority)
 }
 
 func fetchPriceOverview(client *http.Client, marketHashName string, scope MarketScope, priority RequestPriority) ([]byte, int, error) {
@@ -293,6 +299,7 @@ func steamGet(client *http.Client, targetURL string, referer string) ([]byte, in
 }
 
 func steamGetWithPriority(client *http.Client, targetURL string, referer string, priority RequestPriority) ([]byte, int, error) {
+	endpoint := getEndpointFromURL(targetURL)
 	req, err := http.NewRequest(http.MethodGet, targetURL, nil)
 	if err != nil {
 		return nil, 0, err
@@ -312,7 +319,7 @@ func steamGetWithPriority(client *http.Client, targetURL string, referer string,
 	resp, err := client.Do(req)
 	if err != nil {
 		emitSteamRequestMetric(SteamRequestMetric{
-			Endpoint:        getEndpointFromURL(targetURL),
+			Endpoint:        endpoint,
 			Priority:        priority,
 			LimiterWait:     waitDuration,
 			RequestDuration: time.Since(requestStartedAt),
@@ -325,7 +332,7 @@ func steamGetWithPriority(client *http.Client, targetURL string, referer string,
 	body, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
 		emitSteamRequestMetric(SteamRequestMetric{
-			Endpoint:        getEndpointFromURL(targetURL),
+			Endpoint:        endpoint,
 			Priority:        priority,
 			LimiterWait:     waitDuration,
 			RequestDuration: time.Since(requestStartedAt),
@@ -336,10 +343,11 @@ func steamGetWithPriority(client *http.Client, targetURL string, referer string,
 		return body, resp.StatusCode, readErr
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		urlText, appID, marketHashName, responseBody := steamErrorMetricDetails(endpoint, targetURL, body)
 		steamErr := &SteamError{
 			StatusCode: resp.StatusCode,
 			Status:     resp.Status,
-			Endpoint:   getEndpointFromURL(targetURL),
+			Endpoint:   endpoint,
 			RetryAfter: resp.Header.Get("Retry-After"),
 		}
 		emitSteamRequestMetric(SteamRequestMetric{
@@ -350,11 +358,15 @@ func steamGetWithPriority(client *http.Client, targetURL string, referer string,
 			StatusCode:      resp.StatusCode,
 			RetryAfter:      steamErr.RetryAfter,
 			Error:           steamErr.Error(),
+			URL:             urlText,
+			AppID:           appID,
+			MarketHashName:  marketHashName,
+			ResponseBody:    responseBody,
 		})
 		return body, resp.StatusCode, steamErr
 	}
 	emitSteamRequestMetric(SteamRequestMetric{
-		Endpoint:        getEndpointFromURL(targetURL),
+		Endpoint:        endpoint,
 		Priority:        priority,
 		LimiterWait:     waitDuration,
 		RequestDuration: time.Since(requestStartedAt),
@@ -362,6 +374,28 @@ func steamGetWithPriority(client *http.Client, targetURL string, referer string,
 		RetryAfter:      resp.Header.Get("Retry-After"),
 	})
 	return body, resp.StatusCode, nil
+}
+
+func steamErrorMetricDetails(endpoint string, targetURL string, body []byte) (string, string, string, string) {
+	if endpoint != "pricehistory" {
+		return "", "", "", ""
+	}
+	parsed, err := url.Parse(targetURL)
+	if err != nil {
+		return targetURL, "", "", limitMetricBody(body, 1024)
+	}
+	query := parsed.Query()
+	return targetURL, query.Get("appid"), query.Get("market_hash_name"), limitMetricBody(body, 1024)
+}
+
+func limitMetricBody(body []byte, maxBytes int) string {
+	if maxBytes <= 0 || len(body) == 0 {
+		return ""
+	}
+	if len(body) > maxBytes {
+		body = body[:maxBytes]
+	}
+	return strings.TrimSpace(string(body))
 }
 
 func emitSteamRequestMetric(metric SteamRequestMetric) {

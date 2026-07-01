@@ -8,9 +8,17 @@ import (
 	"unsafe"
 
 	"github.com/nidea1/task-bar-trade-center/internal/game"
+	"github.com/nidea1/task-bar-trade-center/internal/inventory"
 	"github.com/nidea1/task-bar-trade-center/internal/market"
 	"github.com/nidea1/task-bar-trade-center/internal/win32"
 )
+
+const initialInventoryPrepareTimeout = 60 * time.Second
+
+type inventoryPrepareResult struct {
+	state inventory.DashboardState
+	err   error
+}
 
 func Run() {
 	runtime.LockOSThread()
@@ -18,6 +26,7 @@ func Run() {
 
 	configureNotificationIdentity()
 	createAppWindow()
+	initializeRuntimeState()
 	setAppStatus(AppStatusStarting)
 	addTrayIcon()
 	startedAt := time.Now()
@@ -95,15 +104,19 @@ func shutdownApplication() {
 
 func attachGameAndWatchHoveredItems() {
 	for {
+		resetRuntimeForWaitingGame()
 		setAppStatus(AppStatusWaitingForGame)
 		pid := waitForGameProcess()
+		setRuntimeStep("game_process", runtimeStepOK, "")
 		pHandle, ok := openGameProcess(pid)
 		if !ok {
 			setAppStatus(AppStatusAttachFailed)
+			markRuntimeFailed(tr("status.admin_required"))
 			return
 		}
 
 		setAppStatus(AppStatusWaitingForGameAssembly)
+		setRuntimeStep("game_assembly", runtimeStepRunning, tr("status.attaching"))
 		gameAssemblyBase, gameStillRunning := waitForGameAssembly(pHandle)
 		if !gameStillRunning {
 			win32.ProcCloseHandle.Call(pHandle)
@@ -112,13 +125,17 @@ func attachGameAndWatchHoveredItems() {
 			}
 			continue
 		}
+		setRuntimeStep("game_assembly", runtimeStepOK, "")
 
 		configureGameProcess(pid, pHandle, gameAssemblyBase)
-		activeApp.gameReady.Store(true)
-		setAppStatus(AppStatusReady)
-		go refreshInventoryDashboardState("game-attached")
-		go monitorInventoryNotifications(pHandle)
+		if !prepareGameSession(pHandle, gameAssemblyBase) {
+			if handleGameClosed() {
+				return
+			}
+			continue
+		}
 		go preScanTooltipAOB()
+		go monitorInventoryNotifications(pHandle)
 		watchHoveredItems(pHandle, gameAssemblyBase)
 		if handleGameClosed() {
 			return
@@ -166,15 +183,101 @@ func waitForGameAssembly(processHandle uintptr) (uintptr, bool) {
 }
 
 func configureGameProcess(pid uint32, processHandle uintptr, gameAssemblyBase uintptr) {
+	activeApp.gameReady.Store(false)
 	activeApp.gameProcessHandle = processHandle
 	activeApp.gameProcessID = pid
 	activeApp.gameAssemblyBase = gameAssemblyBase
+	configureInventoryResolverCache(processHandle, gameAssemblyBase)
 	activeApp.gameLayoutReadHealth.Reset()
 	activeApp.tooltipXAOBResolver.Reset()
 	activeApp.tooltipYAOBResolver.Reset()
 	activeApp.tooltipHeightAOBResolver.Reset()
 	resetMarketableInventoryNotifications()
 	triggerSavePollNow = false
+}
+
+func prepareGameSession(processHandle uintptr, gameAssemblyBase uintptr) bool {
+	setAppStatus(AppStatusPreparing)
+	resetRuntimeForGamePreparation()
+	logPrintln("[PREPARE] Resolving game memory and inventory state...")
+
+	resultCh := resolveInventoryDashboardUntilReady(processHandle, gameAssemblyBase)
+	timeout := time.NewTimer(initialInventoryPrepareTimeout)
+	defer timeout.Stop()
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		if processHandle == 0 || game.HasProcessExited(processHandle) || activeApp.gameProcessHandle != processHandle || activeApp.gameAssemblyBase != gameAssemblyBase {
+			return false
+		}
+
+		setRuntimeStep("inventory", runtimeStepRunning, trFallback("preparing.inventory_message", "Resolving PlayerSaveData..."))
+		select {
+		case result := <-resultCh:
+			if result.err != nil {
+				return false
+			}
+			publishPreparedInventoryState(result.state)
+			return true
+		case <-timeout.C:
+			setRuntimeStep("inventory", runtimeStepDegraded, trFallback("preparing.inventory_retry", "Continuing inventory resolve in the background..."))
+			markRuntimeReady()
+			activeApp.gameReady.Store(true)
+			setAppStatus(AppStatusReady)
+			logPrintf("[PREPARE] Inventory resolve exceeded %s; opening dashboard and continuing in the background.\n", initialInventoryPrepareTimeout)
+			go publishPreparedInventoryWhenReady(resultCh, processHandle, gameAssemblyBase)
+			return true
+		case <-ticker.C:
+		}
+	}
+}
+
+func resolveInventoryDashboardUntilReady(processHandle uintptr, gameAssemblyBase uintptr) <-chan inventoryPrepareResult {
+	resultCh := make(chan inventoryPrepareResult, 1)
+	go func() {
+		var lastErr string
+		for {
+			if processHandle == 0 || game.HasProcessExited(processHandle) || activeApp.gameProcessHandle != processHandle || activeApp.gameAssemblyBase != gameAssemblyBase {
+				resultCh <- inventoryPrepareResult{err: fmt.Errorf("game process changed during inventory preparation")}
+				return
+			}
+			state, err := readInventoryDashboardStateCore()
+			if err == nil {
+				resultCh <- inventoryPrepareResult{state: state}
+				return
+			}
+			if errText := err.Error(); errText != lastErr {
+				logPrintf("[PREPARE] Inventory state is not ready yet: %v\n", err)
+				lastErr = errText
+			}
+			time.Sleep(3 * time.Second)
+		}
+	}()
+	return resultCh
+}
+
+func publishPreparedInventoryState(state inventory.DashboardState) {
+	publishInventoryDashboardState(state, "game-prepared")
+	setRuntimeStep("inventory", runtimeStepOK, "")
+	markRuntimeReady()
+	activeApp.gameReady.Store(true)
+	setAppStatus(AppStatusReady)
+	logPrintln("[PREPARE] Game session is ready.")
+}
+
+func publishPreparedInventoryWhenReady(resultCh <-chan inventoryPrepareResult, processHandle uintptr, gameAssemblyBase uintptr) {
+	result := <-resultCh
+	if result.err != nil {
+		logPrintf("[PREPARE] Background inventory resolve stopped: %v\n", result.err)
+		return
+	}
+	if processHandle == 0 || game.HasProcessExited(processHandle) || activeApp.gameProcessHandle != processHandle || activeApp.gameAssemblyBase != gameAssemblyBase {
+		return
+	}
+	publishInventoryDashboardState(result.state, "game-prepared-background")
+	setRuntimeStep("inventory", runtimeStepOK, "")
+	logPrintln("[PREPARE] Background inventory resolve completed.")
 }
 
 func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
@@ -295,6 +398,9 @@ func resetGameProcess(setWaitingStatus bool) {
 	setCurrentItemName("")
 	activeApp.showOverlay.Store(false)
 	activeApp.hasLastOverlayRect = false
+	activeApp.lastOverlayRectAt = time.Time{}
+	activeApp.hasOverlayWindowRect = false
+	activeApp.overlayWindowVisible = false
 	redrawOverlay()
 	if activeApp.gameProcessHandle != 0 {
 		win32.ProcCloseHandle.Call(activeApp.gameProcessHandle)
@@ -302,12 +408,23 @@ func resetGameProcess(setWaitingStatus bool) {
 	}
 	activeApp.gameProcessID = 0
 	activeApp.gameAssemblyBase = 0
+	activeApp.gameAssemblyFingerprint = ""
 	activeApp.gameWindowHWND = 0
 	activeApp.gameLayoutReadHealth.Reset()
 	activeApp.tooltipXAOBResolver.Reset()
 	activeApp.tooltipYAOBResolver.Reset()
 	activeApp.tooltipHeightAOBResolver.Reset()
+	activeApp.inventorySnapshotMu.Lock()
+	activeApp.inventorySnapshotInFlight = nil
+	activeApp.inventorySnapshotBackoffUntil = time.Time{}
+	activeApp.inventorySnapshotLastErr = ""
+	activeApp.inventorySnapshotMu.Unlock()
+	activeApp.inventoryMu.Lock()
+	activeApp.inventoryResolver = nil
+	activeApp.lastSnapshot = nil
+	activeApp.inventoryMu.Unlock()
 	if setWaitingStatus {
+		resetRuntimeForWaitingGame()
 		setAppStatus(AppStatusWaitingForGame)
 	}
 }
@@ -394,13 +511,23 @@ func preScanTooltipAOB() {
 	activeApp.gameLayoutMu.RUnlock()
 
 	logPrintln("Pre-scanning tooltip AOB signatures in the background...")
+	setRuntimeStep("overlay", runtimeStepRunning, trFallback("preparing.overlay_message", "Prewarming tooltip pointers..."))
 
 	// Pre-resolve X
-	activeApp.tooltipXAOBResolver.Resolve("x", pHandle, base, layout.TooltipXPointerBaseAOB, layout.TooltipXPointerOffsets)
+	_, xOK, xTrace := activeApp.tooltipXAOBResolver.Resolve("x", pHandle, base, layout.TooltipXPointerBaseAOB, layout.TooltipXPointerOffsets)
 	// Pre-resolve Y
-	activeApp.tooltipYAOBResolver.Resolve("y", pHandle, base, layout.TooltipYPointerBaseAOB, layout.TooltipYPointerOffsets)
+	_, yOK, yTrace := activeApp.tooltipYAOBResolver.Resolve("y", pHandle, base, layout.TooltipYPointerBaseAOB, layout.TooltipYPointerOffsets)
 	// Pre-resolve Height
-	activeApp.tooltipHeightAOBResolver.Resolve("height", pHandle, base, layout.TooltipHeightPointerBaseAOB, layout.TooltipHeightPointerOffsets)
+	_, heightOK, heightTrace := activeApp.tooltipHeightAOBResolver.Resolve("height", pHandle, base, layout.TooltipHeightPointerBaseAOB, layout.TooltipHeightPointerOffsets)
 
+	if xOK && yOK {
+		setRuntimeStep("overlay", runtimeStepOK, "")
+	} else {
+		setRuntimeStep("overlay", runtimeStepDegraded, trFallback("preparing.overlay_background", "Finalized in the background"))
+		logPrintf("[PREPARE] Tooltip AOB pre-scan degraded: x_ok=%t y_ok=%t height_ok=%t x_trace=%q y_trace=%q height_trace=%q\n", xOK, yOK, heightOK, xTrace, yTrace, heightTrace)
+	}
+	if !heightOK {
+		logPrintln("[PREPARE] Tooltip height pointer unavailable after pre-scan; using runtime fallback.")
+	}
 	logPrintln("Tooltip AOB background pre-scan completed.")
 }
