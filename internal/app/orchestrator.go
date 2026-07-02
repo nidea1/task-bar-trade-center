@@ -1,6 +1,8 @@
 package app
 
 import (
+	"time"
+
 	"github.com/nidea1/task-bar-trade-center/internal/catalog"
 	"github.com/nidea1/task-bar-trade-center/internal/inventory"
 	"github.com/nidea1/task-bar-trade-center/internal/market"
@@ -18,6 +20,7 @@ func New(callbacks Callbacks) *App {
 		notificationIconCache:     make(map[string]uintptr),
 		notificationIconPreparing: make(map[string]struct{}),
 		dashboardSettings:         defaultDashboardSettings(),
+		settingsReadyCh:           make(chan struct{}),
 	}
 	return activeApp
 }
@@ -28,6 +31,10 @@ func (app *App) Run() {
 
 func (app *App) Stop() {
 	Stop()
+}
+
+func (app *App) WaitForSettingsReady(timeout time.Duration) bool {
+	return waitForSettingsReady(timeout)
 }
 
 func (app *App) GetInventoryDashboard() (inventory.DashboardState, error) {

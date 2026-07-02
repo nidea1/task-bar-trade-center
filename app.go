@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"sync"
+	"time"
 
 	core "github.com/nidea1/task-bar-trade-center/internal/app"
 	"github.com/nidea1/task-bar-trade-center/internal/inventory"
@@ -42,6 +43,7 @@ func (a *App) startup(ctx context.Context) {
 	a.mu.Unlock()
 	core.ApplyDashboardWindowIcon()
 	go appCore.Run()
+	appCore.WaitForSettingsReady(5 * time.Second)
 }
 
 func (a *App) domReady(ctx context.Context) {

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestSettingsPersistLanguage(t *testing.T) {
@@ -152,5 +153,64 @@ func TestSettingsPersistDashboardSettings(t *testing.T) {
 	loadSettingsFromDisk()
 	if got := currentDashboardSettings(); got != want {
 		t.Fatalf("loaded dashboard settings = %+v, want %+v", got, want)
+	}
+}
+
+func TestGetDashboardSettingsWaitsForSettingsLoad(t *testing.T) {
+	originalApp := activeApp
+	callbacks.RLock()
+	originalCallbacks := callbacks.value
+	callbacks.RUnlock()
+	t.Cleanup(func() {
+		activeApp = originalApp
+		SetCallbacks(originalCallbacks)
+	})
+
+	app := New(Callbacks{})
+	app.settingsFilePath = filepath.Join(t.TempDir(), "settings.json")
+	want := DashboardSettings{
+		ThemeMode:           "light",
+		PriceMode:           "instant",
+		RarityFilter:        "RARE",
+		EquipmentFilter:     "weapon",
+		SortMode:            "rarity_desc",
+		BestRarityFilter:    "LEGENDARY",
+		BestEquipmentFilter: "SWORD",
+		BestOwnershipFilter: "unequipped",
+		BestSortMode:        "score_asc",
+		MarketableItemsTab:  "best",
+		NotifySources:       "box,offering",
+		HotkeyModifiers:     0,
+		HotkeyVK:            VK_F2,
+		GameScale:           GameScale125,
+	}
+	if err := filestore.WriteJSON(app.settingsFilePath, AppSettings{
+		GameScalePercent: GameScale125,
+		DisplayLanguage:  "en-US",
+		Dashboard:        want,
+	}); err != nil {
+		t.Fatalf("write settings: %v", err)
+	}
+
+	gotCh := make(chan DashboardSettings, 1)
+	go func() {
+		gotCh <- app.GetDashboardSettings()
+	}()
+
+	select {
+	case got := <-gotCh:
+		t.Fatalf("GetDashboardSettings returned before settings loaded: %+v", got)
+	case <-time.After(25 * time.Millisecond):
+	}
+
+	loadSettingsFromDisk()
+
+	select {
+	case got := <-gotCh:
+		if got != want {
+			t.Fatalf("dashboard settings = %+v, want %+v", got, want)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("GetDashboardSettings did not return after settings loaded")
 	}
 }

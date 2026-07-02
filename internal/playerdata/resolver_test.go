@@ -283,6 +283,50 @@ func TestResolverPrefersHighestGoldPlayerSaveDataCandidate(t *testing.T) {
 	}
 }
 
+func TestResolverUsesDistinctHeroKeysWhenOldHeroKeyFieldIsShared(t *testing.T) {
+	nameAddr := uintptr(0x260000)
+	classPtr := uintptr(0x360000)
+	object := uintptr(0x470000)
+	mem := fakeMemory{
+		ptrs:     make(map[uintptr]uintptr),
+		ints:     make(map[uintptr]int32),
+		uints:    make(map[uintptr]uint64),
+		patterns: make(map[string][]uintptr),
+	}
+	writeClass(mem, "PlayerSaveData", nameAddr, classPtr, object)
+
+	itemsList, itemsArray := uintptr(0xA00000), uintptr(0xA01000)
+	heroesList, heroesArray := uintptr(0xA02000), uintptr(0xA03000)
+	mem.ptrs[object+playerItems] = itemsList
+	mem.ptrs[object+playerHeroes] = heroesList
+	writeList(mem, itemsList, itemsArray, 3)
+	writeList(mem, heroesList, heroesArray, 3)
+
+	writeItem(mem, itemsArray, 0, 100, 1000)
+	writeItem(mem, itemsArray, 1, 200, 2000)
+	writeItem(mem, itemsArray, 2, 300, 3000)
+	writeHeroWithOldAndActualKey(mem, heroesArray, 0, 0xA10000, 1, 101, 1000)
+	writeHeroWithOldAndActualKey(mem, heroesArray, 1, 0xA11000, 1, 201, 2000)
+	writeHeroWithOldAndActualKey(mem, heroesArray, 2, 0xA12000, 1, 301, 3000)
+
+	resolver := NewResolver(map[int]ItemMetadata{
+		100: {Marketable: true},
+		200: {Marketable: true},
+		300: {Marketable: true},
+	})
+	snapshot, ok := resolver.ReadSnapshotCore(mem, time.Unix(1700000000, 0))
+	if !ok {
+		t.Fatal("expected snapshot")
+	}
+
+	for itemID, wantHero := range map[int]int{100: 101, 200: 201, 300: 301} {
+		item, ok := findOwnedItem(snapshot.Items, itemID)
+		if !ok || item.Location != LocationEquipped || item.EquippedHeroKey != wantHero {
+			t.Fatalf("item %d = %+v, ok=%v, want equipped hero %d", itemID, item, ok, wantHero)
+		}
+	}
+}
+
 func TestResolverDiscoversShiftedSaveDataLayout(t *testing.T) {
 	nameAddr := uintptr(0x250000)
 	classPtr := uintptr(0x350000)
@@ -431,6 +475,16 @@ func writeHero(memory fakeMemory, array uintptr, index int, hero uintptr, key in
 	equipped := uintptr(0x800000)
 	memory.ptrs[array+il2cpp.ArrayDataOffset+uintptr(index*8)] = hero
 	memory.ints[hero+heroKey] = key
+	memory.ptrs[hero+heroEquippedItems] = equipped
+	memory.ptrs[equipped+il2cpp.ArrayMaxOffset] = 1
+	memory.uints[equipped+il2cpp.ArrayDataOffset] = unique
+}
+
+func writeHeroWithOldAndActualKey(memory fakeMemory, array uintptr, index int, hero uintptr, oldKey int32, actualKey int32, unique uint64) {
+	equipped := hero + 0x1000
+	memory.ptrs[array+il2cpp.ArrayDataOffset+uintptr(index*8)] = hero
+	memory.ints[hero+heroKey] = oldKey
+	memory.ints[hero+0x34] = actualKey
 	memory.ptrs[hero+heroEquippedItems] = equipped
 	memory.ptrs[equipped+il2cpp.ArrayMaxOffset] = 1
 	memory.uints[equipped+il2cpp.ArrayDataOffset] = unique

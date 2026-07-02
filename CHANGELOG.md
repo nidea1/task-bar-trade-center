@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.7] - 2026-07-02
+
+### Fixed
+
+* Fixed dashboard settings appearing reset after application updates or first startup by waiting for the settings file to load before serving settings-related APIs.
+* Fixed dashboard settings writes to use an atomic write path so interrupted saves do not leave a partially written `settings.json`.
+* Fixed equipped item value totals being assigned to the wrong hero when game updates expose a shared legacy hero-key field before the actual hero class key.
+
+### Tests
+
+* Added regression coverage for dashboard settings API calls racing the settings load during startup.
+* Added regression coverage for equipped items resolving to distinct hero keys when the old hero-key offset contains the same value for multiple heroes.
+
 ## [0.11.6] - 2026-07-02
 
 ### Changed

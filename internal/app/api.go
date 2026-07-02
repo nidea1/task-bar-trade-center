@@ -10,7 +10,10 @@ import (
 	"github.com/nidea1/task-bar-trade-center/internal/win32"
 )
 
-const inventoryDashboardPollCacheMaxAge = 2 * time.Second
+const (
+	inventoryDashboardPollCacheMaxAge = 2 * time.Second
+	settingsReadyAPITimeout           = 5 * time.Second
+)
 
 func RunRestartAfterUpdateHelper() bool {
 	return runRestartAfterUpdateHelper()
@@ -330,10 +333,12 @@ func GetMarketRegions() []RegionInfo {
 }
 
 func GetCurrentLanguage() string {
+	waitForSettingsReady(settingsReadyAPITimeout)
 	return currentDisplayLanguagePreference()
 }
 
 func GetCurrentMarketScope() CurrentMarketScopeInfo {
+	waitForSettingsReady(settingsReadyAPITimeout)
 	scope := market.CurrentScope()
 	return CurrentMarketScopeInfo{
 		CurrencyCode: scope.Currency.Code,
@@ -361,18 +366,22 @@ func InstallAvailableUpdate() bool {
 }
 
 func GetDashboardSettings() DashboardSettings {
+	waitForSettingsReady(settingsReadyAPITimeout)
 	return currentDashboardSettings()
 }
 
 func SetDashboardSettings(settings DashboardSettings) DashboardSettings {
+	waitForSettingsReady(settingsReadyAPITimeout)
 	return setDashboardSettings(settings)
 }
 
 func SetDisplayLanguage(preference string) bool {
+	waitForSettingsReady(settingsReadyAPITimeout)
 	return selectDisplayLanguage(preference)
 }
 
 func SetMarketScope(currencyCode string, countryCode string) bool {
+	waitForSettingsReady(settingsReadyAPITimeout)
 	scope, changed, selected := market.SelectRegion(currencyCode, countryCode)
 	if selected && changed {
 		fmt.Printf("Market region changed via dashboard to %s.\n", market.FormatScope(scope))
@@ -390,14 +399,17 @@ func SetMarketScope(currencyCode string, countryCode string) bool {
 }
 
 func GetTranslations() map[string]string {
+	waitForSettingsReady(settingsReadyAPITimeout)
 	return currentTranslations()
 }
 
 func GetMinRarityNotify() string {
+	waitForSettingsReady(settingsReadyAPITimeout)
 	return rarityGrade(int(activeApp.minRarityNotifyLevel.Load()))
 }
 
 func SetMinRarityNotify(grade string) bool {
+	waitForSettingsReady(settingsReadyAPITimeout)
 	level := rarityLevel(grade)
 	activeApp.minRarityNotifyLevel.Store(int32(level))
 	saveSettingsToDisk()

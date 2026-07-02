@@ -95,6 +95,10 @@ func (resolver *Resolver) readEquippedItemsWithLayout(memory Memory, heroes list
 	if layout.heroEquippedItems == 0 {
 		return nil
 	}
+	heroKeyOffset := detectHeroKeyOffset(memory, heroes, layout.heroEquippedItems, uniqueToItem)
+	if heroKeyOffset == 0 {
+		heroKeyOffset = layout.heroKeyOffset
+	}
 	limit := heroes.size
 	if limit > 100 {
 		limit = 100
@@ -106,8 +110,8 @@ func (resolver *Resolver) readEquippedItemsWithLayout(memory Memory, heroes list
 			continue
 		}
 		var heroKeyValue int32
-		if layout.heroKeyOffset != 0 {
-			heroKeyValue, _ = memory.ReadInt32(hero + layout.heroKeyOffset)
+		if heroKeyOffset != 0 {
+			heroKeyValue, _ = memory.ReadInt32(hero + heroKeyOffset)
 		}
 		arrayPtr, ok := memory.ReadUintptr(hero + layout.heroEquippedItems)
 		if !ok || arrayPtr == 0 || !tbhmem.PlausibleAddress(arrayPtr) {

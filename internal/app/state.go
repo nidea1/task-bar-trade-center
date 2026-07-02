@@ -58,6 +58,8 @@ type App struct {
 	hasOverlayWindowRect bool
 	dashboardSettingsMu  sync.RWMutex
 	dashboardSettings    DashboardSettings
+	settingsReadyOnce    sync.Once
+	settingsReadyCh      chan struct{}
 
 	appStatus            atomic.Int32
 	configurationStatus  atomic.Int32
@@ -149,6 +151,7 @@ var activeApp = &App{
 	notificationIconCache:     make(map[string]uintptr),
 	notificationIconPreparing: make(map[string]struct{}),
 	dashboardSettings:         defaultDashboardSettings(),
+	settingsReadyCh:           make(chan struct{}),
 }
 
 func getCurrentPriceText() string {

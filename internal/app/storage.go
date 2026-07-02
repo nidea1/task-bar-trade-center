@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	filestore "github.com/nidea1/task-bar-trade-center/internal/storage"
 )
@@ -120,6 +121,34 @@ type AppSettings struct {
 	Dashboard          DashboardSettings `json:"dashboard"`
 }
 
+func markSettingsReady() {
+	activeApp.settingsReadyOnce.Do(func() {
+		if activeApp.settingsReadyCh != nil {
+			close(activeApp.settingsReadyCh)
+		}
+	})
+}
+
+func waitForSettingsReady(timeout time.Duration) bool {
+	if activeApp.settingsReadyCh == nil {
+		return true
+	}
+	if timeout <= 0 {
+		select {
+		case <-activeApp.settingsReadyCh:
+			return true
+		default:
+			return false
+		}
+	}
+	select {
+	case <-activeApp.settingsReadyCh:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
+}
+
 func rarityLevel(grade string) int {
 	switch grade {
 	case "COMMON":
@@ -175,6 +204,8 @@ func rarityGrade(level int) string {
 }
 
 func loadSettingsFromDisk() {
+	defer markSettingsReady()
+
 	if activeApp.settingsFilePath == "" {
 		return
 	}
@@ -242,7 +273,7 @@ func saveSettingsToDisk() {
 		Dashboard:          dashSettings,
 	}
 
-	if err := filestore.WriteJSON(activeApp.settingsFilePath, settings); err != nil {
+	if err := filestore.WriteJSONAtomic(activeApp.settingsFilePath, settings); err != nil {
 		fmt.Printf("Settings file could not be written: %v\n", err)
 	} else {
 		fmt.Println("Settings saved to disk.")

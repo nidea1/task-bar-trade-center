@@ -55,6 +55,7 @@ func initializeApplication(startedAt time.Time) {
 	logPrintf("startup tray_ready=%s\n", time.Since(startedAt))
 	cleanOldVersion()
 	activeApp.gameReady.Store(false)
+	loadSettingsFromDisk()
 
 	if err := loadItemsJSON(); err != nil {
 		failApplicationInitialization(fmt.Errorf("items database: %w", err))
@@ -62,7 +63,6 @@ func initializeApplication(startedAt time.Time) {
 	}
 	loadPriceCacheFromDisk()
 	loadIconMetadataFromDisk()
-	loadSettingsFromDisk()
 	notifyApplicationStarted()
 	if err := loadLocalGameLayout(); err != nil {
 		failApplicationInitialization(fmt.Errorf("game layout: %w", err))

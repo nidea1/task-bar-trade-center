@@ -92,6 +92,18 @@ type heroListShape struct {
 	known               int
 }
 
+type heroKeyScore struct {
+	offset              uintptr
+	score               int
+	valid               int
+	canonical           int
+	compact             int
+	exactIndex          int
+	knownEquipped       int
+	knownEquippedUnique int
+	unique              int
+}
+
 type currencyListShape struct {
 	keyOffset      uintptr
 	quantityOffset uintptr
@@ -484,40 +496,127 @@ func analyzeHeroList(memory Memory, list listInfo, uniqueToItem map[uint64]int) 
 		return heroListShape{}, false
 	}
 	return heroListShape{
-		keyOffset:           detectHeroKeyOffset(memory, list, arrayOffset),
+		keyOffset:           detectHeroKeyOffset(memory, list, arrayOffset, uniqueToItem),
 		equippedItemsOffset: arrayOffset,
 		known:               known,
 	}, true
 }
 
-func detectHeroKeyOffset(memory Memory, list listInfo, arrayOffset uintptr) uintptr {
-	countByOffset := make(map[uintptr]int)
+func detectHeroKeyOffset(memory Memory, list listInfo, arrayOffset uintptr, uniqueToItem map[uint64]int) uintptr {
+	best := heroKeyScore{}
+	for offset := uintptr(dynamicEntryFieldStart); offset <= dynamicEntryFieldEnd; offset += 4 {
+		if fieldsOverlap(offset, 4, arrayOffset, 8) {
+			continue
+		}
+		next := scoreHeroKeyOffset(memory, list, arrayOffset, offset, uniqueToItem)
+		if next.betterThan(best) {
+			best = next
+		}
+	}
+	if !best.acceptable() {
+		return 0
+	}
+	return best.offset
+}
+
+func scoreHeroKeyOffset(memory Memory, list listInfo, arrayOffset uintptr, offset uintptr, uniqueToItem map[uint64]int) heroKeyScore {
+	score := heroKeyScore{offset: offset}
+	classes := make(map[int]struct{})
+	knownEquippedClasses := make(map[int]struct{})
 	limit := sampleLimit(list.size, 100)
 	for i := 0; i < limit; i++ {
 		hero, ok := listObjectAt(memory, list, i)
 		if !ok {
 			continue
 		}
-		for offset := uintptr(dynamicEntryFieldStart); offset <= dynamicEntryFieldEnd; offset += 4 {
-			if fieldsOverlap(offset, 4, arrayOffset, 8) {
-				continue
-			}
-			value, ok := memory.ReadInt32(hero + offset)
-			if !ok || value <= 0 || value > 100000 {
-				continue
-			}
-			countByOffset[offset]++
+		value, ok := memory.ReadInt32(hero + offset)
+		if !ok {
+			continue
+		}
+		classID, keyKindOK := heroClassIDFromKey(int(value))
+		if !keyKindOK {
+			continue
+		}
+		score.valid++
+		classes[classID] = struct{}{}
+		if classID == i+1 {
+			score.exactIndex++
+		}
+		if value >= 101 {
+			score.canonical++
+		} else {
+			score.compact++
+		}
+		if heroHasKnownEquippedItem(memory, hero, arrayOffset, uniqueToItem) {
+			score.knownEquipped++
+			knownEquippedClasses[classID] = struct{}{}
 		}
 	}
-	var bestOffset uintptr
-	bestCount := 0
-	for offset, count := range countByOffset {
-		if count > bestCount {
-			bestOffset = offset
-			bestCount = count
-		}
+	score.unique = len(classes)
+	score.knownEquippedUnique = len(knownEquippedClasses)
+	score.score = score.valid + score.compact*2 + score.canonical*4 + score.exactIndex*8 + score.unique*12 + score.knownEquipped*20 + score.knownEquippedUnique*50
+	if score.knownEquipped > 1 && score.knownEquippedUnique <= 1 {
+		score.score -= 1000
 	}
-	return bestOffset
+	if score.valid > 1 && score.unique <= 1 {
+		score.score -= 100
+	}
+	return score
+}
+
+func (score heroKeyScore) acceptable() bool {
+	if score.offset == 0 || score.valid == 0 {
+		return false
+	}
+	if score.knownEquipped > 1 {
+		return score.knownEquippedUnique > 1
+	}
+	if score.valid > 1 {
+		return score.unique > 1
+	}
+	return true
+}
+
+func (score heroKeyScore) betterThan(other heroKeyScore) bool {
+	scoreAcceptable := score.acceptable()
+	otherAcceptable := other.acceptable()
+	if scoreAcceptable != otherAcceptable {
+		return scoreAcceptable
+	}
+	if score.score != other.score {
+		return score.score > other.score
+	}
+	if score.knownEquippedUnique != other.knownEquippedUnique {
+		return score.knownEquippedUnique > other.knownEquippedUnique
+	}
+	if score.unique != other.unique {
+		return score.unique > other.unique
+	}
+	if score.exactIndex != other.exactIndex {
+		return score.exactIndex > other.exactIndex
+	}
+	if score.canonical != other.canonical {
+		return score.canonical > other.canonical
+	}
+	return other.offset == 0 || score.offset < other.offset
+}
+
+func heroClassIDFromKey(value int) (int, bool) {
+	if value >= 101 && value <= 601 && value%100 == 1 {
+		return value / 100, true
+	}
+	if value >= 1 && value <= 6 {
+		return value, true
+	}
+	return 0, false
+}
+
+func heroHasKnownEquippedItem(memory Memory, hero uintptr, arrayOffset uintptr, uniqueToItem map[uint64]int) bool {
+	arrayPtr, ok := memory.ReadUintptr(hero + arrayOffset)
+	if !ok {
+		return false
+	}
+	return countKnownUniqueIDsInArray(memory, arrayPtr, uniqueToItem) > 0
 }
 
 func countKnownUniqueIDsInArray(memory Memory, arrayPtr uintptr, uniqueToItem map[uint64]int) int {
