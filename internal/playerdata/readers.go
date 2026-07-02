@@ -17,7 +17,14 @@ const (
 )
 
 func (resolver *Resolver) readItemSaveDataList(memory Memory, list listInfo) (map[uint64]int, int) {
+	return resolver.readItemSaveDataListWithLayout(memory, list, defaultSaveDataLayout())
+}
+
+func (resolver *Resolver) readItemSaveDataListWithLayout(memory Memory, list listInfo, layout saveDataLayout) (map[uint64]int, int) {
 	uniqueToItem := make(map[uint64]int)
+	if layout.itemKeyOffset == 0 || layout.itemUniqueIDOffset == 0 {
+		return uniqueToItem, 0
+	}
 	valid := 0
 	limit := list.size
 	if limit > 5000 {
@@ -28,14 +35,14 @@ func (resolver *Resolver) readItemSaveDataList(memory Memory, list listInfo) (ma
 		if !ok || obj == 0 || !tbhmem.PlausibleAddress(obj) {
 			continue
 		}
-		key, ok := memory.ReadInt32(obj + itemSaveItemKey)
+		key, ok := memory.ReadInt32(obj + layout.itemKeyOffset)
 		if !ok || key <= 0 {
 			continue
 		}
 		if _, exists := resolver.metadata[int(key)]; !exists && len(resolver.metadata) > 0 {
 			continue
 		}
-		uniqueID, ok := memory.ReadUint64(obj + itemSaveUniqueID)
+		uniqueID, ok := memory.ReadUint64(obj + layout.itemUniqueIDOffset)
 		if !ok || uniqueID == 0 {
 			continue
 		}
@@ -46,6 +53,13 @@ func (resolver *Resolver) readItemSaveDataList(memory Memory, list listInfo) (ma
 }
 
 func (resolver *Resolver) readSlotItems(memory Memory, list listInfo, uniqueToItem map[uint64]int, seen map[uint64]struct{}, location Location) []OwnedItem {
+	return resolver.readSlotItemsWithLayout(memory, list, uniqueToItem, seen, location, defaultSaveDataLayout())
+}
+
+func (resolver *Resolver) readSlotItemsWithLayout(memory Memory, list listInfo, uniqueToItem map[uint64]int, seen map[uint64]struct{}, location Location, layout saveDataLayout) []OwnedItem {
+	if layout.slotUniqueIDOffset == 0 {
+		return nil
+	}
 	limit := list.size
 	if limit > 5000 {
 		limit = 5000
@@ -56,7 +70,7 @@ func (resolver *Resolver) readSlotItems(memory Memory, list listInfo, uniqueToIt
 		if !ok || slot == 0 || !tbhmem.PlausibleAddress(slot) {
 			continue
 		}
-		uniqueID, ok := memory.ReadUint64(slot + slotUniqueID)
+		uniqueID, ok := memory.ReadUint64(slot + layout.slotUniqueIDOffset)
 		if !ok || uniqueID == 0 {
 			continue
 		}
@@ -68,12 +82,19 @@ func (resolver *Resolver) readSlotItems(memory Memory, list listInfo, uniqueToIt
 			continue
 		}
 		seen[uniqueID] = struct{}{}
-		items = append(items, resolver.ownedItem(itemID, uniqueID, location, 0, readSlotPosition(memory, slot, i, list.size)))
+		items = append(items, resolver.ownedItem(itemID, uniqueID, location, 0, readSlotPositionWithLayout(memory, slot, i, list.size, layout)))
 	}
 	return items
 }
 
 func (resolver *Resolver) readEquippedItems(memory Memory, heroes listInfo, uniqueToItem map[uint64]int, seen map[uint64]struct{}) []OwnedItem {
+	return resolver.readEquippedItemsWithLayout(memory, heroes, uniqueToItem, seen, defaultSaveDataLayout())
+}
+
+func (resolver *Resolver) readEquippedItemsWithLayout(memory Memory, heroes listInfo, uniqueToItem map[uint64]int, seen map[uint64]struct{}, layout saveDataLayout) []OwnedItem {
+	if layout.heroEquippedItems == 0 {
+		return nil
+	}
 	limit := heroes.size
 	if limit > 100 {
 		limit = 100
@@ -84,8 +105,11 @@ func (resolver *Resolver) readEquippedItems(memory Memory, heroes listInfo, uniq
 		if !ok || hero == 0 || !tbhmem.PlausibleAddress(hero) {
 			continue
 		}
-		heroKeyValue, _ := memory.ReadInt32(hero + heroKey)
-		arrayPtr, ok := memory.ReadUintptr(hero + heroEquippedItems)
+		var heroKeyValue int32
+		if layout.heroKeyOffset != 0 {
+			heroKeyValue, _ = memory.ReadInt32(hero + layout.heroKeyOffset)
+		}
+		arrayPtr, ok := memory.ReadUintptr(hero + layout.heroEquippedItems)
 		if !ok || arrayPtr == 0 || !tbhmem.PlausibleAddress(arrayPtr) {
 			continue
 		}
@@ -125,7 +149,14 @@ func (resolver *Resolver) ownedItem(itemID int, uniqueID uint64, location Locati
 }
 
 func readSlotPosition(memory Memory, slot uintptr, fallback int, listSize int) int {
-	value, ok := memory.ReadInt32(slot + slotIndex)
+	return readSlotPositionWithLayout(memory, slot, fallback, listSize, defaultSaveDataLayout())
+}
+
+func readSlotPositionWithLayout(memory Memory, slot uintptr, fallback int, listSize int, layout saveDataLayout) int {
+	if layout.slotIndexOffset == 0 {
+		return fallback
+	}
+	value, ok := memory.ReadInt32(slot + layout.slotIndexOffset)
 	if !ok || value < 0 {
 		return fallback
 	}
@@ -141,6 +172,13 @@ func readSlotPosition(memory Memory, slot uintptr, fallback int, listSize int) i
 }
 
 func countSlotMatches(memory Memory, list listInfo, uniqueToItem map[uint64]int) (filled int, known int) {
+	return countSlotMatchesWithLayout(memory, list, uniqueToItem, defaultSaveDataLayout())
+}
+
+func countSlotMatchesWithLayout(memory Memory, list listInfo, uniqueToItem map[uint64]int, layout saveDataLayout) (filled int, known int) {
+	if layout.slotUniqueIDOffset == 0 {
+		return 0, 0
+	}
 	limit := list.size
 	if limit > 5000 {
 		limit = 5000
@@ -150,7 +188,7 @@ func countSlotMatches(memory Memory, list listInfo, uniqueToItem map[uint64]int)
 		if !ok || slot == 0 || !tbhmem.PlausibleAddress(slot) {
 			continue
 		}
-		uniqueID, ok := memory.ReadUint64(slot + slotUniqueID)
+		uniqueID, ok := memory.ReadUint64(slot + layout.slotUniqueIDOffset)
 		if !ok || uniqueID == 0 {
 			continue
 		}
@@ -163,6 +201,13 @@ func countSlotMatches(memory Memory, list listInfo, uniqueToItem map[uint64]int)
 }
 
 func countEquippedMatches(memory Memory, heroes listInfo, uniqueToItem map[uint64]int) (filled int, known int) {
+	return countEquippedMatchesWithLayout(memory, heroes, uniqueToItem, defaultSaveDataLayout())
+}
+
+func countEquippedMatchesWithLayout(memory Memory, heroes listInfo, uniqueToItem map[uint64]int, layout saveDataLayout) (filled int, known int) {
+	if layout.heroEquippedItems == 0 {
+		return 0, 0
+	}
 	seen := make(map[uint64]struct{})
 	limit := heroes.size
 	if limit > 100 {
@@ -173,7 +218,7 @@ func countEquippedMatches(memory Memory, heroes listInfo, uniqueToItem map[uint6
 		if !ok || hero == 0 || !tbhmem.PlausibleAddress(hero) {
 			continue
 		}
-		arrayPtr, ok := memory.ReadUintptr(hero + heroEquippedItems)
+		arrayPtr, ok := memory.ReadUintptr(hero + layout.heroEquippedItems)
 		if !ok || arrayPtr == 0 || !tbhmem.PlausibleAddress(arrayPtr) {
 			continue
 		}
@@ -200,6 +245,13 @@ func countEquippedMatches(memory Memory, heroes listInfo, uniqueToItem map[uint6
 }
 
 func readGold(memory Memory, currencies listInfo) (uint64, bool) {
+	return readGoldWithLayout(memory, currencies, defaultSaveDataLayout())
+}
+
+func readGoldWithLayout(memory Memory, currencies listInfo, layout saveDataLayout) (uint64, bool) {
+	if layout.currencyKeyOffset == 0 || layout.currencyQuantityOffset == 0 {
+		return 0, false
+	}
 	limit := currencies.size
 	if limit > 1000 {
 		limit = 1000
@@ -209,16 +261,23 @@ func readGold(memory Memory, currencies listInfo) (uint64, bool) {
 		if !ok || currency == 0 || !tbhmem.PlausibleAddress(currency) {
 			continue
 		}
-		key, ok := memory.ReadInt32(currency + currencyKey)
+		key, ok := memory.ReadInt32(currency + layout.currencyKeyOffset)
 		if !ok || key != goldKey {
 			continue
 		}
-		return memory.ReadUint64(currency + currencyQuantity)
+		return memory.ReadUint64(currency + layout.currencyQuantityOffset)
 	}
 	return 0, false
 }
 
 func (resolver *Resolver) readTradeSlots(memory Memory, list listInfo) []TradeShipSlot {
+	return resolver.readTradeSlotsWithLayout(memory, list, defaultSaveDataLayout())
+}
+
+func (resolver *Resolver) readTradeSlotsWithLayout(memory Memory, list listInfo, layout saveDataLayout) []TradeShipSlot {
+	if layout.tradeSlotIndexOffset == 0 || layout.tradeSlotCooldown == 0 || layout.tradeSlotStateOffset == 0 {
+		return nil
+	}
 	limit := list.size
 	if limit > 100 {
 		limit = 100
@@ -229,15 +288,15 @@ func (resolver *Resolver) readTradeSlots(memory Memory, list listInfo) []TradeSh
 		if !ok || slotPtr == 0 || !tbhmem.PlausibleAddress(slotPtr) {
 			continue
 		}
-		indexVal, ok := memory.ReadInt32(slotPtr + 0x10) // slotIndex
+		indexVal, ok := memory.ReadInt32(slotPtr + layout.tradeSlotIndexOffset)
 		if !ok {
 			continue
 		}
-		cooldownRaw, ok := memory.ReadUint64(slotPtr + 0x18) // cooldownUntil (ticks)
+		cooldownRaw, ok := memory.ReadUint64(slotPtr + layout.tradeSlotCooldown)
 		if !ok {
 			continue
 		}
-		stateVal, ok := memory.ReadInt32(slotPtr + 0x20) // state
+		stateVal, ok := memory.ReadInt32(slotPtr + layout.tradeSlotStateOffset)
 		if !ok {
 			continue
 		}

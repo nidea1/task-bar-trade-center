@@ -283,6 +283,90 @@ func TestResolverPrefersHighestGoldPlayerSaveDataCandidate(t *testing.T) {
 	}
 }
 
+func TestResolverDiscoversShiftedSaveDataLayout(t *testing.T) {
+	nameAddr := uintptr(0x250000)
+	classPtr := uintptr(0x350000)
+	object := uintptr(0x460000)
+	mem := fakeMemory{
+		ptrs:     make(map[uintptr]uintptr),
+		ints:     make(map[uintptr]int32),
+		uints:    make(map[uintptr]uint64),
+		patterns: make(map[string][]uintptr),
+	}
+	writeClass(mem, "PlayerSaveData", nameAddr, classPtr, object)
+
+	shifted := saveDataLayout{
+		itemsOffset:            0x38,
+		stashOffset:            0x48,
+		inventoryOffset:        0x58,
+		heroesOffset:           0x68,
+		currenciesOffset:       0x78,
+		itemKeyOffset:          0x24,
+		itemUniqueIDOffset:     0x30,
+		slotIndexOffset:        0x28,
+		slotUniqueIDOffset:     0x40,
+		heroKeyOffset:          0x34,
+		heroEquippedItems:      0x50,
+		currencyKeyOffset:      0x2C,
+		currencyQuantityOffset: 0x38,
+	}
+
+	itemsList, itemsArray := uintptr(0x900000), uintptr(0x901000)
+	stashList, stashArray := uintptr(0x902000), uintptr(0x903000)
+	inventoryList, inventoryArray := uintptr(0x904000), uintptr(0x905000)
+	heroesList, heroesArray := uintptr(0x906000), uintptr(0x907000)
+	currencyList, currencyArray := uintptr(0x908000), uintptr(0x909000)
+	mem.ptrs[object+shifted.itemsOffset] = itemsList
+	mem.ptrs[object+shifted.stashOffset] = stashList
+	mem.ptrs[object+shifted.inventoryOffset] = inventoryList
+	mem.ptrs[object+shifted.heroesOffset] = heroesList
+	mem.ptrs[object+shifted.currenciesOffset] = currencyList
+	writeList(mem, itemsList, itemsArray, 4)
+	writeList(mem, stashList, stashArray, 2)
+	writeList(mem, inventoryList, inventoryArray, 1)
+	writeList(mem, heroesList, heroesArray, 1)
+	writeList(mem, currencyList, currencyArray, 1)
+
+	writeItemWithOffsets(mem, itemsArray, 0, 0x910000, shifted.itemKeyOffset, shifted.itemUniqueIDOffset, 100, 1000)
+	writeItemWithOffsets(mem, itemsArray, 1, 0x911000, shifted.itemKeyOffset, shifted.itemUniqueIDOffset, 200, 2000)
+	writeItemWithOffsets(mem, itemsArray, 2, 0x912000, shifted.itemKeyOffset, shifted.itemUniqueIDOffset, 300, 3000)
+	writeItemWithOffsets(mem, itemsArray, 3, 0x913000, shifted.itemKeyOffset, shifted.itemUniqueIDOffset, 400, 4000)
+	writeSlotWithOffsets(mem, stashArray, 0, 0x920000, shifted.slotIndexOffset, shifted.slotUniqueIDOffset, 250, 1000)
+	writeSlotWithOffsets(mem, stashArray, 1, 0x921000, shifted.slotIndexOffset, shifted.slotUniqueIDOffset, 251, 2000)
+	writeSlotWithOffsets(mem, inventoryArray, 0, 0x922000, shifted.slotIndexOffset, shifted.slotUniqueIDOffset, 0, 3000)
+	writeHeroWithOffsets(mem, heroesArray, 0, 0x930000, shifted.heroKeyOffset, shifted.heroEquippedItems, 601, 4000)
+	writeCurrencyWithOffsets(mem, currencyArray, 0, 0x940000, shifted.currencyKeyOffset, shifted.currencyQuantityOffset, goldKey, 777)
+
+	resolver := NewResolver(map[int]ItemMetadata{
+		100: {Marketable: true},
+		200: {Marketable: true},
+		300: {Marketable: true},
+		400: {Marketable: true},
+	})
+	snapshot, ok := resolver.ReadSnapshotCore(mem, time.Unix(1700000000, 0))
+	if !ok {
+		t.Fatal("expected snapshot from discovered layout")
+	}
+	if snapshot.Gold != 777 {
+		t.Fatalf("gold = %d, want 777", snapshot.Gold)
+	}
+	if len(snapshot.Items) != 4 {
+		t.Fatalf("items = %+v, want 4", snapshot.Items)
+	}
+	stashItem, ok := findOwnedItem(snapshot.Items, 100)
+	if !ok || stashItem.Location != LocationStash || stashItem.SlotIndex != 250 {
+		t.Fatalf("stash item = %+v, ok=%v, want item 100 in shifted stash slot 250", stashItem, ok)
+	}
+	inventoryItem, ok := findOwnedItem(snapshot.Items, 300)
+	if !ok || inventoryItem.Location != LocationInventory {
+		t.Fatalf("inventory item = %+v, ok=%v, want item 300 in shifted inventory", inventoryItem, ok)
+	}
+	equippedItem, ok := findOwnedItem(snapshot.Items, 400)
+	if !ok || equippedItem.Location != LocationEquipped || equippedItem.EquippedHeroKey != 601 {
+		t.Fatalf("equipped item = %+v, ok=%v, want item 400 equipped by hero 601", equippedItem, ok)
+	}
+}
+
 func findOwnedItem(items []OwnedItem, itemID int) (OwnedItem, bool) {
 	for _, item := range items {
 		if item.ItemID == itemID {
@@ -374,6 +458,33 @@ func writeCandidateSaveData(memory fakeMemory, object uintptr, base uintptr, fir
 	writeItem(memory, itemsArray, 2, firstItemID+2, uint64(firstItemID+2)*10)
 	writeSlot(memory, stashArray, 0, base+0x6000, uint64(firstItemID)*10)
 	writeCurrency(memory, currencyArray, 0, base+0x7000, goldKey, gold)
+}
+
+func writeItemWithOffsets(memory fakeMemory, array uintptr, index int, obj uintptr, keyOffset uintptr, uniqueOffset uintptr, key int32, unique uint64) {
+	memory.ptrs[array+il2cpp.ArrayDataOffset+uintptr(index*8)] = obj
+	memory.ints[obj+keyOffset] = key
+	memory.uints[obj+uniqueOffset] = unique
+}
+
+func writeSlotWithOffsets(memory fakeMemory, array uintptr, index int, slot uintptr, indexOffset uintptr, uniqueOffset uintptr, savedIndex int32, unique uint64) {
+	memory.ptrs[array+il2cpp.ArrayDataOffset+uintptr(index*8)] = slot
+	memory.ints[slot+indexOffset] = savedIndex
+	memory.uints[slot+uniqueOffset] = unique
+}
+
+func writeHeroWithOffsets(memory fakeMemory, array uintptr, index int, hero uintptr, keyOffset uintptr, equippedOffset uintptr, key int32, unique uint64) {
+	equipped := hero + 0x1000
+	memory.ptrs[array+il2cpp.ArrayDataOffset+uintptr(index*8)] = hero
+	memory.ints[hero+keyOffset] = key
+	memory.ptrs[hero+equippedOffset] = equipped
+	memory.ptrs[equipped+il2cpp.ArrayMaxOffset] = 1
+	memory.uints[equipped+il2cpp.ArrayDataOffset] = unique
+}
+
+func writeCurrencyWithOffsets(memory fakeMemory, array uintptr, index int, obj uintptr, keyOffset uintptr, quantityOffset uintptr, key int32, value uint64) {
+	memory.ptrs[array+il2cpp.ArrayDataOffset+uintptr(index*8)] = obj
+	memory.ints[obj+keyOffset] = key
+	memory.uints[obj+quantityOffset] = value
 }
 
 func TestResolverReadsTradeSlots(t *testing.T) {

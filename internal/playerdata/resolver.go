@@ -49,6 +49,7 @@ type Resolver struct {
 	cachedObject           uintptr
 	cachedObjectResolvedAt time.Time
 	classCache             map[string][]uintptr
+	layout                 saveDataLayout
 }
 
 type ResolverCache struct {
@@ -68,6 +69,7 @@ type candidate struct {
 	object uintptr
 	score  int
 	gold   uint64
+	layout saveDataLayout
 }
 
 func NewResolver(metadata map[int]ItemMetadata) *Resolver {
@@ -134,6 +136,7 @@ func (resolver *Resolver) resolveAndReadObject(memory Memory, now time.Time, inc
 	}
 	resolver.cachedObject = best.object
 	resolver.cachedObjectResolvedAt = now
+	resolver.layout = best.layout
 	return resolver.readObject(memory, best.object, now, includeRuntimeTradeSlots)
 }
 
@@ -211,44 +214,78 @@ func betterCandidate(next candidate, best candidate) bool {
 }
 
 func (resolver *Resolver) validateObject(memory Memory, object uintptr) (candidate, bool) {
-	items := readListInfo(memory, readPtr(memory, object+playerItems), 200000)
+	if resolver.layout.valid() {
+		if next, ok := resolver.validateObjectWithLayout(memory, object, resolver.layout); ok {
+			return next, true
+		}
+	}
+
+	if next, ok := resolver.validateObjectWithLayout(memory, object, defaultSaveDataLayout()); ok {
+		return next, true
+	}
+
+	_, next, ok := resolver.discoverObjectLayout(memory, object)
+	return next, ok
+}
+
+func (resolver *Resolver) validateObjectWithLayout(memory Memory, object uintptr, layout saveDataLayout) (candidate, bool) {
+	items := readObjectListInfo(memory, object, layout.itemsOffset, 200000)
 	if !items.ok || items.size <= 0 {
 		return candidate{}, false
 	}
-	uniqueToItem, validItems := resolver.readItemSaveDataList(memory, items)
+	uniqueToItem, validItems := resolver.readItemSaveDataListWithLayout(memory, items, layout)
 	if validItems < 3 {
 		return candidate{}, false
 	}
 
 	score := validItems
-	if inventory := readListInfo(memory, readPtr(memory, object+playerInventory), 200000); inventory.ok {
-		_, known := countSlotMatches(memory, inventory, uniqueToItem)
+	if inventory := readObjectListInfo(memory, object, layout.inventoryOffset, 200000); inventory.ok {
+		_, known := countSlotMatchesWithLayout(memory, inventory, uniqueToItem, layout)
 		score += known * 3
 	}
-	if stash := readListInfo(memory, readPtr(memory, object+playerStash), 200000); stash.ok {
-		_, known := countSlotMatches(memory, stash, uniqueToItem)
+	if stash := readObjectListInfo(memory, object, layout.stashOffset, 200000); stash.ok {
+		_, known := countSlotMatchesWithLayout(memory, stash, uniqueToItem, layout)
 		score += known * 3
 	}
-	if heroes := readListInfo(memory, readPtr(memory, object+playerHeroes), 1000); heroes.ok {
-		_, known := countEquippedMatches(memory, heroes, uniqueToItem)
+	if heroes := readObjectListInfo(memory, object, layout.heroesOffset, 1000); heroes.ok {
+		_, known := countEquippedMatchesWithLayout(memory, heroes, uniqueToItem, layout)
 		score += known * 3
 	}
 	var gold uint64
-	if currencies := readListInfo(memory, readPtr(memory, object+playerCurrencies), 1000); currencies.ok {
-		if value, ok := readGold(memory, currencies); ok {
+	if currencies := readObjectListInfo(memory, object, layout.currenciesOffset, 1000); currencies.ok {
+		if value, ok := readGoldWithLayout(memory, currencies, layout); ok {
 			gold = value
 			score += 10
 		}
 	}
-	return candidate{object: object, score: score, gold: gold}, score > validItems
+	return candidate{object: object, score: score, gold: gold, layout: layout}, score > validItems
 }
 
 func (resolver *Resolver) readObject(memory Memory, object uintptr, now time.Time, includeRuntimeTradeSlots bool) (InventorySnapshot, bool) {
-	items := readListInfo(memory, readPtr(memory, object+playerItems), 200000)
+	if resolver.layout.valid() {
+		if snapshot, ok := resolver.readObjectWithLayout(memory, object, now, includeRuntimeTradeSlots, resolver.layout); ok {
+			return snapshot, true
+		}
+		resolver.layout = saveDataLayout{}
+	}
+
+	if snapshot, ok := resolver.readObjectWithLayout(memory, object, now, includeRuntimeTradeSlots, defaultSaveDataLayout()); ok {
+		return snapshot, true
+	}
+
+	if layout, _, ok := resolver.discoverObjectLayout(memory, object); ok {
+		resolver.layout = layout
+		return resolver.readObjectWithLayout(memory, object, now, includeRuntimeTradeSlots, layout)
+	}
+	return InventorySnapshot{}, false
+}
+
+func (resolver *Resolver) readObjectWithLayout(memory Memory, object uintptr, now time.Time, includeRuntimeTradeSlots bool, layout saveDataLayout) (InventorySnapshot, bool) {
+	items := readObjectListInfo(memory, object, layout.itemsOffset, 200000)
 	if !items.ok {
 		return InventorySnapshot{}, false
 	}
-	uniqueToItem, validItems := resolver.readItemSaveDataList(memory, items)
+	uniqueToItem, validItems := resolver.readItemSaveDataListWithLayout(memory, items, layout)
 	if validItems < 3 {
 		return InventorySnapshot{}, false
 	}
@@ -256,27 +293,27 @@ func (resolver *Resolver) readObject(memory Memory, object uintptr, now time.Tim
 	var owned []OwnedItem
 	stashPageCount := 0
 	seen := make(map[uint64]struct{})
-	if stash := readListInfo(memory, readPtr(memory, object+playerStash), 200000); stash.ok {
+	if stash := readObjectListInfo(memory, object, layout.stashOffset, 200000); stash.ok {
 		stashPageCount = pageCountForSlotCount(stash.size)
-		owned = append(owned, resolver.readSlotItems(memory, stash, uniqueToItem, seen, LocationStash)...)
+		owned = append(owned, resolver.readSlotItemsWithLayout(memory, stash, uniqueToItem, seen, LocationStash, layout)...)
 	}
-	if inventory := readListInfo(memory, readPtr(memory, object+playerInventory), 200000); inventory.ok {
-		owned = append(owned, resolver.readSlotItems(memory, inventory, uniqueToItem, seen, LocationInventory)...)
+	if inventory := readObjectListInfo(memory, object, layout.inventoryOffset, 200000); inventory.ok {
+		owned = append(owned, resolver.readSlotItemsWithLayout(memory, inventory, uniqueToItem, seen, LocationInventory, layout)...)
 	}
 	// Storage slots are the stronger current-location signal when a save-backed hero
 	// equipped array lags after an unequip.
-	if heroes := readListInfo(memory, readPtr(memory, object+playerHeroes), 1000); heroes.ok {
-		owned = append(owned, resolver.readEquippedItems(memory, heroes, uniqueToItem, seen)...)
+	if heroes := readObjectListInfo(memory, object, layout.heroesOffset, 1000); heroes.ok {
+		owned = append(owned, resolver.readEquippedItemsWithLayout(memory, heroes, uniqueToItem, seen, layout)...)
 	}
 
 	var gold uint64
-	if currencies := readListInfo(memory, readPtr(memory, object+playerCurrencies), 1000); currencies.ok {
-		gold, _ = readGold(memory, currencies)
+	if currencies := readObjectListInfo(memory, object, layout.currenciesOffset, 1000); currencies.ok {
+		gold, _ = readGoldWithLayout(memory, currencies, layout)
 	}
 
 	var tradeSlots []TradeShipSlot
-	if trade := readListInfo(memory, readPtr(memory, object+playerTradeSlots), 100); trade.ok {
-		tradeSlots = resolver.readTradeSlots(memory, trade)
+	if trade := readObjectListInfo(memory, object, layout.tradeSlotsOffset, 100); trade.ok {
+		tradeSlots = resolver.readTradeSlotsWithLayout(memory, trade, layout)
 	}
 	if includeRuntimeTradeSlots {
 		if runtimeTradeSlots := resolver.readRuntimeTradeSlots(memory, now); len(runtimeTradeSlots) > 0 {
@@ -297,6 +334,13 @@ func pageCountForSlotCount(slotCount int) int {
 func readPtr(memory Memory, address uintptr) uintptr {
 	value, _ := memory.ReadUintptr(address)
 	return value
+}
+
+func readObjectListInfo(memory Memory, object uintptr, offset uintptr, maxAllowed int) listInfo {
+	if offset == 0 {
+		return listInfo{}
+	}
+	return readListInfo(memory, readPtr(memory, object+offset), maxAllowed)
 }
 
 func readListInfo(memory Memory, listPtr uintptr, maxAllowed int) listInfo {

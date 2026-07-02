@@ -6,6 +6,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.6] - 2026-07-02
+
+### Changed
+
+* Changed inventory snapshot resolution to keep the existing fixed `PlayerSaveData` layout as the fast path, then fall back to runtime layout discovery when game updates shift save-data field offsets.
+
+### Fixed
+
+* Fixed inventory snapshots failing with `PlayerSaveData could not be resolved` after TaskBarHero updates changed save-data object offsets.
+* Fixed future save-data offset shifts from requiring a code update when item, slot, hero, currency, or trade-slot lists can still be identified from their runtime data shape.
+
+### Tests
+
+* Added regression coverage for shifted `PlayerSaveData` layouts, including moved item IDs, unique IDs, stash/inventory slots, equipped items, and gold fields.
+
 ## [0.11.5] - 2026-07-01
 
 ### Added
