@@ -42,6 +42,7 @@ var (
 	ProcGetDC                      = User32.NewProc("GetDC")
 	ProcEnumWindows                = User32.NewProc("EnumWindows")
 	ProcGetWindowThreadProcessId   = User32.NewProc("GetWindowThreadProcessId")
+	ProcIsWindow                   = User32.NewProc("IsWindow")
 	ProcIsWindowVisible            = User32.NewProc("IsWindowVisible")
 	ProcGetClientRect              = User32.NewProc("GetClientRect")
 	ProcClientToScreen             = User32.NewProc("ClientToScreen")

@@ -18,10 +18,30 @@ func ApplyDashboardWindowIcon() {
 	}
 
 	hInstance, _, _ := win32.ProcGetModuleHandleW.Call(0)
-	if largeIcon := loadAppIcon(hInstance, getSystemMetric(SM_CXICON)); largeIcon != 0 {
+	largeIcon := cachedAppIcon(hInstance, true)
+	if largeIcon != 0 && windowIcon(hwnd, ICON_BIG) != largeIcon {
 		win32.ProcSendMessageW.Call(hwnd, WM_SETICON, ICON_BIG, largeIcon)
 	}
-	if smallIcon := loadAppIcon(hInstance, getSystemMetric(SM_CXSMICON)); smallIcon != 0 {
+	smallIcon := cachedAppIcon(hInstance, false)
+	if smallIcon != 0 && windowIcon(hwnd, ICON_SMALL) != smallIcon {
 		win32.ProcSendMessageW.Call(hwnd, WM_SETICON, ICON_SMALL, smallIcon)
 	}
+}
+
+func cachedAppIcon(hInstance uintptr, large bool) uintptr {
+	if large {
+		if activeApp.appIconLarge == 0 {
+			activeApp.appIconLarge = loadAppIcon(hInstance, getSystemMetric(SM_CXICON))
+		}
+		return activeApp.appIconLarge
+	}
+	if activeApp.appIconSmall == 0 {
+		activeApp.appIconSmall = loadAppIcon(hInstance, getSystemMetric(SM_CXSMICON))
+	}
+	return activeApp.appIconSmall
+}
+
+func windowIcon(hwnd uintptr, iconType uintptr) uintptr {
+	icon, _, _ := win32.ProcSendMessageW.Call(hwnd, WM_GETICON, iconType, 0)
+	return icon
 }

@@ -7,7 +7,7 @@ const (
 	AppProcessName           = "tbtc"
 	DashboardWindowClassName = AppProcessName + "DashboardWindow"
 	AppCreatorName           = "nidea1"
-	AppVersion               = "0.11.7"
+	AppVersion               = "0.11.8"
 	GameProcessName          = "TaskBarHero.exe"
 
 	EnablePriceHUD           = true
@@ -45,6 +45,7 @@ const (
 	WM_PAINT                  = 0x000F
 	WM_CLOSE                  = 0x0010
 	WM_DESTROY                = 0x0002
+	WM_GETICON                = 0x007F
 	WM_SETICON                = 0x0080
 	WM_COMMAND                = 0x0111
 	WM_HOTKEY                 = 0x0312
@@ -60,6 +61,7 @@ const (
 	WM_APP_HOTKEY_UPDATE      = 0x800A
 	WM_APP_HOTKEY_DISABLE     = 0x800B
 	WM_APP_HOTKEY_ENABLE      = 0x800C
+	WM_APP_RECREATE_OVERLAY   = 0x800D
 	SW_HIDE                   = 0
 	SW_SHOWDEFAULT            = 10
 	SW_SHOWNA                 = 8

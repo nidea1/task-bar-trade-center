@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.8] - 2026-07-03
+
+### Fixed
+
+* Fixed the overlay, tray menu, and dashboard becoming unreliable after long-running sessions by recovering stale overlay windows instead of leaving overlay update state stuck.
+* Fixed an overlay window destroy event from terminating the shared Win32 message loop used by tray and hotkey handling.
+* Fixed repeated dashboard icon application from loading new native icon handles on every dashboard show.
+
+### Tests
+
+* Added regression coverage to ensure overlay window destruction only clears overlay state.
+
 ## [0.11.7] - 2026-07-02
 
 ### Fixed

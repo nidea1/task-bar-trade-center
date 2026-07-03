@@ -194,6 +194,14 @@ func appWndProc(hWnd uintptr, msg uint32, wParam uintptr, lParam uintptr) uintpt
 	case WM_APP_HOTKEY_ENABLE:
 		registerDashboardHotkey()
 		return 0
+	case WM_APP_RECREATE_OVERLAY:
+		if EnablePriceHUD && activeApp.overlayHWND == 0 && !activeApp.shutdownRequested.Load() {
+			createOverlayWindow()
+			if activeApp.showOverlay.Load() {
+				redrawOverlay()
+			}
+		}
+		return 0
 	case WM_APP_GAME_CLOSED_PROMPT:
 		if showYesNoMessageBox(tr("dialog.game_closed.title"), tr("dialog.game_closed.body")) {
 			return 1
@@ -214,6 +222,7 @@ func appWndProc(hWnd uintptr, msg uint32, wParam uintptr, lParam uintptr) uintpt
 		handleTrayCommand(uint32(wParam & 0xffff))
 		return 0
 	case WM_CLOSE:
+		activeApp.shutdownRequested.Store(true)
 		activeApp.showOverlay.Store(false)
 		if activeApp.overlayHWND != 0 {
 			win32.ProcShowWindow.Call(activeApp.overlayHWND, SW_HIDE)

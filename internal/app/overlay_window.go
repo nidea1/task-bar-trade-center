@@ -12,7 +12,12 @@ import (
 const overlayRedrawMinInterval = 75 * time.Millisecond
 
 func redrawOverlay() {
-	if !EnablePriceHUD || activeApp.overlayHWND == 0 {
+	if !EnablePriceHUD {
+		return
+	}
+	overlayHWND := activeApp.overlayHWND
+	if overlayHWND == 0 {
+		requestOverlayWindowRecreate()
 		return
 	}
 	now := time.Now()
@@ -26,10 +31,21 @@ func redrawOverlay() {
 	if !activeApp.overlayUpdatePending.CompareAndSwap(false, true) {
 		return
 	}
-	win32.ProcPostMessageW.Call(activeApp.overlayHWND, WM_OVERLAY_UPDATE, 0, 0)
+	result, _, _ := win32.ProcPostMessageW.Call(overlayHWND, WM_OVERLAY_UPDATE, 0, 0)
+	if result != 0 {
+		return
+	}
+	activeApp.overlayUpdatePending.Store(false)
+	if !isWindow(overlayHWND) {
+		clearOverlayWindowState(overlayHWND)
+		requestOverlayWindowRecreate()
+	}
 }
 
 func createOverlayWindow() {
+	if activeApp.overlayHWND != 0 {
+		return
+	}
 	className, _ := syscall.UTF16PtrFromString(AppProcessName + "PriceOverlay")
 	windowTitle, _ := syscall.UTF16PtrFromString(AppName + " Price HUD")
 	hInstance, _, _ := win32.ProcGetModuleHandleW.Call(0)
@@ -63,6 +79,13 @@ func createOverlayWindow() {
 	win32.ProcSetLayeredWindowAttributes.Call(activeApp.overlayHWND, 0, 0, LWA_COLORKEY)
 	win32.ProcShowWindow.Call(activeApp.overlayHWND, SW_HIDE)
 	fmt.Printf("Overlay window ready: hwnd=0x%X size=%dx%d\n", activeApp.overlayHWND, TooltipOverlayWidth, TooltipOverlayHeight)
+}
+
+func requestOverlayWindowRecreate() {
+	if activeApp.appHWND == 0 || activeApp.shutdownRequested.Load() {
+		return
+	}
+	win32.ProcPostMessageW.Call(activeApp.appHWND, WM_APP_RECREATE_OVERLAY, 0, 0)
 }
 
 func wndProc(hWnd uintptr, msg uint32, wParam uintptr, lParam uintptr) uintptr {
@@ -151,10 +174,27 @@ func wndProc(hWnd uintptr, msg uint32, wParam uintptr, lParam uintptr) uintptr {
 		win32.ProcEndPaint.Call(hWnd, uintptr(unsafe.Pointer(&ps)))
 		return 0
 	case WM_DESTROY:
-		win32.ProcPostQuitMessage.Call(0)
+		clearOverlayWindowState(hWnd)
 		return 0
 	}
 	return winDefWindowProc(hWnd, msg, wParam, lParam)
+}
+
+func clearOverlayWindowState(hwnd uintptr) {
+	if activeApp.overlayHWND == hwnd {
+		activeApp.overlayHWND = 0
+	}
+	activeApp.overlayUpdatePending.Store(false)
+	activeApp.hasOverlayWindowRect = false
+	activeApp.overlayWindowVisible = false
+}
+
+func isWindow(hwnd uintptr) bool {
+	if hwnd == 0 {
+		return false
+	}
+	result, _, _ := win32.ProcIsWindow.Call(hwnd)
+	return result != 0
 }
 
 func rectsClose(a win32.RECT, b win32.RECT, tolerance int32) bool {
