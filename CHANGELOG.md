@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-07-04
+
+### Added
+- Added persistent caching of absolute memory pointers for inventory resolver results (`PlayerSaveData` layout and class addresses), resulting in instant (<1ms) startup times when the game remains active.
+- Added automatic validation of cached pointers, with graceful fallback to a full memory scan and cache regeneration upon game process restarts or cache errors.
+
+### Changed
+- Changed "Box" notify source label to "Chest" in all 18 supported languages.
+
 ## [0.12.1] - 2026-07-04
 
 ### Fixed

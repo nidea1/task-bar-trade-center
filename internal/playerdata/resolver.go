@@ -62,9 +62,30 @@ type Resolver struct {
 	layout                 saveDataLayout
 }
 
+type SaveDataLayout struct {
+	CurrenciesOffset       uintptr `json:"currencies_offset"`
+	HeroesOffset           uintptr `json:"heroes_offset"`
+	InventoryOffset        uintptr `json:"inventory_offset"`
+	StashOffset            uintptr `json:"stash_offset"`
+	TradeSlotsOffset       uintptr `json:"trade_slots_offset"`
+	ItemsOffset            uintptr `json:"items_offset"`
+	CurrencyKeyOffset      uintptr `json:"currency_key_offset"`
+	CurrencyQuantityOffset uintptr `json:"currency_quantity_offset"`
+	HeroKeyOffset          uintptr `json:"hero_key_offset"`
+	HeroEquippedItems      uintptr `json:"hero_equipped_items"`
+	ItemKeyOffset          uintptr `json:"item_key_offset"`
+	ItemUniqueIDOffset     uintptr `json:"item_unique_id_offset"`
+	SlotIndexOffset        uintptr `json:"slot_index_offset"`
+	SlotUniqueIDOffset     uintptr `json:"slot_unique_id_offset"`
+	TradeSlotIndexOffset   uintptr `json:"trade_slot_index_offset"`
+	TradeSlotCooldown      uintptr `json:"trade_slot_cooldown"`
+	TradeSlotStateOffset   uintptr `json:"trade_slot_state_offset"`
+}
+
 type ResolverCache struct {
 	CachedObject uintptr
 	ClassCache   map[string][]uintptr
+	Layout       SaveDataLayout
 }
 
 type listInfo struct {
@@ -107,6 +128,7 @@ func (resolver *Resolver) readSnapshot(memory Memory, now time.Time, includeRunt
 			return snapshot, true
 		}
 		resolver.cachedObject = 0
+		resolver.classCache = nil // Clear class cache so we perform a full scan
 	}
 
 	if snapshot, ok := resolver.resolveAndReadObject(memory, now, includeRuntimeTradeSlots); ok {
@@ -187,6 +209,25 @@ func (resolver *Resolver) ExportCache() ResolverCache {
 	cache := ResolverCache{
 		CachedObject: resolver.cachedObject,
 		ClassCache:   make(map[string][]uintptr, len(resolver.classCache)),
+		Layout: SaveDataLayout{
+			CurrenciesOffset:       resolver.layout.currenciesOffset,
+			HeroesOffset:           resolver.layout.heroesOffset,
+			InventoryOffset:        resolver.layout.inventoryOffset,
+			StashOffset:            resolver.layout.stashOffset,
+			TradeSlotsOffset:       resolver.layout.tradeSlotsOffset,
+			ItemsOffset:            resolver.layout.itemsOffset,
+			CurrencyKeyOffset:      resolver.layout.currencyKeyOffset,
+			CurrencyQuantityOffset: resolver.layout.currencyQuantityOffset,
+			HeroKeyOffset:          resolver.layout.heroKeyOffset,
+			HeroEquippedItems:      resolver.layout.heroEquippedItems,
+			ItemKeyOffset:          resolver.layout.itemKeyOffset,
+			ItemUniqueIDOffset:     resolver.layout.itemUniqueIDOffset,
+			SlotIndexOffset:        resolver.layout.slotIndexOffset,
+			SlotUniqueIDOffset:     resolver.layout.slotUniqueIDOffset,
+			TradeSlotIndexOffset:   resolver.layout.tradeSlotIndexOffset,
+			TradeSlotCooldown:      resolver.layout.tradeSlotCooldown,
+			TradeSlotStateOffset:   resolver.layout.tradeSlotStateOffset,
+		},
 	}
 	for name, addresses := range resolver.classCache {
 		cache.ClassCache[name] = append([]uintptr(nil), addresses...)
@@ -198,6 +239,25 @@ func (resolver *Resolver) ImportCache(cache ResolverCache) {
 	resolver.cachedObject = cache.CachedObject
 	if cache.CachedObject != 0 {
 		resolver.cachedObjectResolvedAt = time.Now()
+	}
+	resolver.layout = saveDataLayout{
+		currenciesOffset:       cache.Layout.CurrenciesOffset,
+		heroesOffset:           cache.Layout.HeroesOffset,
+		inventoryOffset:        cache.Layout.InventoryOffset,
+		stashOffset:            cache.Layout.StashOffset,
+		tradeSlotsOffset:       cache.Layout.TradeSlotsOffset,
+		itemsOffset:            cache.Layout.ItemsOffset,
+		currencyKeyOffset:      cache.Layout.CurrencyKeyOffset,
+		currencyQuantityOffset: cache.Layout.CurrencyQuantityOffset,
+		heroKeyOffset:          cache.Layout.HeroKeyOffset,
+		heroEquippedItems:      cache.Layout.HeroEquippedItems,
+		itemKeyOffset:          cache.Layout.ItemKeyOffset,
+		itemUniqueIDOffset:     cache.Layout.ItemUniqueIDOffset,
+		slotIndexOffset:        cache.Layout.SlotIndexOffset,
+		slotUniqueIDOffset:     cache.Layout.SlotUniqueIDOffset,
+		tradeSlotIndexOffset:   cache.Layout.TradeSlotIndexOffset,
+		tradeSlotCooldown:      cache.Layout.TradeSlotCooldown,
+		tradeSlotStateOffset:   cache.Layout.TradeSlotStateOffset,
 	}
 	if len(cache.ClassCache) == 0 {
 		return

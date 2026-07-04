@@ -1114,3 +1114,108 @@ func TestResolverPrefersRuntimeTradeSlotCooldowns(t *testing.T) {
 		t.Fatalf("slot1 = %+v, want runtime cooldown %v", snapshot.TradeSlots[1], expected1)
 	}
 }
+
+func TestResolverCacheImportExport(t *testing.T) {
+	resolver := NewResolver(map[int]ItemMetadata{
+		100: {Marketable: true},
+		101: {Marketable: false},
+		102: {Marketable: true},
+	})
+
+	// Setup mock data
+	nameAddr := uintptr(0x200000)
+	classPtr := uintptr(0x300000)
+	object := uintptr(0x400000)
+	mem := fakeMemory{
+		ptrs:     make(map[uintptr]uintptr),
+		ints:     make(map[uintptr]int32),
+		uints:    make(map[uintptr]uint64),
+		patterns: make(map[string][]uintptr),
+	}
+
+	// Setup classes and candidate save data
+	writeClass(mem, "PlayerSaveData", nameAddr, classPtr, object)
+	writeCandidateSaveData(mem, object, 0x500000, 100, 12345)
+
+	// First scan to populate the cache
+	snapshot, ok := resolver.ReadSnapshot(mem, time.Unix(1700000000, 0))
+	if !ok {
+		t.Fatal("expected snapshot")
+	}
+	if snapshot.Gold != 12345 {
+		t.Fatalf("snapshot.Gold = %d, want 12345", snapshot.Gold)
+	}
+
+	// Export the cache
+	cache := resolver.ExportCache()
+	if cache.CachedObject != object {
+		t.Fatalf("cache.CachedObject = 0x%X, want 0x%X", cache.CachedObject, object)
+	}
+	if cache.Layout.ItemsOffset != playerItems {
+		t.Fatalf("cache.Layout.ItemsOffset = 0x%X, want 0x%X", cache.Layout.ItemsOffset, playerItems)
+	}
+	if len(cache.ClassCache) == 0 {
+		t.Fatal("expected ClassCache to be populated")
+	}
+
+	// Import the cache into a new resolver
+	resolver2 := NewResolver(map[int]ItemMetadata{
+		100: {Marketable: true},
+		101: {Marketable: false},
+		102: {Marketable: true},
+	})
+	resolver2.ImportCache(cache)
+
+	// We clear the memory patterns so that a full scan would FAIL.
+	// If it successfully reads, it must have used the cachedObject and Layout directly!
+	memNoPatterns := fakeMemory{
+		ptrs:     mem.ptrs,
+		ints:     mem.ints,
+		uints:    mem.uints,
+		patterns: make(map[string][]uintptr), // NO PATTERNS for scanning!
+	}
+
+	snapshot2, ok := resolver2.ReadSnapshot(memNoPatterns, time.Unix(1700000000, 0))
+	if !ok {
+		t.Fatal("expected snapshot2 from cache")
+	}
+	if snapshot2.Gold != 12345 {
+		t.Fatalf("snapshot2.Gold = %d, want 12345", snapshot2.Gold)
+	}
+
+	// Now we test cache invalidation/fallback:
+	// We corrupt the memory at cachedObject (e.g. set itemsList ptr to 0)
+	// so validation fails.
+	memCorrupted := fakeMemory{
+		ptrs:     make(map[uintptr]uintptr),
+		ints:     make(map[uintptr]int32),
+		uints:    make(map[uintptr]uint64),
+		patterns: make(map[string][]uintptr),
+	}
+	// Copy over some pointers but NOT the valid structure at object
+	for k, v := range mem.ptrs {
+		if k != object+playerItems {
+			memCorrupted.ptrs[k] = v
+		}
+	}
+	// Add valid PlayerSaveData patterns so it can fall back to a full scan and succeed there.
+	newObject := uintptr(0x900000)
+	writeClass(memCorrupted, "PlayerSaveData", nameAddr, classPtr, newObject)
+	writeCandidateSaveData(memCorrupted, newObject, 0x950000, 100, 99999)
+
+	// Try reading snapshot. It should:
+	// 1. Try reading from cachedObject (0x400000) -> fails because itemsList is missing/corrupted.
+	// 2. Clear cachedObject and classCache.
+	// 3. Perform a full scan and resolve newObject (0x900000) -> succeeds!
+	snapshot3, ok := resolver2.ReadSnapshot(memCorrupted, time.Unix(1700000000, 0))
+	if !ok {
+		t.Fatal("expected snapshot3 after fallback scan")
+	}
+	if snapshot3.Gold != 99999 {
+		t.Fatalf("snapshot3.Gold = %d, want 99999", snapshot3.Gold)
+	}
+	if resolver2.cachedObject != newObject {
+		t.Fatalf("resolver2.cachedObject = 0x%X, want 0x%X", resolver2.cachedObject, newObject)
+	}
+}
+

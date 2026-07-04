@@ -912,7 +912,7 @@ function App() {
     const selectedRarityNotifyLabel = t("rarity." + minRarityNotify, minRarityNotify) + "+";
     const rarityNotifyTitle = `${controlRarityNotifyLabel}: ${selectedRarityNotifyLabel}`;
     const notifySourceOptions: Array<{ value: NotificationSource; label: string; icon: JSX.Element }> = [
-        { value: "box", label: t("dashboard.notify_source_box", localizedFallback(currentLanguage, "Sandık", "Box")), icon: <PackageOpen className="w-3.5 h-3.5" /> },
+        { value: "box", label: t("dashboard.notify_source_box", localizedFallback(currentLanguage, "Sandık", "Chest")), icon: <PackageOpen className="w-3.5 h-3.5" /> },
         { value: "craft", label: t("dashboard.notify_source_craft", localizedFallback(currentLanguage, "Üretim", "Craft")), icon: <Hammer className="w-3.5 h-3.5" /> },
         { value: "synthesis", label: t("dashboard.notify_source_synthesis", localizedFallback(currentLanguage, "Sentez", "Synthesis")), icon: <FlaskConical className="w-3.5 h-3.5" /> },
         { value: "offering", label: t("dashboard.notify_source_offering", localizedFallback(currentLanguage, "Adak", "Offering")), icon: <HandHeart className="w-3.5 h-3.5" /> },
