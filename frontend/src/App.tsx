@@ -435,6 +435,29 @@ function App() {
             if (!mountedRef.current) return;
             setState(nextState as unknown as DashboardState);
             setError("");
+
+            GetCurrentLanguage().then((lang: string) => {
+                if (mountedRef.current) {
+                    setCurrentLanguage((prev) => {
+                        if (prev !== lang) {
+                            loadTranslations();
+                            return lang;
+                        }
+                        return prev;
+                    });
+                }
+            });
+
+            GetCurrentMarketScope().then((scope: { currency_code: string; country_code: string } | null) => {
+                if (mountedRef.current && scope) {
+                    setCurrentMarketScope((prev) => {
+                        if (!prev || prev.currency_code !== scope.currency_code || prev.country_code !== scope.country_code) {
+                            return scope;
+                        }
+                        return prev;
+                    });
+                }
+            });
         });
         const unsubscribeFooter = EventsOn("dashboard-footer-updated", (info: unknown) => {
             if (!mountedRef.current) return;

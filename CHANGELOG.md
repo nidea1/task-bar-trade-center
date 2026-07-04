@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-07-04
+
+### Fixed
+- Fixed dashboard language and market scope not updating dynamically when modified from the system tray menu.
+
+### Added
+- Added inventory forecast screenshot to README.md.
+
 ## [0.12.0] - 2026-07-04
 
 ### Added

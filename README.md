@@ -59,6 +59,9 @@ The application operates on a hybrid architecture designed for minimal system im
 #### Background Price Syncing Queue
 ![Dashboard - Syncing & Queue](./assets/dashboard-syncing.png)
 
+#### Inventory Forecast & Fill Tooltip
+![Dashboard - Inventory Forecast Tooltip](./assets/dashboard-inv-tracker.png)
+
 ---
 
 ### 🎮 In-game Price Overlay HUD
