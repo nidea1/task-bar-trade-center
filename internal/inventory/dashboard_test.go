@@ -1,6 +1,7 @@
 package inventory
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -254,5 +255,237 @@ func TestBuildDashboardIncludesEmptyStashPages(t *testing.T) {
 	}
 	if state.Totals.StashPageValues[7] != 7 {
 		t.Errorf("stash page 7 value = %f, want 7", state.Totals.StashPageValues[7])
+	}
+}
+
+func TestBuildInventoryFillEstimateUsesRuneReductions(t *testing.T) {
+	snapshot := playerdata.InventorySnapshot{
+		InventorySlots: playerdata.InventorySlotSummary{Total: 20, Used: 10, Free: 10},
+		ChestAutomation: playerdata.ChestAutomation{
+			CommonRuneReductionSeconds: 39,
+			StageRuneReductionSeconds:  75,
+			RuneResolved:               true,
+			HasCommonAutoOpenRune:      true,
+			HasStageAutoOpenRune:       true,
+		},
+		ChestCounts: playerdata.ChestCounts{NormalChests: 1, StageChests: 1, TotalChests: 2},
+	}
+
+	estimate := BuildInventoryFillEstimate(snapshot)
+
+	if !estimate.Available || !estimate.Fills {
+		t.Fatalf("estimate availability = available %t fills %t, want true/true", estimate.Available, estimate.Fills)
+	}
+	if estimate.CommonAutoOpenSeconds != 261 {
+		t.Fatalf("common auto-open = %d, want 261", estimate.CommonAutoOpenSeconds)
+	}
+	if estimate.StageAutoOpenSeconds != 525 {
+		t.Fatalf("stage auto-open = %d, want 525", estimate.StageAutoOpenSeconds)
+	}
+	if math.Abs(estimate.NetFillPerHour-20.6502) > 0.001 {
+		t.Fatalf("net fill per hour = %.4f, want about 20.6502", estimate.NetFillPerHour)
+	}
+	if estimate.NextCommonDropSeconds != 240 || estimate.NextStageDropSeconds != 360 {
+		t.Fatalf("next drops = common %d stage %d, want 240/360", estimate.NextCommonDropSeconds, estimate.NextStageDropSeconds)
+	}
+	if estimate.CommonChestCount != 1 || estimate.StageChestCount != 1 {
+		t.Fatalf("chest counts = common %d stage %d, want 1/1", estimate.CommonChestCount, estimate.StageChestCount)
+	}
+	if estimate.TimeToFullSeconds != 1827 {
+		t.Fatalf("time to full = %d, want 1827 seconds", estimate.TimeToFullSeconds)
+	}
+}
+
+func TestBuildInventoryFillEstimateUsesCustomChestTiming(t *testing.T) {
+	snapshot := playerdata.InventorySnapshot{
+		InventorySlots: playerdata.InventorySlotSummary{Total: 20, Used: 10, Free: 10},
+		ChestAutomation: playerdata.ChestAutomation{
+			CommonRuneReductionSeconds: 39,
+			StageRuneReductionSeconds:  75,
+			RuneResolved:               true,
+			HasCommonAutoOpenRune:      true,
+			HasStageAutoOpenRune:       true,
+		},
+		ChestCounts: playerdata.ChestCounts{NormalChests: 1, StageChests: 1, TotalChests: 2},
+	}
+	timing := ChestTimingConfig{
+		CommonDropSeconds:         300,
+		StageDropSeconds:          420,
+		CommonBaseAutoOpenSeconds: 360,
+		StageBaseAutoOpenSeconds:  700,
+	}
+
+	estimate := BuildInventoryFillEstimateWithTiming(snapshot, timing)
+
+	if estimate.CommonDropSeconds != 300 || estimate.StageDropSeconds != 420 {
+		t.Fatalf("drop seconds = common %d stage %d, want 300/420", estimate.CommonDropSeconds, estimate.StageDropSeconds)
+	}
+	if estimate.CommonAutoOpenSeconds != 321 || estimate.StageAutoOpenSeconds != 625 {
+		t.Fatalf("auto-open seconds = common %d stage %d, want 321/625", estimate.CommonAutoOpenSeconds, estimate.StageAutoOpenSeconds)
+	}
+	if estimate.NextCommonDropSeconds != 300 || estimate.NextStageDropSeconds != 420 {
+		t.Fatalf("next drops = common %d stage %d, want 300/420", estimate.NextCommonDropSeconds, estimate.NextStageDropSeconds)
+	}
+}
+
+func TestChestItemFillRateUsesAutoOpenThroughputWhenDropsBacklog(t *testing.T) {
+	stageRate := chestItemFillRate(stageChestDropSeconds, 525) * 3600
+	if math.Abs(stageRate-6.8571) > 0.001 {
+		t.Fatalf("stage rate = %.4f, want about 6.8571", stageRate)
+	}
+
+	commonRate := chestItemFillRate(commonChestDropSeconds, 261) * 3600
+	if math.Abs(commonRate-13.7931) > 0.001 {
+		t.Fatalf("common rate = %.4f, want about 13.7931", commonRate)
+	}
+}
+
+func TestBuildInventoryFillEstimateUsesFreeSlotSummary(t *testing.T) {
+	snapshot := playerdata.InventorySnapshot{
+		InventorySlots: playerdata.InventorySlotSummary{Total: 300, Used: 196, Free: 104},
+		ChestAutomation: playerdata.ChestAutomation{
+			CommonRuneReductionSeconds: 39,
+			StageRuneReductionSeconds:  75,
+			RuneResolved:               true,
+			HasCommonAutoOpenRune:      true,
+			HasStageAutoOpenRune:       true,
+		},
+	}
+
+	estimate := BuildInventoryFillEstimate(snapshot)
+
+	if estimate.FreeSlots != 104 {
+		t.Fatalf("free slots = %d, want 104", estimate.FreeSlots)
+	}
+	if estimate.TimeToFullSeconds != 18510 {
+		t.Fatalf("time to full = %d, want 18510 seconds", estimate.TimeToFullSeconds)
+	}
+}
+
+func TestBuildInventoryFillEstimateUsesObservedDropSchedule(t *testing.T) {
+	snapshot := playerdata.InventorySnapshot{
+		InventorySlots: playerdata.InventorySlotSummary{Total: 20, Used: 10, Free: 10},
+		ChestAutomation: playerdata.ChestAutomation{
+			CommonRuneReductionSeconds: 39,
+			StageRuneReductionSeconds:  75,
+			RuneResolved:               true,
+			HasCommonAutoOpenRune:      true,
+			HasStageAutoOpenRune:       true,
+		},
+	}
+
+	estimate := BuildInventoryFillEstimate(snapshot, ChestDropSchedule{
+		NextCommonDropSeconds: 10,
+		NextStageDropSeconds:  20,
+		CommonDropObserved:    true,
+		StageDropObserved:     true,
+	})
+
+	if !estimate.CommonDropObserved || !estimate.StageDropObserved {
+		t.Fatalf("drop observed flags = common %t stage %t, want true/true", estimate.CommonDropObserved, estimate.StageDropObserved)
+	}
+	if estimate.TimeToFullSeconds != 1837 {
+		t.Fatalf("time to full = %d, want 1837 seconds", estimate.TimeToFullSeconds)
+	}
+}
+
+func TestBuildInventoryFillEstimatePreservesReadyDropSchedule(t *testing.T) {
+	snapshot := playerdata.InventorySnapshot{
+		InventorySlots: playerdata.InventorySlotSummary{Total: 20, Used: 19, Free: 1},
+		ChestAutomation: playerdata.ChestAutomation{
+			CommonRuneReductionSeconds: 39,
+			StageRuneReductionSeconds:  75,
+			RuneResolved:               true,
+			HasCommonAutoOpenRune:      true,
+			HasStageAutoOpenRune:       true,
+		},
+	}
+
+	estimate := BuildInventoryFillEstimate(snapshot, ChestDropSchedule{
+		NextCommonDropSeconds: 0,
+		NextStageDropSeconds:  360,
+		CommonDropObserved:    true,
+		CommonDropReady:       true,
+	})
+
+	if !estimate.CommonDropReady || estimate.NextCommonDropSeconds != 0 {
+		t.Fatalf("common ready state = ready %t next %d, want true/0", estimate.CommonDropReady, estimate.NextCommonDropSeconds)
+	}
+	if estimate.TimeToFullSeconds != 261 {
+		t.Fatalf("time to full = %d, want ready common drop to open after 261 seconds", estimate.TimeToFullSeconds)
+	}
+}
+
+func TestBuildInventoryFillEstimateUsesDropPaceWhenAutoOpenOutpacesDrops(t *testing.T) {
+	snapshot := playerdata.InventorySnapshot{
+		InventorySlots: playerdata.InventorySlotSummary{Total: 20, Used: 10, Free: 10},
+		ChestAutomation: playerdata.ChestAutomation{
+			CommonRuneReductionSeconds: 120,
+			StageRuneReductionSeconds:  300,
+			RuneResolved:               true,
+			HasCommonAutoOpenRune:      true,
+			HasStageAutoOpenRune:       true,
+		},
+	}
+
+	estimate := BuildInventoryFillEstimate(snapshot)
+
+	if !estimate.Available {
+		t.Fatal("estimate should be available when slot count is known")
+	}
+	if !estimate.Fills {
+		t.Fatalf("estimate fills = false, want true: %+v", estimate)
+	}
+	if math.Abs(estimate.NetFillPerHour-25) > 0.001 {
+		t.Fatalf("net fill per hour = %.4f, want 25", estimate.NetFillPerHour)
+	}
+	if estimate.TimeToFullSeconds != 1740 {
+		t.Fatalf("time to full = %d, want 1740", estimate.TimeToFullSeconds)
+	}
+}
+
+func TestBuildInventoryFillEstimateCanFillTransientlyBeforeAutoOpen(t *testing.T) {
+	snapshot := playerdata.InventorySnapshot{
+		InventorySlots: playerdata.InventorySlotSummary{Total: 20, Used: 19, Free: 1},
+		ChestAutomation: playerdata.ChestAutomation{
+			CommonRuneReductionSeconds: 120,
+			StageRuneReductionSeconds:  300,
+			RuneResolved:               true,
+			HasCommonAutoOpenRune:      true,
+			HasStageAutoOpenRune:       true,
+		},
+	}
+
+	estimate := BuildInventoryFillEstimate(snapshot)
+
+	if !estimate.Fills {
+		t.Fatalf("estimate fills = false, want true")
+	}
+	if estimate.TimeToFullSeconds != 420 {
+		t.Fatalf("time to full = %d, want first common auto-open at 420 seconds", estimate.TimeToFullSeconds)
+	}
+}
+
+func TestBuildInventoryFillEstimateRequiresRunes(t *testing.T) {
+	snapshot := playerdata.InventorySnapshot{
+		InventorySlots: playerdata.InventorySlotSummary{Total: 20, Used: 10, Free: 10},
+		ChestAutomation: playerdata.ChestAutomation{
+			CommonRuneReductionSeconds: 39,
+			StageRuneReductionSeconds:  75,
+			RuneResolved:               true,
+			HasCommonAutoOpenRune:      false,
+			HasStageAutoOpenRune:       false,
+		},
+		ChestCounts: playerdata.ChestCounts{NormalChests: 1, StageChests: 1, TotalChests: 2},
+	}
+
+	estimate := BuildInventoryFillEstimate(snapshot)
+
+	if estimate.Fills {
+		t.Fatal("estimate fills = true, want false since player lacks auto-open runes")
+	}
+	if estimate.CommonAutoOpenSeconds != 0 || estimate.StageAutoOpenSeconds != 0 {
+		t.Fatalf("expected auto-open seconds to be 0 when runes are missing, got common=%d stage=%d",
+			estimate.CommonAutoOpenSeconds, estimate.StageAutoOpenSeconds)
 	}
 }

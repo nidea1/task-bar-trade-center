@@ -152,7 +152,6 @@ func notifyApplicationStarted() {
 	}
 	trayNotifications.started = true
 	trayNotifications.Unlock()
-	queueRawTrayNotification(tr("status.starting"))
 }
 
 func notifyRuntimeStateChange(previous int32, status int32) {
@@ -168,8 +167,8 @@ func notifyRuntimeStateChange(previous int32, status int32) {
 	}
 }
 
-func runtimeShouldNotify(status int32) bool {
-	return status == AppStatusWaitingForGame || status == AppStatusReady
+func runtimeShouldNotify(_ int32) bool {
+	return false
 }
 
 func queueTrayNotification(message string, actionRequired bool) {

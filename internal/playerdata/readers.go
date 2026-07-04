@@ -2,7 +2,9 @@ package playerdata
 
 import (
 	"encoding/binary"
+	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/nidea1/task-bar-trade-center/internal/il2cpp"
@@ -85,6 +87,115 @@ func (resolver *Resolver) readSlotItemsWithLayout(memory Memory, list listInfo, 
 		items = append(items, resolver.ownedItem(itemID, uniqueID, location, 0, readSlotPositionWithLayout(memory, slot, i, list.size, layout)))
 	}
 	return items
+}
+
+func readInventorySlotSummaryWithLayout(memory Memory, list listInfo, layout saveDataLayout) InventorySlotSummary {
+	if !list.ok || list.size <= 0 || layout.slotUniqueIDOffset == 0 {
+		return InventorySlotSummary{}
+	}
+	limit := list.size
+	if limit > 5000 {
+		limit = 5000
+	}
+	if summary, ok := readUnlockedInventorySlotSummary(memory, list, layout, limit); ok {
+		return summary
+	}
+
+	used := 0
+	emptySlots := make([]int, 0)
+	for i := 0; i < limit; i++ {
+		slot, ok := memory.ReadUintptr(list.arrayPtr + il2cpp.ArrayDataOffset + uintptr(i*8))
+		if !ok || slot == 0 || !tbhmem.PlausibleAddress(slot) {
+			emptySlots = append(emptySlots, i)
+			continue
+		}
+		uniqueID, ok := memory.ReadUint64(slot + layout.slotUniqueIDOffset)
+		if ok && uniqueID != 0 {
+			used++
+			continue
+		}
+		emptySlots = append(emptySlots, readSlotPositionWithLayout(memory, slot, i, list.size, layout))
+	}
+	free := list.size - used
+	if free < 0 {
+		free = 0
+	}
+	return InventorySlotSummary{
+		Total:           list.size,
+		Used:            used,
+		Free:            free,
+		EmptySlotRanges: formatSlotRanges(emptySlots),
+	}
+}
+
+func readUnlockedInventorySlotSummary(memory Memory, list listInfo, layout saveDataLayout, limit int) (InventorySlotSummary, bool) {
+	unlockStateRead := false
+	total := 0
+	used := 0
+	emptySlots := make([]int, 0)
+	for i := 0; i < limit; i++ {
+		slot, ok := listObjectAt(memory, list, i)
+		if !ok {
+			continue
+		}
+		unlocked, ok := readInventorySlotUnlocked(memory, slot)
+		if !ok {
+			continue
+		}
+		unlockStateRead = true
+		if !unlocked {
+			continue
+		}
+		total++
+		uniqueID, ok := memory.ReadUint64(slot + layout.slotUniqueIDOffset)
+		if ok && uniqueID != 0 {
+			used++
+			continue
+		}
+		emptySlots = append(emptySlots, readSlotPositionWithLayout(memory, slot, i, list.size, layout))
+	}
+	if !unlockStateRead {
+		return InventorySlotSummary{}, false
+	}
+	free := total - used
+	if free < 0 {
+		free = 0
+	}
+	return InventorySlotSummary{
+		Total:           total,
+		BackingTotal:    backingTotal(list.size, total),
+		Used:            used,
+		Free:            free,
+		EmptySlotRanges: formatSlotRanges(emptySlots),
+	}, true
+}
+
+func readInventorySlotUnlocked(memory Memory, slot uintptr) (bool, bool) {
+	baseUnlocked, baseOK := readBoolByte(memory, slot+slotIsUnlock)
+	runeUnlocked, runeOK := readBoolByte(memory, slot+slotIsRuneUnlock)
+	if !baseOK && !runeOK {
+		return false, false
+	}
+	return (baseOK && baseUnlocked) || (runeOK && runeUnlocked), true
+}
+
+func readBoolByte(memory Memory, address uintptr) (bool, bool) {
+	reader, ok := memory.(byteMemory)
+	if !ok {
+		return false, false
+	}
+	var data [1]byte
+	if !reader.ReadBytes(address, data[:]) {
+		return false, false
+	}
+	return data[0] != 0, true
+}
+
+func backingTotal(rawTotal int, usableTotal int) int {
+	if rawTotal == usableTotal {
+		return 0
+	}
+	return rawTotal
 }
 
 func (resolver *Resolver) readEquippedItems(memory Memory, heroes listInfo, uniqueToItem map[uint64]int, seen map[uint64]struct{}) []OwnedItem {
@@ -173,6 +284,44 @@ func readSlotPositionWithLayout(memory Memory, slot uintptr, fallback int, listS
 		return fallback
 	}
 	return int(value)
+}
+
+func formatSlotRanges(slots []int) string {
+	if len(slots) == 0 {
+		return ""
+	}
+	sort.Ints(slots)
+	uniqueSlots := slots[:0]
+	previous := -1
+	for _, slot := range slots {
+		if slot == previous {
+			continue
+		}
+		uniqueSlots = append(uniqueSlots, slot)
+		previous = slot
+	}
+
+	parts := make([]string, 0)
+	start := uniqueSlots[0]
+	end := start
+	for _, slot := range uniqueSlots[1:] {
+		if slot == end+1 {
+			end = slot
+			continue
+		}
+		parts = append(parts, formatSlotRange(start, end))
+		start = slot
+		end = slot
+	}
+	parts = append(parts, formatSlotRange(start, end))
+	return strings.Join(parts, ",")
+}
+
+func formatSlotRange(start int, end int) string {
+	if start == end {
+		return fmt.Sprintf("%d", start)
+	}
+	return fmt.Sprintf("%d-%d", start, end)
 }
 
 func countSlotMatches(memory Memory, list listInfo, uniqueToItem map[uint64]int) (filled int, known int) {

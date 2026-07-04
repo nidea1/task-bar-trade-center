@@ -147,6 +147,13 @@ func (a *App) GetDashboardFooterInfo() (core.DashboardFooterInfo, error) {
 	return core.DashboardFooterInfo{}, nil
 }
 
+func (a *App) CheckForUpdates() (core.DashboardFooterInfo, error) {
+	if appCore := a.coreApp(); appCore != nil {
+		return appCore.CheckForUpdates(), nil
+	}
+	return core.DashboardFooterInfo{}, nil
+}
+
 func (a *App) GetRuntimeState() (core.RuntimeStateInfo, error) {
 	if appCore := a.coreApp(); appCore != nil {
 		return appCore.GetRuntimeState(), nil

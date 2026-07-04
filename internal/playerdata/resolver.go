@@ -11,12 +11,12 @@ import (
 const (
 	stashSlotsPerPage = 100
 
-	playerCurrencies = 0x48
-	playerHeroes     = 0x50
-	playerInventory  = 0x78
-	playerStash      = 0x80
-	playerTradeSlots = 0x88
-	playerItems      = 0xA0
+	playerCurrencies = 0x50
+	playerHeroes     = 0x58
+	playerInventory  = 0x80
+	playerStash      = 0x88
+	playerTradeSlots = 0x90
+	playerItems      = 0xA8
 
 	currencyKey      = 0x10
 	currencyQuantity = 0x18
@@ -29,6 +29,12 @@ const (
 	itemSaveUniqueID = 0x18
 	slotIndex        = 0x10
 	slotUniqueID     = 0x18
+	slotIsUnlock     = 0x20
+	slotIsRuneUnlock = 0x21
+
+	playerSerializedBoxData = 0x20
+	sBoxDataBoxTypes        = 0x10
+	sBoxDataBoxQuantity     = 0x20
 
 	maxClassRefs = 50000
 )
@@ -42,6 +48,10 @@ type Memory interface {
 
 type multiPatternMemory interface {
 	ScanPatterns(patterns [][]byte, maxResults int) ([][]uintptr, uint64)
+}
+
+type byteMemory interface {
+	ReadBytes(address uintptr, destination []byte) bool
 }
 
 type Resolver struct {
@@ -291,14 +301,18 @@ func (resolver *Resolver) readObjectWithLayout(memory Memory, object uintptr, no
 	}
 
 	var owned []OwnedItem
+	var inventorySlots InventorySlotSummary
 	stashPageCount := 0
 	seen := make(map[uint64]struct{})
 	if stash := readObjectListInfo(memory, object, layout.stashOffset, 200000); stash.ok {
 		stashPageCount = pageCountForSlotCount(stash.size)
 		owned = append(owned, resolver.readSlotItemsWithLayout(memory, stash, uniqueToItem, seen, LocationStash, layout)...)
 	}
-	if inventory := readObjectListInfo(memory, object, layout.inventoryOffset, 200000); inventory.ok {
-		owned = append(owned, resolver.readSlotItemsWithLayout(memory, inventory, uniqueToItem, seen, LocationInventory, layout)...)
+	if inventory, inventoryLayout, inventorySource, ok := resolver.readInventorySaveDataList(memory, object, layout); ok {
+		inventoryItems := resolver.readSlotItemsWithLayout(memory, inventory.info, uniqueToItem, seen, LocationInventory, inventoryLayout)
+		inventorySlots = readInventorySlotSummaryWithLayout(memory, inventory.info, inventoryLayout)
+		inventorySlots.Source = inventorySource
+		owned = append(owned, inventoryItems...)
 	}
 	// Storage slots are the stronger current-location signal when a save-backed hero
 	// equipped array lags after an unequip.
@@ -321,7 +335,59 @@ func (resolver *Resolver) readObjectWithLayout(memory Memory, object uintptr, no
 		}
 	}
 
-	return InventorySnapshot{ReadAt: now, Gold: gold, StashPageCount: stashPageCount, Items: owned, TradeSlots: tradeSlots}, true
+	return InventorySnapshot{
+		ReadAt:          now,
+		Gold:            gold,
+		StashPageCount:  stashPageCount,
+		InventorySlots:  inventorySlots,
+		ChestAutomation: resolver.readChestAutomationWithLayout(memory, object, layout),
+		ChestCounts:     readChestCounts(memory, object),
+		Items:           owned,
+		TradeSlots:      tradeSlots,
+	}, true
+}
+
+func readChestCounts(memory Memory, object uintptr) ChestCounts {
+	sBoxDataPtr := readPtr(memory, object+playerSerializedBoxData)
+	if sBoxDataPtr == 0 {
+		return ChestCounts{}
+	}
+	boxTypesPtr := readPtr(memory, sBoxDataPtr+sBoxDataBoxTypes)
+	boxQtyPtr := readPtr(memory, sBoxDataPtr+sBoxDataBoxQuantity)
+	if boxTypesPtr == 0 || boxQtyPtr == 0 {
+		return ChestCounts{}
+	}
+	typesInfo := readListInfo(memory, boxTypesPtr, 200)
+	qtyInfo := readListInfo(memory, boxQtyPtr, 200)
+	if !typesInfo.ok || !qtyInfo.ok || typesInfo.size == 0 {
+		return ChestCounts{}
+	}
+	normal, stage := 0, 0
+	for i := 0; i < typesInfo.size; i++ {
+		boxType, ok := memory.ReadInt32(typesInfo.arrayPtr + il2cpp.ArrayDataOffset + uintptr(i)*4)
+		if !ok {
+			continue
+		}
+		qty := int32(1)
+		if i < qtyInfo.size {
+			if q, ok := memory.ReadInt32(qtyInfo.arrayPtr + il2cpp.ArrayDataOffset + uintptr(i)*4); ok {
+				qty = q
+			}
+		}
+		if qty <= 0 {
+			continue
+		}
+		if boxType == 0 {
+			normal += int(qty)
+		} else if boxType == 1 {
+			stage += int(qty)
+		}
+	}
+	return ChestCounts{
+		NormalChests: normal,
+		StageChests:  stage,
+		TotalChests:  normal + stage,
+	}
 }
 
 func pageCountForSlotCount(slotCount int) int {
@@ -341,6 +407,67 @@ func readObjectListInfo(memory Memory, object uintptr, offset uintptr, maxAllowe
 		return listInfo{}
 	}
 	return readListInfo(memory, readPtr(memory, object+offset), maxAllowed)
+}
+
+func (resolver *Resolver) readInventorySaveDataList(memory Memory, object uintptr, layout saveDataLayout) (objectListCandidate, saveDataLayout, string, bool) {
+	if list, ok := resolver.findInventorySaveDataList(memory, object); ok {
+		inventoryLayout := layout
+		inventoryLayout.slotUniqueIDOffset = slotUniqueID
+		inventoryLayout.slotIndexOffset = 0
+		return list, inventoryLayout, "InventorySaveData", true
+	}
+	info := readObjectListInfo(memory, object, layout.inventoryOffset, 200000)
+	if !info.ok {
+		return objectListCandidate{}, layout, "", false
+	}
+	return objectListCandidate{offset: layout.inventoryOffset, info: info}, layout, "layout", true
+}
+
+func (resolver *Resolver) findInventorySaveDataList(memory Memory, object uintptr) (objectListCandidate, bool) {
+	classes, ok := resolver.resolveClassByName(memory, "InventorySaveData")
+	if !ok {
+		return objectListCandidate{}, false
+	}
+	classSet := make(map[uintptr]struct{}, len(classes))
+	for _, classPtr := range classes {
+		classSet[classPtr] = struct{}{}
+	}
+
+	if direct := readObjectListInfo(memory, object, playerInventory, 200000); direct.ok {
+		matches := countListObjectsWithClass(memory, direct, classSet)
+		if matches > 0 {
+			return objectListCandidate{offset: playerInventory, info: direct}, true
+		}
+	}
+
+	var best objectListCandidate
+	bestMatches := 0
+	for _, list := range discoverObjectLists(memory, object) {
+		matches := countListObjectsWithClass(memory, list.info, classSet)
+		if matches > bestMatches || (matches == bestMatches && matches > 0 && list.offset == playerInventory) {
+			best = list
+			bestMatches = matches
+		}
+	}
+	return best, bestMatches > 0
+}
+
+func countListObjectsWithClass(memory Memory, list listInfo, classes map[uintptr]struct{}) int {
+	if !list.ok || list.size <= 0 || len(classes) == 0 {
+		return 0
+	}
+	matches := 0
+	limit := sampleLimit(list.size, 5000)
+	for index := 0; index < limit; index++ {
+		object, ok := listObjectAt(memory, list, index)
+		if !ok {
+			continue
+		}
+		if objectHasAnyClass(memory, object, classes) {
+			matches++
+		}
+	}
+	return matches
 }
 
 func readListInfo(memory Memory, listPtr uintptr, maxAllowed int) listInfo {

@@ -361,6 +361,19 @@ func GetDashboardFooterInfo() DashboardFooterInfo {
 	}
 }
 
+func CheckForUpdates() DashboardFooterInfo {
+	status := activeApp.updateStatus.Load()
+	if status == UpdateStatusChecking || status == UpdateStatusDownloading {
+		return GetDashboardFooterInfo()
+	}
+	setUpdateState(UpdateStatusChecking, "", "", "")
+	go func() {
+		fmt.Println("Running dashboard update check...")
+		checkForUpdates(false)
+	}()
+	return GetDashboardFooterInfo()
+}
+
 func InstallAvailableUpdate() bool {
 	return installAvailableUpdate()
 }

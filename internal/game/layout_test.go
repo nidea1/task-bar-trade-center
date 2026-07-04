@@ -158,6 +158,12 @@ func TestParseGameLayoutValidatesOffsetsAndPlacementCalibrations(t *testing.T) {
 	if !layout.TooltipXPointerBaseAOB.configured() || !layout.TooltipYPointerBaseAOB.configured() || !layout.TooltipHeightPointerBaseAOB.configured() {
 		t.Fatal("tooltip AOB pattern was not parsed")
 	}
+	if layout.ChestTiming.CommonChestDropSeconds != 240 || layout.ChestTiming.StageChestDropSeconds != 360 {
+		t.Fatalf("chest drop timing = common %d stage %d, want 240/360", layout.ChestTiming.CommonChestDropSeconds, layout.ChestTiming.StageChestDropSeconds)
+	}
+	if layout.ChestTiming.CommonChestBaseAutoOpenSeconds != 300 || layout.ChestTiming.StageChestBaseAutoOpenSeconds != 600 {
+		t.Fatalf("chest auto-open timing = common %d stage %d, want 300/600", layout.ChestTiming.CommonChestBaseAutoOpenSeconds, layout.ChestTiming.StageChestBaseAutoOpenSeconds)
+	}
 }
 
 func TestParseGameLayoutAcceptsLegacyWidthConfiguration(t *testing.T) {
@@ -171,6 +177,26 @@ func TestParseGameLayoutAcceptsLegacyWidthConfiguration(t *testing.T) {
 
 	if _, err := ParseGameLayout([]byte(legacyLayout)); err != nil {
 		t.Fatalf("ParseGameLayout rejected a legacy width configuration: %v", err)
+	}
+}
+
+func TestParseGameLayoutAcceptsMissingChestTiming(t *testing.T) {
+	var doc map[string]any
+	if err := json.Unmarshal(EmbeddedLayoutJSON(), &doc); err != nil {
+		t.Fatalf("failed to unmarshal embedded layout: %v", err)
+	}
+	delete(doc, "chest_timing")
+	raw, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatalf("failed to marshal layout without chest timing: %v", err)
+	}
+
+	layout, err := ParseGameLayout(raw)
+	if err != nil {
+		t.Fatalf("ParseGameLayout rejected missing chest_timing: %v", err)
+	}
+	if layout.ChestTiming != (ChestTiming{}) {
+		t.Fatalf("missing chest_timing = %+v, want zero timing for app defaults", layout.ChestTiming)
 	}
 }
 
@@ -216,6 +242,20 @@ func TestParseGameLayoutRejectsUnsupportedAndIncompleteDocuments(t *testing.T) {
 					t.Fatal("hovered_item not found or not a map")
 				}
 				hovered["pointer_offsets"] = []any{}
+			}),
+		},
+		{
+			name: "negative chest timing",
+			raw: modifyLayoutJSON(func(m map[string]any) {
+				chestTiming, ok := m["chest_timing"].(map[string]any)
+				if !ok {
+					t.Fatal("chest_timing not found or not a map")
+				}
+				commonChest, ok := chestTiming["common_chest"].(map[string]any)
+				if !ok {
+					t.Fatal("chest_timing.common_chest not found or not a map")
+				}
+				commonChest["drop_seconds"] = -1
 			}),
 		},
 	}

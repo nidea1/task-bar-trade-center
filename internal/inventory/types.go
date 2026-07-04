@@ -100,6 +100,50 @@ type RefreshStatus struct {
 	LastFinishedAt            string `json:"last_finished_at,omitempty"`
 }
 
+type ChestDropSchedule struct {
+	NextCommonDropSeconds int  `json:"next_common_drop_seconds"`
+	NextStageDropSeconds  int  `json:"next_stage_drop_seconds"`
+	CommonDropObserved    bool `json:"common_drop_observed"`
+	StageDropObserved     bool `json:"stage_drop_observed"`
+	CommonDropReady       bool `json:"common_drop_ready"`
+	StageDropReady        bool `json:"stage_drop_ready"`
+}
+
+type ChestTimingConfig struct {
+	CommonDropSeconds         int `json:"common_drop_seconds"`
+	StageDropSeconds          int `json:"stage_drop_seconds"`
+	CommonBaseAutoOpenSeconds int `json:"common_base_auto_open_seconds"`
+	StageBaseAutoOpenSeconds  int `json:"stage_base_auto_open_seconds"`
+}
+
+type InventoryFillEstimate struct {
+	Available                  bool    `json:"available"`
+	Fills                      bool    `json:"fills"`
+	FillModel                  string  `json:"fill_model"`
+	SlotCount                  int     `json:"slot_count"`
+	UsedSlots                  int     `json:"used_slots"`
+	FreeSlots                  int     `json:"free_slots"`
+	CommonDropSeconds          int     `json:"common_drop_seconds"`
+	StageDropSeconds           int     `json:"stage_drop_seconds"`
+	NextCommonDropSeconds      int     `json:"next_common_drop_seconds"`
+	NextStageDropSeconds       int     `json:"next_stage_drop_seconds"`
+	CommonAutoOpenSeconds      int     `json:"common_auto_open_seconds"`
+	StageAutoOpenSeconds       int     `json:"stage_auto_open_seconds"`
+	CommonRuneReductionSeconds int     `json:"common_rune_reduction_seconds"`
+	StageRuneReductionSeconds  int     `json:"stage_rune_reduction_seconds"`
+	NetFillPerHour             float64 `json:"net_fill_per_hour"`
+	TimeToFullSeconds          int     `json:"time_to_full_seconds"`
+	RuneResolved               bool    `json:"rune_resolved"`
+	HasCommonAutoOpenRune      bool    `json:"has_common_auto_open_rune"`
+	HasStageAutoOpenRune       bool    `json:"has_stage_auto_open_rune"`
+	CommonDropObserved         bool    `json:"common_drop_observed"`
+	StageDropObserved          bool    `json:"stage_drop_observed"`
+	CommonDropReady            bool    `json:"common_drop_ready"`
+	StageDropReady             bool    `json:"stage_drop_ready"`
+	CommonChestCount           int     `json:"common_chest_count"`
+	StageChestCount            int     `json:"stage_chest_count"`
+}
+
 type DashboardState struct {
 	UpdatedAt      string                     `json:"updated_at"`
 	SnapshotReadAt string                     `json:"snapshot_read_at"`
@@ -118,4 +162,6 @@ type DashboardState struct {
 	Refresh        RefreshStatus              `json:"refresh"`
 	Translations   map[string]string          `json:"translations"`
 	TradeSlots     []playerdata.TradeShipSlot `json:"trade_slots"`
+	InventoryFill  InventoryFillEstimate      `json:"inventory_fill"`
+	ChestCounts    playerdata.ChestCounts     `json:"chest_counts"`
 }

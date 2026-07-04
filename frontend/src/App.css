@@ -728,9 +728,28 @@
 .dashboard-footer-update {
   max-width: 260px;
   color: #caa66a;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  transition: color 140ms ease;
 }
 
 .dashboard-footer-update.has-update {
+  color: #ffbe2d;
+}
+
+.dashboard-footer-update:hover:not(:disabled),
+.dashboard-footer-update:focus-visible {
+  color: #ffbe2d;
+  outline: none;
+}
+
+.dashboard-footer-update:disabled {
+  cursor: default;
+}
+
+.dashboard-footer-update.is-busy {
   color: #ffbe2d;
 }
 
@@ -1591,7 +1610,7 @@
 
 @media (min-width: 900px) {
   .metrics-grid {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 }
 
@@ -2418,6 +2437,12 @@
   color: #a15c07;
 }
 
+.theme-light .dashboard-footer-update:hover:not(:disabled),
+.theme-light .dashboard-footer-update:focus-visible,
+.theme-light .dashboard-footer-update.is-busy {
+  color: #a15c07;
+}
+
 .theme-light .dashboard-footer-sync {
   color: #64748b;
 }
@@ -2849,6 +2874,98 @@
 .theme-light .game-dropdown-menu button[data-has-color="true"],
 .theme-light .game-dropdown-menu button[data-has-color="true"]:hover {
   color: var(--option-color, var(--raw-option-color)) !important;
+}
+
+/* ═══ Inventory Fill Tooltip Rework ═══ */
+
+.inventory-fill-tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 260px;
+  max-width: 285px;
+}
+
+.tooltip-config-card {
+  background-color: rgba(3, 3, 4, 0.6);
+  border: 1px solid #2d261f;
+  padding: 0.375rem;
+  border-radius: 4px;
+}
+
+.theme-light .tooltip-config-card {
+  background-color: rgba(240, 244, 248, 0.65);
+  border-color: #cbd5df;
+}
+
+.tooltip-badge-rune {
+  background-color: #1a1520;
+  border: 1px solid rgba(255, 190, 45, 0.2);
+  color: #ffbe2d;
+}
+
+.theme-light .tooltip-badge-rune {
+  background-color: #fef3c7;
+  border-color: rgba(217, 119, 6, 0.3);
+  color: #b45309;
+}
+
+.tooltip-badge-observed {
+  background-color: #0f2d1e;
+  border: 1px solid rgba(84, 220, 94, 0.3);
+  color: #54dc5e;
+}
+
+.theme-light .tooltip-badge-observed {
+  background-color: #dcfce7;
+  border-color: rgba(22, 163, 74, 0.3);
+  color: #16a34a;
+}
+
+.tooltip-badge-default {
+  background-color: #2b1f15;
+  border: 1px solid rgba(232, 126, 48, 0.3);
+  color: #e87e30;
+}
+
+.theme-light .tooltip-badge-default {
+  background-color: #ffedd5;
+  border-color: rgba(234, 88, 12, 0.3);
+  color: #ea580c;
+}
+
+/* --- Down-Left Tooltip Direction Support --- */
+
+.metric-tooltip-down-left {
+  top: 100%;
+  right: 0;
+  left: auto;
+  transform: none;
+  margin-top: 0.625rem;
+}
+
+.metric-tooltip-down-left .metric-tooltip-arrow {
+  left: auto;
+  right: 20px;
+  transform: none;
+}
+
+.metric-tooltip-down-left .metric-tooltip-arrow-outer {
+  bottom: 100%;
+  border-bottom: 8px solid #463d30;
+}
+
+.metric-tooltip-down-left .metric-tooltip-arrow-inner {
+  bottom: calc(100% - 2px);
+  border-bottom: 6px solid #0d0b12;
+}
+
+.theme-light .metric-tooltip-down-left .metric-tooltip-arrow-outer {
+  border-bottom-color: #cbd5df;
+}
+
+.theme-light .metric-tooltip-down-left .metric-tooltip-arrow-inner {
+  border-bottom-color: #ffffff;
 }
 
 

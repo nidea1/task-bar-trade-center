@@ -30,6 +30,17 @@ func (memory fakeMemory) ReadInt32(address uintptr) (int32, bool) {
 	return value, ok
 }
 
+func (memory fakeMemory) ReadBytes(address uintptr, destination []byte) bool {
+	for index := range destination {
+		value, ok := memory.ints[address+uintptr(index)]
+		if !ok {
+			return false
+		}
+		destination[index] = byte(value)
+	}
+	return true
+}
+
 func (memory fakeMemory) ScanPattern(pattern []byte, _ int) ([]uintptr, uint64) {
 	return memory.patterns[string(pattern)], 0
 }
@@ -143,6 +154,382 @@ func TestResolverPrefersSlotLocationOverStaleEquippedReference(t *testing.T) {
 	item, ok := findOwnedItem(snapshot.Items, 300)
 	if !ok || item.Location != LocationInventory {
 		t.Fatalf("item = %+v, ok=%v, want inventory location", item, ok)
+	}
+}
+
+func TestResolverReadsInventorySlotSummary(t *testing.T) {
+	nameAddr := uintptr(0x215000)
+	classPtr := uintptr(0x315000)
+	object := uintptr(0x415000)
+	mem := fakeMemory{
+		ptrs:     make(map[uintptr]uintptr),
+		ints:     make(map[uintptr]int32),
+		uints:    make(map[uintptr]uint64),
+		patterns: make(map[string][]uintptr),
+	}
+	writeClass(mem, "PlayerSaveData", nameAddr, classPtr, object)
+
+	itemsList, itemsArray := uintptr(0x5E0000), uintptr(0x5F0000)
+	inventoryList, inventoryArray := uintptr(0x600000), uintptr(0x601000)
+	mem.ptrs[object+playerItems] = itemsList
+	mem.ptrs[object+playerInventory] = inventoryList
+	writeList(mem, itemsList, itemsArray, 3)
+	writeList(mem, inventoryList, inventoryArray, 3)
+
+	writeItem(mem, itemsArray, 0, 100, 1000)
+	writeItem(mem, itemsArray, 1, 200, 2000)
+	writeItem(mem, itemsArray, 2, 300, 3000)
+	writeSlot(mem, inventoryArray, 0, 0x602000, 1000)
+
+	resolver := NewResolver(map[int]ItemMetadata{
+		100: {Marketable: true},
+		200: {Marketable: true},
+		300: {Marketable: true},
+	})
+	snapshot, ok := resolver.ReadSnapshotCore(mem, time.Unix(1700000000, 0))
+	if !ok {
+		t.Fatal("expected snapshot")
+	}
+	if snapshot.InventorySlots.Total != 3 || snapshot.InventorySlots.Used != 1 || snapshot.InventorySlots.Free != 2 {
+		t.Fatalf("inventory slots = %+v, want total=3 used=1 free=2", snapshot.InventorySlots)
+	}
+	if snapshot.InventorySlots.EmptySlotRanges != "1-2" {
+		t.Fatalf("empty slot ranges = %q, want 1-2", snapshot.InventorySlots.EmptySlotRanges)
+	}
+	if snapshot.InventorySlots.Source != "layout" {
+		t.Fatalf("inventory slot source = %q, want layout", snapshot.InventorySlots.Source)
+	}
+}
+
+func TestResolverCountsUnknownFilledInventorySlots(t *testing.T) {
+	nameAddr := uintptr(0x215800)
+	classPtr := uintptr(0x315800)
+	object := uintptr(0x415800)
+	mem := fakeMemory{
+		ptrs:     make(map[uintptr]uintptr),
+		ints:     make(map[uintptr]int32),
+		uints:    make(map[uintptr]uint64),
+		patterns: make(map[string][]uintptr),
+	}
+	writeClass(mem, "PlayerSaveData", nameAddr, classPtr, object)
+
+	itemsList, itemsArray := uintptr(0x61A000), uintptr(0x61B000)
+	inventoryList, inventoryArray := uintptr(0x61C000), uintptr(0x61D000)
+	mem.ptrs[object+playerItems] = itemsList
+	mem.ptrs[object+playerInventory] = inventoryList
+	writeList(mem, itemsList, itemsArray, 4)
+	writeList(mem, inventoryList, inventoryArray, 4)
+
+	writeItem(mem, itemsArray, 0, 100, 1000)
+	writeItem(mem, itemsArray, 1, 200, 2000)
+	writeItem(mem, itemsArray, 2, 300, 3000)
+	writeItem(mem, itemsArray, 3, 999, 9990)
+	writeSlot(mem, inventoryArray, 0, 0x61E000, 1000)
+	writeSlot(mem, inventoryArray, 1, 0x61F000, 9990)
+
+	resolver := NewResolver(map[int]ItemMetadata{
+		100: {Marketable: true},
+		200: {Marketable: true},
+		300: {Marketable: true},
+	})
+	snapshot, ok := resolver.ReadSnapshotCore(mem, time.Unix(1700000000, 0))
+	if !ok {
+		t.Fatal("expected snapshot")
+	}
+	if snapshot.InventorySlots.Total != 4 || snapshot.InventorySlots.Used != 2 || snapshot.InventorySlots.Free != 2 {
+		t.Fatalf("inventory slots = %+v, want total=4 used=2 free=2", snapshot.InventorySlots)
+	}
+	if snapshot.InventorySlots.EmptySlotRanges != "2-3" {
+		t.Fatalf("empty slot ranges = %q, want 2-3", snapshot.InventorySlots.EmptySlotRanges)
+	}
+	if len(snapshot.Items) != 1 {
+		t.Fatalf("known inventory items = %+v, want only metadata-backed item exposed", snapshot.Items)
+	}
+}
+
+func TestResolverUsesCurrentInventorySlotsOffsetInsteadOfStash(t *testing.T) {
+	nameAddr := uintptr(0x215A00)
+	classPtr := uintptr(0x315A00)
+	object := uintptr(0x415A00)
+	mem := fakeMemory{
+		ptrs:     make(map[uintptr]uintptr),
+		ints:     make(map[uintptr]int32),
+		uints:    make(map[uintptr]uint64),
+		patterns: make(map[string][]uintptr),
+	}
+	writeClass(mem, "PlayerSaveData", nameAddr, classPtr, object)
+
+	itemsList, itemsArray := uintptr(0x620000), uintptr(0x621000)
+	inventoryList, inventoryArray := uintptr(0x622000), uintptr(0x623000)
+	stashList, stashArray := uintptr(0x624000), uintptr(0x625000)
+	mem.ptrs[object+0x80] = inventoryList
+	mem.ptrs[object+0x88] = stashList
+	mem.ptrs[object+0xA8] = itemsList
+	writeList(mem, itemsList, itemsArray, 3)
+	writeList(mem, inventoryList, inventoryArray, 104)
+	writeList(mem, stashList, stashArray, 260)
+
+	writeItem(mem, itemsArray, 0, 100, 1000)
+	writeItem(mem, itemsArray, 1, 200, 2000)
+	writeItem(mem, itemsArray, 2, 300, 3000)
+	writeSlot(mem, inventoryArray, 0, 0x626000, 1000)
+	writeSlot(mem, stashArray, 0, 0x627000, 2000)
+
+	resolver := NewResolver(map[int]ItemMetadata{
+		100: {Marketable: true},
+		200: {Marketable: true},
+		300: {Marketable: true},
+	})
+	snapshot, ok := resolver.ReadSnapshotCore(mem, time.Unix(1700000000, 0))
+	if !ok {
+		t.Fatal("expected snapshot")
+	}
+	if snapshot.InventorySlots.Total != 104 {
+		t.Fatalf("inventory total slots = %d, want 104", snapshot.InventorySlots.Total)
+	}
+	if snapshot.InventorySlots.Free != 103 {
+		t.Fatalf("inventory free slots = %d, want 103", snapshot.InventorySlots.Free)
+	}
+	stashItem, ok := findOwnedItem(snapshot.Items, 200)
+	if !ok || stashItem.Location != LocationStash {
+		t.Fatalf("stash item = %+v, ok=%v, want item 200 in stash", stashItem, ok)
+	}
+	inventoryItem, ok := findOwnedItem(snapshot.Items, 100)
+	if !ok || inventoryItem.Location != LocationInventory {
+		t.Fatalf("inventory item = %+v, ok=%v, want item 100 in inventory", inventoryItem, ok)
+	}
+}
+
+func TestResolverReadsInventorySlotsFromInventorySaveDataClass(t *testing.T) {
+	nameAddr := uintptr(0x215C00)
+	classPtr := uintptr(0x315C00)
+	inventoryNameAddr := uintptr(0x216C00)
+	inventoryClassPtr := uintptr(0x316C00)
+	object := uintptr(0x415C00)
+	mem := fakeMemory{
+		ptrs:     make(map[uintptr]uintptr),
+		ints:     make(map[uintptr]int32),
+		uints:    make(map[uintptr]uint64),
+		patterns: make(map[string][]uintptr),
+	}
+	writeClass(mem, "PlayerSaveData", nameAddr, classPtr, object)
+	writeClass(mem, "InventorySaveData", inventoryNameAddr, inventoryClassPtr)
+
+	itemsList, itemsArray := uintptr(0x620000), uintptr(0x621000)
+	inventoryList, inventoryArray := uintptr(0x622000), uintptr(0x623000)
+	mem.ptrs[object+playerItems] = itemsList
+	mem.ptrs[object+0xB8] = inventoryList
+	writeList(mem, itemsList, itemsArray, 3)
+	writeList(mem, inventoryList, inventoryArray, 4)
+
+	writeItem(mem, itemsArray, 0, 100, 1000)
+	writeItem(mem, itemsArray, 1, 200, 2000)
+	writeItem(mem, itemsArray, 2, 300, 3000)
+	writeInventorySaveSlot(mem, inventoryArray, 0, 0x624000, inventoryClassPtr, 1000)
+	writeInventorySaveSlot(mem, inventoryArray, 1, 0x625000, inventoryClassPtr, 0)
+	writeInventorySaveSlot(mem, inventoryArray, 2, 0x626000, inventoryClassPtr, 3000)
+	writeInventorySaveSlot(mem, inventoryArray, 3, 0x627000, inventoryClassPtr, 0)
+
+	resolver := NewResolver(map[int]ItemMetadata{
+		100: {Marketable: true},
+		200: {Marketable: true},
+		300: {Marketable: true},
+	})
+	snapshot, ok := resolver.ReadSnapshotCore(mem, time.Unix(1700000000, 0))
+	if !ok {
+		t.Fatal("expected snapshot")
+	}
+	if snapshot.InventorySlots.Total != 4 || snapshot.InventorySlots.Used != 2 || snapshot.InventorySlots.Free != 2 {
+		t.Fatalf("inventory slots = %+v, want total=4 used=2 free=2", snapshot.InventorySlots)
+	}
+	if snapshot.InventorySlots.EmptySlotRanges != "1,3" {
+		t.Fatalf("empty slot ranges = %q, want 1,3", snapshot.InventorySlots.EmptySlotRanges)
+	}
+	if snapshot.InventorySlots.Source != "InventorySaveData" {
+		t.Fatalf("inventory slot source = %q, want InventorySaveData", snapshot.InventorySlots.Source)
+	}
+	if item, ok := findOwnedItem(snapshot.Items, 300); !ok || item.Location != LocationInventory {
+		t.Fatalf("inventory item = %+v, ok=%v, want item 300 from InventorySaveData list", item, ok)
+	}
+}
+
+func TestResolverCountsOnlyUnlockedInventorySaveSlots(t *testing.T) {
+	nameAddr := uintptr(0x215D00)
+	classPtr := uintptr(0x315D00)
+	inventoryNameAddr := uintptr(0x216D00)
+	inventoryClassPtr := uintptr(0x316D00)
+	object := uintptr(0x415D00)
+	mem := fakeMemory{
+		ptrs:     make(map[uintptr]uintptr),
+		ints:     make(map[uintptr]int32),
+		uints:    make(map[uintptr]uint64),
+		patterns: make(map[string][]uintptr),
+	}
+	writeClass(mem, "PlayerSaveData", nameAddr, classPtr, object)
+	writeClass(mem, "InventorySaveData", inventoryNameAddr, inventoryClassPtr)
+
+	itemsList, itemsArray := uintptr(0x628000), uintptr(0x629000)
+	inventoryList, inventoryArray := uintptr(0x62A000), uintptr(0x62B000)
+	mem.ptrs[object+playerItems] = itemsList
+	mem.ptrs[object+playerInventory] = inventoryList
+	writeList(mem, itemsList, itemsArray, 3)
+	writeList(mem, inventoryList, inventoryArray, 260)
+
+	writeItem(mem, itemsArray, 0, 100, 1000)
+	writeItem(mem, itemsArray, 1, 200, 2000)
+	writeItem(mem, itemsArray, 2, 300, 3000)
+	for index := 0; index < 260; index++ {
+		uniqueID := uint64(0)
+		if index == 0 {
+			uniqueID = 1000
+		}
+		writeInventorySaveSlotWithUnlock(mem, inventoryArray, index, 0x630000+uintptr(index*0x100), inventoryClassPtr, uniqueID, index < 104, false)
+	}
+
+	resolver := NewResolver(map[int]ItemMetadata{
+		100: {Marketable: true},
+		200: {Marketable: true},
+		300: {Marketable: true},
+	})
+	snapshot, ok := resolver.ReadSnapshotCore(mem, time.Unix(1700000000, 0))
+	if !ok {
+		t.Fatal("expected snapshot")
+	}
+	if snapshot.InventorySlots.Total != 104 || snapshot.InventorySlots.BackingTotal != 260 {
+		t.Fatalf("inventory totals = %+v, want total=104 backing_total=260", snapshot.InventorySlots)
+	}
+	if snapshot.InventorySlots.Used != 1 || snapshot.InventorySlots.Free != 103 {
+		t.Fatalf("inventory slots = %+v, want used=1 free=103", snapshot.InventorySlots)
+	}
+	if snapshot.InventorySlots.EmptySlotRanges != "1-103" {
+		t.Fatalf("empty slot ranges = %q, want 1-103", snapshot.InventorySlots.EmptySlotRanges)
+	}
+}
+
+func TestResolverReadsChestAutomationRuneReductions(t *testing.T) {
+	nameAddr := uintptr(0x216000)
+	classPtr := uintptr(0x316000)
+	runeNameAddr := uintptr(0x216800)
+	runeClassPtr := uintptr(0x316800)
+	object := uintptr(0x416000)
+	mem := fakeMemory{
+		ptrs:     make(map[uintptr]uintptr),
+		ints:     make(map[uintptr]int32),
+		uints:    make(map[uintptr]uint64),
+		patterns: make(map[string][]uintptr),
+	}
+	writeClass(mem, "PlayerSaveData", nameAddr, classPtr, object)
+	writeClass(mem, "RuneSaveData", runeNameAddr, runeClassPtr)
+
+	itemsList, itemsArray := uintptr(0x603000), uintptr(0x604000)
+	inventoryList, inventoryArray := uintptr(0x605000), uintptr(0x606000)
+	runeList, runeArray := uintptr(0x607000), uintptr(0x608000)
+	mem.ptrs[object+playerItems] = itemsList
+	mem.ptrs[object+playerInventory] = inventoryList
+	mem.ptrs[object+0xB8] = runeList
+	writeList(mem, itemsList, itemsArray, 3)
+	writeList(mem, inventoryList, inventoryArray, 1)
+	writeList(mem, runeList, runeArray, 8)
+
+	writeItem(mem, itemsArray, 0, 100, 1000)
+	writeItem(mem, itemsArray, 1, 200, 2000)
+	writeItem(mem, itemsArray, 2, 300, 3000)
+	writeSlot(mem, inventoryArray, 0, 0x609000, 1000)
+	writeRuneSave(mem, runeArray, 0, 0x60A000, runeClassPtr, 130021, 3)
+	writeRuneSave(mem, runeArray, 1, 0x60B000, runeClassPtr, 190301, 5)
+	writeRuneSave(mem, runeArray, 2, 0x60C000, runeClassPtr, 190501, 5)
+	writeRuneSave(mem, runeArray, 3, 0x60D000, runeClassPtr, 1905011, 5)
+	writeRuneSave(mem, runeArray, 4, 0x60E000, runeClassPtr, 150011, 3)
+	writeRuneSave(mem, runeArray, 5, 0x60F000, runeClassPtr, 1905021, 5)
+	writeRuneSave(mem, runeArray, 6, 0x610000, runeClassPtr, 190502, 5)
+	writeRuneSave(mem, runeArray, 7, 0x611000, runeClassPtr, 190302, 5)
+
+	resolver := NewResolver(map[int]ItemMetadata{
+		100: {Marketable: true},
+		200: {Marketable: true},
+		300: {Marketable: true},
+	})
+	snapshot, ok := resolver.ReadSnapshotCore(mem, time.Unix(1700000000, 0))
+	if !ok {
+		t.Fatal("expected snapshot")
+	}
+	if snapshot.ChestAutomation.CommonRuneReductionSeconds != 39 {
+		t.Fatalf("common reduction = %d, want 39", snapshot.ChestAutomation.CommonRuneReductionSeconds)
+	}
+	if snapshot.ChestAutomation.StageRuneReductionSeconds != 75 {
+		t.Fatalf("stage reduction = %d, want 75", snapshot.ChestAutomation.StageRuneReductionSeconds)
+	}
+	if !snapshot.ChestAutomation.RuneResolved {
+		t.Fatalf("rune reductions were not fully resolved: %+v", snapshot.ChestAutomation.Diagnostics)
+	}
+	if !snapshot.ChestAutomation.HasCommonAutoOpenRune {
+		t.Fatal("expected HasCommonAutoOpenRune to be true")
+	}
+	if !snapshot.ChestAutomation.HasStageAutoOpenRune {
+		t.Fatal("expected HasStageAutoOpenRune to be true")
+	}
+	wantCommonBuffs := "130021 lv3 -9s,190301 lv5 -10s,190501 lv5 -10s,1905011 lv5 -10s"
+	if snapshot.ChestAutomation.CommonReductionBuffSummary != wantCommonBuffs {
+		t.Fatalf("common buff summary = %q, want %q", snapshot.ChestAutomation.CommonReductionBuffSummary, wantCommonBuffs)
+	}
+	wantStageBuffs := "150011 lv3 -15s,190302 lv5 -20s,190502 lv5 -20s,1905021 lv5 -20s"
+	if snapshot.ChestAutomation.StageReductionBuffSummary != wantStageBuffs {
+		t.Fatalf("stage buff summary = %q, want %q", snapshot.ChestAutomation.StageReductionBuffSummary, wantStageBuffs)
+	}
+	wantBuffs := "common:130021 lv3 -9s,190301 lv5 -10s,190501 lv5 -10s,1905011 lv5 -10s; stage:150011 lv3 -15s,190302 lv5 -20s,190502 lv5 -20s,1905021 lv5 -20s"
+	if snapshot.ChestAutomation.ReductionBuffSummary != wantBuffs {
+		t.Fatalf("buff summary = %q, want %q", snapshot.ChestAutomation.ReductionBuffSummary, wantBuffs)
+	}
+}
+
+func TestResolverIgnoresNonRuneSaveDataStageOffset(t *testing.T) {
+	nameAddr := uintptr(0x217000)
+	classPtr := uintptr(0x317000)
+	runeNameAddr := uintptr(0x217800)
+	runeClassPtr := uintptr(0x317800)
+	object := uintptr(0x417000)
+	mem := fakeMemory{
+		ptrs:     make(map[uintptr]uintptr),
+		ints:     make(map[uintptr]int32),
+		uints:    make(map[uintptr]uint64),
+		patterns: make(map[string][]uintptr),
+	}
+	writeClass(mem, "PlayerSaveData", nameAddr, classPtr, object)
+	writeClass(mem, "RuneSaveData", runeNameAddr, runeClassPtr)
+
+	itemsList, itemsArray := uintptr(0x612000), uintptr(0x613000)
+	inventoryList, inventoryArray := uintptr(0x614000), uintptr(0x615000)
+	legacyLikeList, legacyLikeArray := uintptr(0x616000), uintptr(0x617000)
+	legacyLikeRune := uintptr(0x618000)
+	mem.ptrs[object+playerItems] = itemsList
+	mem.ptrs[object+playerInventory] = inventoryList
+	mem.ptrs[object+0xB8] = legacyLikeList
+	writeList(mem, itemsList, itemsArray, 3)
+	writeList(mem, inventoryList, inventoryArray, 1)
+	writeList(mem, legacyLikeList, legacyLikeArray, 1)
+
+	writeItem(mem, itemsArray, 0, 100, 1000)
+	writeItem(mem, itemsArray, 1, 200, 2000)
+	writeItem(mem, itemsArray, 2, 300, 3000)
+	writeSlot(mem, inventoryArray, 0, 0x619000, 1000)
+	mem.ptrs[legacyLikeArray+il2cpp.ArrayDataOffset] = legacyLikeRune
+	mem.ints[legacyLikeRune+0x10] = 130021
+	mem.ints[legacyLikeRune+0x18] = 3
+
+	resolver := NewResolver(map[int]ItemMetadata{
+		100: {Marketable: true},
+		200: {Marketable: true},
+		300: {Marketable: true},
+	})
+	snapshot, ok := resolver.ReadSnapshotCore(mem, time.Unix(1700000000, 0))
+	if !ok {
+		t.Fatal("expected snapshot")
+	}
+	if snapshot.ChestAutomation.CommonRuneReductionSeconds != 0 {
+		t.Fatalf("common reduction = %d, want 0", snapshot.ChestAutomation.CommonRuneReductionSeconds)
+	}
+	if snapshot.ChestAutomation.RuneResolved {
+		t.Fatalf("rune reductions resolved from non-RuneSaveData shape: %+v", snapshot.ChestAutomation.Diagnostics)
 	}
 }
 
@@ -471,6 +858,26 @@ func writeSlotWithIndex(memory fakeMemory, array uintptr, index int, slot uintpt
 	memory.ints[slot+slotIndex] = savedIndex
 }
 
+func writeInventorySaveSlot(memory fakeMemory, array uintptr, index int, slot uintptr, classPtr uintptr, unique uint64) {
+	writeSlot(memory, array, index, slot, unique)
+	memory.ptrs[slot] = classPtr
+}
+
+func writeInventorySaveSlotWithUnlock(memory fakeMemory, array uintptr, index int, slot uintptr, classPtr uintptr, unique uint64, unlocked bool, unlockedByRune bool) {
+	writeInventorySaveSlot(memory, array, index, slot, classPtr, unique)
+	memory.ints[slot+slotIndex] = int32(index)
+	if unlocked {
+		memory.ints[slot+slotIsUnlock] = 1
+	} else {
+		memory.ints[slot+slotIsUnlock] = 0
+	}
+	if unlockedByRune {
+		memory.ints[slot+slotIsRuneUnlock] = 1
+	} else {
+		memory.ints[slot+slotIsRuneUnlock] = 0
+	}
+}
+
 func writeHero(memory fakeMemory, array uintptr, index int, hero uintptr, key int32, unique uint64) {
 	equipped := uintptr(0x800000)
 	memory.ptrs[array+il2cpp.ArrayDataOffset+uintptr(index*8)] = hero
@@ -494,6 +901,13 @@ func writeCurrency(memory fakeMemory, array uintptr, index int, obj uintptr, key
 	memory.ptrs[array+il2cpp.ArrayDataOffset+uintptr(index*8)] = obj
 	memory.ints[obj+currencyKey] = key
 	memory.uints[obj+currencyQuantity] = value
+}
+
+func writeRuneSave(memory fakeMemory, array uintptr, index int, obj uintptr, classPtr uintptr, key int32, stage int32) {
+	memory.ptrs[array+il2cpp.ArrayDataOffset+uintptr(index*8)] = obj
+	memory.ptrs[obj] = classPtr
+	memory.ints[obj+0x10] = key
+	memory.ints[obj+0x14] = stage
 }
 
 func writeCandidateSaveData(memory fakeMemory, object uintptr, base uintptr, firstItemID int32, gold uint64) {

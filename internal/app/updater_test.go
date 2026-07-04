@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestIsNewerVersion(t *testing.T) {
@@ -119,6 +120,75 @@ func TestCheckForUpdates_RecordsAvailableUpdateAndKeepsInstallerForLater(t *test
 	}
 	if !footerInfo.UpdateAvailable || footerInfo.ReleaseURL != mockRelease.HTMLURL {
 		t.Fatalf("footer update info = %+v, want available update with release URL", footerInfo)
+	}
+}
+
+func TestDashboardCheckForUpdatesStartsAsyncAndPublishesFooter(t *testing.T) {
+	mockRelease := GitHubRelease{
+		TagName: "v" + AppVersion,
+		HTMLURL: "https://github.com/nidea1/task-bar-trade-center/releases/tag/v" + AppVersion,
+		Body:    "Bug fixes.",
+		Assets:  []GitHubAsset{},
+	}
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(mockRelease)
+	}))
+	defer ts.Close()
+
+	oldURL := githubReleaseURL
+	oldStatus := activeApp.updateStatus.Load()
+	appStateDetails.RLock()
+	oldDetail := appStateDetails.update
+	oldDownloadURL := appStateDetails.downloadURL
+	oldReleaseURL := appStateDetails.releaseURL
+	appStateDetails.RUnlock()
+	callbacks.RLock()
+	oldCallbacks := callbacks.value
+	callbacks.RUnlock()
+	defer func() {
+		githubReleaseURL = oldURL
+		activeApp.updateStatus.Store(oldStatus)
+		appStateDetails.Lock()
+		appStateDetails.update = oldDetail
+		appStateDetails.downloadURL = oldDownloadURL
+		appStateDetails.releaseURL = oldReleaseURL
+		appStateDetails.Unlock()
+		SetCallbacks(oldCallbacks)
+	}()
+
+	githubReleaseURL = ts.URL
+	activeApp.updateStatus.Store(UpdateStatusUnknown)
+	footerUpdates := make(chan DashboardFooterInfo, 4)
+	SetCallbacks(Callbacks{
+		DashboardFooterUpdated: func(info DashboardFooterInfo) {
+			footerUpdates <- info
+		},
+	})
+
+	footer := CheckForUpdates()
+	if footer.UpdateStatus != UpdateStatusChecking {
+		t.Fatalf("initial footer update status = %d, want checking", footer.UpdateStatus)
+	}
+
+	deadline := time.After(2 * time.Second)
+	sawChecking := false
+	for {
+		select {
+		case info := <-footerUpdates:
+			if info.UpdateStatus == UpdateStatusChecking {
+				sawChecking = true
+			}
+			if info.UpdateStatus == UpdateStatusUpToDate {
+				if !sawChecking {
+					t.Fatal("footer reached final update status before publishing checking status")
+				}
+				return
+			}
+		case <-deadline:
+			t.Fatalf("timed out waiting for final footer update; status=%d", activeApp.updateStatus.Load())
+		}
 	}
 }
 

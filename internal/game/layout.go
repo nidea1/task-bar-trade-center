@@ -29,7 +29,8 @@ var (
 )
 
 type layoutDocument struct {
-	SchemaVersion int `json:"schema_version"`
+	SchemaVersion int                       `json:"schema_version"`
+	ChestTiming   layoutChestTimingDocument `json:"chest_timing"`
 	HoveredItem   struct {
 		PointerBaseOffset string            `json:"pointer_base_offset"`
 		PointerOffsets    []string          `json:"pointer_offsets"`
@@ -60,6 +61,23 @@ type layoutAOBDocument struct {
 	InstructionEndOffset int    `json:"instruction_end_offset"`
 }
 
+type layoutChestTimingDocument struct {
+	CommonChest layoutChestTimingEntryDocument `json:"common_chest"`
+	StageChest  layoutChestTimingEntryDocument `json:"stage_chest"`
+}
+
+type layoutChestTimingEntryDocument struct {
+	DropSeconds         int `json:"drop_seconds"`
+	BaseAutoOpenSeconds int `json:"base_auto_open_seconds"`
+}
+
+type ChestTiming struct {
+	CommonChestDropSeconds         int
+	CommonChestBaseAutoOpenSeconds int
+	StageChestDropSeconds          int
+	StageChestBaseAutoOpenSeconds  int
+}
+
 type GameLayout struct {
 	HoveredItemPointerBaseOffset uintptr
 	HoveredItemPointerOffsets    []uintptr
@@ -81,6 +99,7 @@ type GameLayout struct {
 	XCalibrations         []overlay.XCalibration
 	ScaleCalibrations     []overlay.ScaleCalibrationProfile
 	PositionCalibrations  []overlay.PositionCalibration
+	ChestTiming           ChestTiming
 }
 
 func EmbeddedLayoutJSON() []byte {
@@ -191,6 +210,10 @@ func ParseGameLayout(raw []byte) (GameLayout, error) {
 	if err != nil {
 		return GameLayout{}, err
 	}
+	chestTiming, err := parseLayoutChestTiming(document.ChestTiming)
+	if err != nil {
+		return GameLayout{}, err
+	}
 
 	return GameLayout{
 		HoveredItemPointerBaseOffset:   hoveredBase,
@@ -211,7 +234,37 @@ func ParseGameLayout(raw []byte) (GameLayout, error) {
 		XCalibrations:                  append([]overlay.XCalibration(nil), document.XCalibrations...),
 		ScaleCalibrations:              scaleCalibrations,
 		PositionCalibrations:           append([]overlay.PositionCalibration(nil), document.PositionCalibrations...),
+		ChestTiming:                    chestTiming,
 	}, nil
+}
+
+func parseLayoutChestTiming(document layoutChestTimingDocument) (ChestTiming, error) {
+	if err := validateLayoutChestTimingSeconds("chest_timing.common_chest.drop_seconds", document.CommonChest.DropSeconds); err != nil {
+		return ChestTiming{}, err
+	}
+	if err := validateLayoutChestTimingSeconds("chest_timing.common_chest.base_auto_open_seconds", document.CommonChest.BaseAutoOpenSeconds); err != nil {
+		return ChestTiming{}, err
+	}
+	if err := validateLayoutChestTimingSeconds("chest_timing.stage_chest.drop_seconds", document.StageChest.DropSeconds); err != nil {
+		return ChestTiming{}, err
+	}
+	if err := validateLayoutChestTimingSeconds("chest_timing.stage_chest.base_auto_open_seconds", document.StageChest.BaseAutoOpenSeconds); err != nil {
+		return ChestTiming{}, err
+	}
+
+	return ChestTiming{
+		CommonChestDropSeconds:         document.CommonChest.DropSeconds,
+		CommonChestBaseAutoOpenSeconds: document.CommonChest.BaseAutoOpenSeconds,
+		StageChestDropSeconds:          document.StageChest.DropSeconds,
+		StageChestBaseAutoOpenSeconds:  document.StageChest.BaseAutoOpenSeconds,
+	}, nil
+}
+
+func validateLayoutChestTimingSeconds(name string, value int) error {
+	if value < 0 {
+		return fmt.Errorf("%s must not be negative", name)
+	}
+	return nil
 }
 
 func normalizeScaleCalibrations(

@@ -6,6 +6,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-07-04
+
+### Added
+- Added chest automation rune parsing to detect "Rune of the Mainspring" levels and calculate chest auto-open rate reductions.
+- Added live chest counts (Normal, Stage, and Total chests) read from game serialization memory (`PlayerSaveData.serializedBoxData`).
+- Added inventory slot summary (total, used, and free slots) with fallback counting.
+- Added inventory fill forecast dashboard metric that estimates the time to fill inventory, net slots per hour, and next chest drop times.
+- Added localized translations for all new chest, rune, and fill forecast dashboard strings in all 18 supported languages.
+- Added interactive update checking to the dashboard footer with active spinner animations during checks.
+
+### Changed
+- Reworked dashboard metrics layout to fit the new inventory fill forecast metric.
+- Updated footer layout with new styles for light mode and active button hover states.
+
 ## [0.11.8] - 2026-07-03
 
 ### Fixed

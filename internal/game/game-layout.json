@@ -1,5 +1,15 @@
 {
   "schema_version": 3,
+  "chest_timing": {
+    "common_chest": {
+      "drop_seconds": 240,
+      "base_auto_open_seconds": 300
+    },
+    "stage_chest": {
+      "drop_seconds": 360,
+      "base_auto_open_seconds": 600
+    }
+  },
   "hovered_item": {
     "pointer_base_offset": "0x05DF8198",
     "pointer_offsets": [

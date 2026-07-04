@@ -28,7 +28,34 @@ const (
 	inventoryDashboardRebuildThrottle   = 1500 * time.Millisecond
 	directInventoryNotificationWindow   = 30 * time.Minute
 	inventorySnapshotResolveBackoff     = 5 * time.Second
+	getBoxLogMonsterType                = 0x50
+	getBoxLogMonster                    = 0
+	getBoxLogStageBoss                  = 1
+	getBoxLogActBoss                    = 2
 )
+
+type inventoryChestCounts struct {
+	common int
+	stage  int
+}
+
+type chestDropTrackerState struct {
+	mu               sync.Mutex
+	initialized      bool
+	commonNextDropAt time.Time
+	stageNextDropAt  time.Time
+	commonObserved   bool
+	stageObserved    bool
+	lastCounts       inventoryChestCounts
+}
+
+var chestDropTracker chestDropTrackerState
+
+var inventoryFullNotifyState = struct {
+	sync.Mutex
+	observed bool
+	full     bool
+}{}
 
 func refreshInventoryDashboardState(reason string) {
 	if !activeApp.inventoryDashboardBuildMu.TryLock() {
@@ -81,6 +108,15 @@ func withCurrentDashboardRuntimeFields(state inventory.DashboardState) inventory
 	state.PriceSuffix = scope.Currency.PriceSuffix
 	state.Refresh = currentInventoryRefreshStatus()
 	state.Translations = currentTranslations()
+	activeApp.inventoryMu.Lock()
+	snapshot := activeApp.lastSnapshot
+	activeApp.inventoryMu.Unlock()
+	if snapshot != nil {
+		now := time.Now()
+		timing := currentChestTimingConfig()
+		state.UpdatedAt = now.Format(time.RFC3339)
+		state.InventoryFill = inventory.BuildInventoryFillEstimateWithTiming(*snapshot, timing, currentInventoryFillDropScheduleWithTiming(now, timing))
+	}
 	return state
 }
 
@@ -114,13 +150,17 @@ func buildInventoryDashboardState(snapshot playerdata.InventorySnapshot) invento
 	storeInventorySnapshot(snapshot)
 
 	scope := market.CurrentScope()
+	now := time.Now()
+	timing := currentChestTimingConfig()
 	state := inventory.BuildDashboard(snapshot, inventoryItemCatalog(scope), cacheQuoteProvider{scope: scope}, inventory.DashboardOptions{
-		MarketScope:  market.FormatScope(scope),
-		CurrencyCode: scope.Currency.Code,
-		PricePrefix:  scope.Currency.PricePrefix,
-		PriceSuffix:  scope.Currency.PriceSuffix,
-		Refresh:      currentInventoryRefreshStatus(),
-		Now:          time.Now(),
+		MarketScope:           market.FormatScope(scope),
+		CurrencyCode:          scope.Currency.Code,
+		PricePrefix:           scope.Currency.PricePrefix,
+		PriceSuffix:           scope.Currency.PriceSuffix,
+		Refresh:               currentInventoryRefreshStatus(),
+		Now:                   now,
+		InventoryFillSchedule: currentInventoryFillDropScheduleWithTiming(now, timing),
+		InventoryFillTiming:   timing,
 	})
 	state.Translations = currentTranslations()
 	return state
@@ -216,6 +256,7 @@ func readInventorySnapshotUncoordinated(includeRuntimeTradeSlots bool, processID
 	}
 	saveInventoryResolverCache(processHandle, gameAssemblyBase, resolver)
 	logPrintf("[INVENTORY:resolve] snapshot include_runtime_trade_slots=%t duration=%s status=%s items=%d trade_slots=%d\n", includeRuntimeTradeSlots, time.Since(startedAt), status, len(snapshot.Items), len(snapshot.TradeSlots))
+	logInventorySnapshotDiagnostics(snapshot)
 	return snapshot, nil
 }
 
@@ -257,6 +298,7 @@ func (memory inventoryScanMemory) ScanPatterns(patterns [][]byte, maxResults int
 }
 
 func storeInventorySnapshot(snapshot playerdata.InventorySnapshot) {
+	updateInventoryFullNotification(snapshot)
 	activeApp.inventoryMu.Lock()
 	activeApp.lastSnapshot = &snapshot
 	activeApp.inventoryMu.Unlock()
@@ -371,7 +413,7 @@ func monitorInventoryNotifications(processHandle uintptr) {
 	const logPollInterval = 2 * time.Second
 
 	// Run first save poll immediately to seed the initial dashboard state on attach
-	pollInventoryNotifications()
+	pollInventoryNotifications("")
 
 	for {
 		time.Sleep(logPollInterval)
@@ -384,9 +426,16 @@ func monitorInventoryNotifications(processHandle uintptr) {
 
 		// 2. Event-driven Save snapshot poll (only when stage ends)
 		if triggerSavePollNow {
-			pollInventoryNotifications()
+			source := triggerSavePollSource
+			hasBoxDrop := triggerSavePollHasBoxDrop
+			pollInventoryNotifications(source)
+			if hasBoxDrop && lastPollErr == nil {
+				logInventoryFillEstimate()
+			}
 			refreshInventoryPricesFromDashboard()
 			triggerSavePollNow = false
+			triggerSavePollSource = ""
+			triggerSavePollHasBoxDrop = false
 		}
 
 		// 3. Trade Ship cooldown check (non-blocking, memory-only)
@@ -458,9 +507,409 @@ func forgetTradeSlotCooldown(index int) {
 	tradeSlotsNotifyMu.Unlock()
 }
 
+func updateInventoryFullNotification(snapshot playerdata.InventorySnapshot) {
+	totalSlots := snapshot.InventorySlots.Total
+	if totalSlots <= 0 {
+		return
+	}
+	freeSlots := snapshot.InventorySlots.Free
+	if freeSlots == 0 && totalSlots > snapshot.InventorySlots.Used {
+		freeSlots = totalSlots - snapshot.InventorySlots.Used
+	}
+	if freeSlots < 0 {
+		freeSlots = 0
+	}
+	isFull := freeSlots <= 0
+
+	inventoryFullNotifyState.Lock()
+	previouslyObserved := inventoryFullNotifyState.observed
+	wasFull := inventoryFullNotifyState.full
+	inventoryFullNotifyState.observed = true
+	inventoryFullNotifyState.full = isFull
+	inventoryFullNotifyState.Unlock()
+
+	if !isFull {
+		return
+	}
+	if !previouslyObserved {
+		logPrintf("[NOTIFY] Inventory was already full on first observation. Suppressing startup/stale notification. slots=%d/%d free=%d\n",
+			snapshot.InventorySlots.Used,
+			totalSlots,
+			freeSlots,
+		)
+		return
+	}
+	if wasFull {
+		return
+	}
+
+	title, body := inventoryFullNotificationContent()
+	queueRawTrayNotification(fmt.Sprintf("%s\n%s", title, body))
+	logPrintf("[NOTIFY] Inventory full notification queued. slots=%d/%d free=%d\n",
+		snapshot.InventorySlots.Used,
+		totalSlots,
+		freeSlots,
+	)
+}
+
+func inventoryFullNotificationContent() (string, string) {
+	if strings.HasPrefix(strings.ToLower(currentDisplayLanguage()), "tr") {
+		return "Envanter Dolu", "Envanterinde boş slot kalmadı."
+	}
+	return "Inventory Full", "Your inventory has no free slots left."
+}
+
+func resetInventoryFullNotification() {
+	inventoryFullNotifyState.Lock()
+	inventoryFullNotifyState.observed = false
+	inventoryFullNotifyState.full = false
+	inventoryFullNotifyState.Unlock()
+}
+
+func logInventorySnapshotDiagnostics(snapshot playerdata.InventorySnapshot) {
+	timing := currentChestTimingConfig()
+	estimate := inventory.BuildInventoryFillEstimateWithTiming(snapshot, timing)
+	emptySlots := snapshot.InventorySlots.EmptySlotRanges
+	if emptySlots == "" {
+		emptySlots = "none"
+	}
+	commonBuffs := snapshot.ChestAutomation.CommonReductionBuffSummary
+	if commonBuffs == "" {
+		commonBuffs = "none"
+	}
+	stageBuffs := snapshot.ChestAutomation.StageReductionBuffSummary
+	if stageBuffs == "" {
+		stageBuffs = "none"
+	}
+	slotSource := snapshot.InventorySlots.Source
+	if slotSource == "" {
+		slotSource = "unknown"
+	}
+	backingTotal := snapshot.InventorySlots.BackingTotal
+	if backingTotal == 0 {
+		backingTotal = snapshot.InventorySlots.Total
+	}
+	logPrintf("[INVENTORY:snapshot] detected slot_source=%s slots=%d/%d free=%d backing_total=%d empty_slots=%s chest_counts common=%d stage=%d total=%d chest_timing common_drop=%ds common_base_open=%ds stage_drop=%ds stage_base_open=%ds chest_time_reductions common=%ds common_open=%ds common_buffs=%s stage=%ds stage_open=%ds stage_buffs=%s rune_resolved=%t\n",
+		slotSource,
+		snapshot.InventorySlots.Used,
+		snapshot.InventorySlots.Total,
+		snapshot.InventorySlots.Free,
+		backingTotal,
+		emptySlots,
+		snapshot.ChestCounts.NormalChests,
+		snapshot.ChestCounts.StageChests,
+		snapshot.ChestCounts.TotalChests,
+		timing.CommonDropSeconds,
+		timing.CommonBaseAutoOpenSeconds,
+		timing.StageDropSeconds,
+		timing.StageBaseAutoOpenSeconds,
+		estimate.CommonRuneReductionSeconds,
+		estimate.CommonAutoOpenSeconds,
+		commonBuffs,
+		estimate.StageRuneReductionSeconds,
+		estimate.StageAutoOpenSeconds,
+		stageBuffs,
+		estimate.RuneResolved,
+	)
+}
+
+func logInventoryFillEstimate() {
+	activeApp.inventoryMu.Lock()
+	snapshot := activeApp.lastSnapshot
+	activeApp.inventoryMu.Unlock()
+	if snapshot == nil {
+		return
+	}
+
+	now := time.Now()
+	timing := currentChestTimingConfig()
+	estimate := inventory.BuildInventoryFillEstimateWithTiming(*snapshot, timing, currentInventoryFillDropScheduleWithTiming(now, timing))
+	if !estimate.Available {
+		logPrintln("[INVENTORY:fill] inventory slot count unavailable; fill estimate skipped")
+		logChestAutomationDiagnostics(snapshot.ChestAutomation)
+		return
+	}
+	if !estimate.Fills {
+		logPrintf("[INVENTORY:fill] inventory will not fill with current chest automation: model=%s slots=%d/%d free=%d common_chests=%d stage_chests=%d common_open=%ds stage_open=%ds next_common_drop=%ds common_ready=%t next_stage_drop=%ds stage_ready=%t net=%.2f slots/hour rune_resolved=%t\n",
+			estimate.FillModel,
+			estimate.UsedSlots,
+			estimate.SlotCount,
+			estimate.FreeSlots,
+			estimate.CommonChestCount,
+			estimate.StageChestCount,
+			estimate.CommonAutoOpenSeconds,
+			estimate.StageAutoOpenSeconds,
+			estimate.NextCommonDropSeconds,
+			estimate.CommonDropReady,
+			estimate.NextStageDropSeconds,
+			estimate.StageDropReady,
+			estimate.NetFillPerHour,
+			estimate.RuneResolved,
+		)
+		logChestAutomationDiagnostics(snapshot.ChestAutomation)
+		return
+	}
+	logPrintf("[INVENTORY:fill] estimated time to full: %s (%d seconds); model=%s slots=%d/%d free=%d common_chests=%d stage_chests=%d common_open=%ds common_reduction=%ds next_common_drop=%ds common_drop_observed=%t common_ready=%t stage_open=%ds stage_reduction=%ds next_stage_drop=%ds stage_drop_observed=%t stage_ready=%t net=%.2f slots/hour rune_resolved=%t\n",
+		formatDurationForLog(time.Duration(estimate.TimeToFullSeconds)*time.Second),
+		estimate.TimeToFullSeconds,
+		estimate.FillModel,
+		estimate.UsedSlots,
+		estimate.SlotCount,
+		estimate.FreeSlots,
+		estimate.CommonChestCount,
+		estimate.StageChestCount,
+		estimate.CommonAutoOpenSeconds,
+		estimate.CommonRuneReductionSeconds,
+		estimate.NextCommonDropSeconds,
+		estimate.CommonDropObserved,
+		estimate.CommonDropReady,
+		estimate.StageAutoOpenSeconds,
+		estimate.StageRuneReductionSeconds,
+		estimate.NextStageDropSeconds,
+		estimate.StageDropObserved,
+		estimate.StageDropReady,
+		estimate.NetFillPerHour,
+		estimate.RuneResolved,
+	)
+	logChestAutomationDiagnostics(snapshot.ChestAutomation)
+}
+
+func logChestAutomationDiagnostics(automation playerdata.ChestAutomation) {
+	if automation.RuneResolved {
+		return
+	}
+	for _, diagnostic := range automation.Diagnostics {
+		logPrintf("[INVENTORY:fill:rune] %s\n", diagnostic)
+	}
+}
+
+func formatDurationForLog(duration time.Duration) string {
+	if duration < 0 {
+		duration = 0
+	}
+	totalSeconds := int(duration.Round(time.Second).Seconds())
+	hours := totalSeconds / 3600
+	minutes := (totalSeconds % 3600) / 60
+	seconds := totalSeconds % 60
+	if hours > 0 {
+		return fmt.Sprintf("%dh %dm %ds", hours, minutes, seconds)
+	}
+	if minutes > 0 {
+		return fmt.Sprintf("%dm %ds", minutes, seconds)
+	}
+	return fmt.Sprintf("%ds", seconds)
+}
+
+func resetChestDropTracker() {
+	chestDropTracker.mu.Lock()
+	chestDropTracker.initialized = false
+	chestDropTracker.commonNextDropAt = time.Time{}
+	chestDropTracker.stageNextDropAt = time.Time{}
+	chestDropTracker.commonObserved = false
+	chestDropTracker.stageObserved = false
+	chestDropTracker.lastCounts = inventoryChestCounts{}
+	chestDropTracker.mu.Unlock()
+}
+
+func updateChestDropTracker(previous *playerdata.InventorySnapshot, current *playerdata.InventorySnapshot, source string, now time.Time) {
+	if current == nil {
+		return
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	timing := currentChestTimingConfig()
+	commonDropInterval := time.Duration(timing.CommonDropSeconds) * time.Second
+	stageDropInterval := time.Duration(timing.StageDropSeconds) * time.Second
+	counts := countInventoryChestItems(current)
+
+	chestDropTracker.mu.Lock()
+	defer chestDropTracker.mu.Unlock()
+
+	if !chestDropTracker.initialized {
+		chestDropTracker.initialized = true
+		chestDropTracker.commonNextDropAt = now.Add(commonDropInterval)
+		chestDropTracker.stageNextDropAt = now.Add(stageDropInterval)
+		chestDropTracker.lastCounts = counts
+		return
+	}
+
+	if source == "StageClearLog" && previous != nil {
+		if counts.common > chestDropTracker.lastCounts.common {
+			chestDropTracker.commonObserved = true
+			chestDropTracker.commonNextDropAt = now.Add(commonDropInterval)
+			logPrintf("[INVENTORY:fill] common chest drop observed; count=%d next_drop=%s\n", counts.common, formatDurationForLog(commonDropInterval))
+		}
+		if counts.stage > chestDropTracker.lastCounts.stage {
+			chestDropTracker.stageObserved = true
+			chestDropTracker.stageNextDropAt = now.Add(stageDropInterval)
+			logPrintf("[INVENTORY:fill] stage chest drop observed; count=%d next_drop=%s\n", counts.stage, formatDurationForLog(stageDropInterval))
+		}
+	}
+
+	chestDropTracker.lastCounts = counts
+}
+
+func recordChestDropLog(monsterType int32, now time.Time) bool {
+	kind := chestDropKindFromMonsterType(monsterType)
+	if kind == "" {
+		return false
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	timing := currentChestTimingConfig()
+	commonDropInterval := time.Duration(timing.CommonDropSeconds) * time.Second
+	stageDropInterval := time.Duration(timing.StageDropSeconds) * time.Second
+
+	chestDropTracker.mu.Lock()
+	if !chestDropTracker.initialized {
+		chestDropTracker.initialized = true
+		chestDropTracker.commonNextDropAt = now.Add(commonDropInterval)
+		chestDropTracker.stageNextDropAt = now.Add(stageDropInterval)
+	}
+	switch kind {
+	case "common":
+		chestDropTracker.commonObserved = true
+		chestDropTracker.commonNextDropAt = now.Add(commonDropInterval)
+	case "stage":
+		chestDropTracker.stageObserved = true
+		chestDropTracker.stageNextDropAt = now.Add(stageDropInterval)
+	}
+	chestDropTracker.mu.Unlock()
+
+	logPrintf("[INVENTORY:fill] %s chest drop observed from GetBoxLog; monster_type=%d next_drop=%s\n",
+		kind,
+		monsterType,
+		formatDurationForLog(chestDropInterval(kind, timing)),
+	)
+	return true
+}
+
+func chestDropKindFromMonsterType(monsterType int32) string {
+	switch monsterType {
+	case getBoxLogMonster:
+		return "common"
+	case getBoxLogStageBoss:
+		return "stage"
+	case getBoxLogActBoss:
+		return ""
+	default:
+		return ""
+	}
+}
+
+func chestDropInterval(kind string, timing inventory.ChestTimingConfig) time.Duration {
+	switch kind {
+	case "common":
+		return time.Duration(timing.CommonDropSeconds) * time.Second
+	case "stage":
+		return time.Duration(timing.StageDropSeconds) * time.Second
+	default:
+		return 0
+	}
+}
+
+func currentChestTimingConfig() inventory.ChestTimingConfig {
+	activeApp.gameLayoutMu.RLock()
+	timing := activeApp.activeGameLayout.ChestTiming
+	activeApp.gameLayoutMu.RUnlock()
+
+	return inventory.NormalizeChestTimingConfig(inventory.ChestTimingConfig{
+		CommonDropSeconds:         timing.CommonChestDropSeconds,
+		StageDropSeconds:          timing.StageChestDropSeconds,
+		CommonBaseAutoOpenSeconds: timing.CommonChestBaseAutoOpenSeconds,
+		StageBaseAutoOpenSeconds:  timing.StageChestBaseAutoOpenSeconds,
+	})
+}
+
+func currentInventoryFillDropSchedule(now time.Time) inventory.ChestDropSchedule {
+	return currentInventoryFillDropScheduleWithTiming(now, currentChestTimingConfig())
+}
+
+func currentInventoryFillDropScheduleWithTiming(now time.Time, timing inventory.ChestTimingConfig) inventory.ChestDropSchedule {
+	if now.IsZero() {
+		now = time.Now()
+	}
+	timing = inventory.NormalizeChestTimingConfig(timing)
+
+	chestDropTracker.mu.Lock()
+	defer chestDropTracker.mu.Unlock()
+
+	if !chestDropTracker.initialized {
+		return inventory.ChestDropSchedule{
+			NextCommonDropSeconds: timing.CommonDropSeconds,
+			NextStageDropSeconds:  timing.StageDropSeconds,
+		}
+	}
+
+	commonNextDropSeconds, commonReady := secondsUntilReady(now, chestDropTracker.commonNextDropAt)
+	stageNextDropSeconds, stageReady := secondsUntilReady(now, chestDropTracker.stageNextDropAt)
+
+	return inventory.ChestDropSchedule{
+		NextCommonDropSeconds: commonNextDropSeconds,
+		NextStageDropSeconds:  stageNextDropSeconds,
+		CommonDropObserved:    chestDropTracker.commonObserved,
+		StageDropObserved:     chestDropTracker.stageObserved,
+		CommonDropReady:       commonReady,
+		StageDropReady:        stageReady,
+	}
+}
+
+func secondsUntilCeil(now time.Time, target time.Time) int {
+	duration := target.Sub(now)
+	if duration <= 0 {
+		return 0
+	}
+	return int((duration + time.Second - time.Nanosecond) / time.Second)
+}
+
+func secondsUntilReady(now time.Time, target time.Time) (int, bool) {
+	if target.IsZero() {
+		return 0, false
+	}
+	seconds := secondsUntilCeil(now, target)
+	return seconds, seconds == 0
+}
+
+func countInventoryChestItems(snapshot *playerdata.InventorySnapshot) inventoryChestCounts {
+	if snapshot == nil {
+		return inventoryChestCounts{}
+	}
+	counts := inventoryChestCounts{}
+	for _, item := range snapshot.Items {
+		if item.Location != playerdata.LocationInventory {
+			continue
+		}
+		switch inventoryChestKind(item.ItemID) {
+		case "common":
+			counts.common++
+		case "stage":
+			counts.stage++
+		}
+	}
+	return counts
+}
+
+func inventoryChestKind(itemID int) string {
+	config, exists := activeApp.allItemMap[itemID]
+	if !exists || config.Type != "STAGEBOX" {
+		return ""
+	}
+	name := strings.ToLower(config.Name["en-US"])
+	switch {
+	case strings.Contains(name, "normal monster box"):
+		return "common"
+	case strings.Contains(name, "stage boss box"):
+		return "stage"
+	default:
+		return ""
+	}
+}
+
 var lastPollErr error
 
-func pollInventoryNotifications() bool {
+func pollInventoryNotifications(source string) bool {
 	snapshot, err := readInventorySnapshot()
 	if err != nil {
 		if lastPollErr == nil || lastPollErr.Error() != err.Error() {
@@ -491,6 +940,7 @@ func pollInventoryNotifications() bool {
 		logPrintf("[INVENTORY:poll] Snapshot changed. Previous items count: %d, current items count: %d\n", prevCount, len(snapshot.Items))
 	}
 
+	updateChestDropTracker(prevSnapshot, &snapshot, source, time.Now())
 	storeInventorySnapshot(snapshot)
 
 	if changed {
@@ -505,6 +955,14 @@ func inventorySnapshotChanged(a, b *playerdata.InventorySnapshot) bool {
 		return a != b
 	}
 	if a.Gold != b.Gold || a.StashPageCount != b.StashPageCount {
+		return true
+	}
+	if a.InventorySlots != b.InventorySlots {
+		return true
+	}
+	if a.ChestAutomation.CommonRuneReductionSeconds != b.ChestAutomation.CommonRuneReductionSeconds ||
+		a.ChestAutomation.StageRuneReductionSeconds != b.ChestAutomation.StageRuneReductionSeconds ||
+		a.ChestAutomation.RuneResolved != b.ChestAutomation.RuneResolved {
 		return true
 	}
 	if len(a.Items) != len(b.Items) {
@@ -739,13 +1197,17 @@ func rebuildDashboardState(reason string) (inventory.DashboardState, bool) {
 	}
 
 	scope := market.CurrentScope()
+	now := time.Now()
+	timing := currentChestTimingConfig()
 	state := inventory.BuildDashboard(*snapshot, inventoryItemCatalog(scope), cacheQuoteProvider{scope: scope}, inventory.DashboardOptions{
-		MarketScope:  market.FormatScope(scope),
-		CurrencyCode: scope.Currency.Code,
-		PricePrefix:  scope.Currency.PricePrefix,
-		PriceSuffix:  scope.Currency.PriceSuffix,
-		Refresh:      currentInventoryRefreshStatus(),
-		Now:          time.Now(),
+		MarketScope:           market.FormatScope(scope),
+		CurrencyCode:          scope.Currency.Code,
+		PricePrefix:           scope.Currency.PricePrefix,
+		PriceSuffix:           scope.Currency.PriceSuffix,
+		Refresh:               currentInventoryRefreshStatus(),
+		Now:                   now,
+		InventoryFillSchedule: currentInventoryFillDropScheduleWithTiming(now, timing),
+		InventoryFillTiming:   timing,
 	})
 	state.Translations = currentTranslations()
 
@@ -806,13 +1268,25 @@ type boxNotificationTracker struct {
 }
 
 var (
-	logManagerInstance       uintptr
-	lastLogCount             int
-	recentlyNotifiedBoxItems = make(map[int]boxNotificationTracker)
-	notifiedBoxItemsMu       sync.Mutex
-	lastProcessHandle        uintptr
-	triggerSavePollNow       bool
+	logManagerInstance        uintptr
+	lastLogCount              int
+	recentlyNotifiedBoxItems  = make(map[int]boxNotificationTracker)
+	notifiedBoxItemsMu        sync.Mutex
+	lastProcessHandle         uintptr
+	triggerSavePollNow        bool
+	triggerSavePollSource     string
+	triggerSavePollHasBoxDrop bool
 )
+
+func requestSavePoll(source string) {
+	triggerSavePollNow = true
+	if source == "GetBoxLog" {
+		triggerSavePollHasBoxDrop = true
+	}
+	if triggerSavePollSource == "" || source == "BoxOpenLog" {
+		triggerSavePollSource = source
+	}
+}
 
 type localListInfo struct {
 	ptr      uintptr
@@ -1276,6 +1750,7 @@ func pollLogManagerNotifications() {
 		}
 		className := readStringLocal(memory, namePtr)
 		if className == "BoxOpenLog" {
+			requestSavePoll(className)
 			if notificationSourceEnabled(notificationSourceBox) {
 				itemID, _, _, ok := readLogItemPayload(memory, logDataPtr)
 				if ok {
@@ -1283,13 +1758,20 @@ func pollLogManagerNotifications() {
 					newItems = appendLogManagerItemNotification(newItems, itemID, notificationSourceBox)
 				}
 			}
+		} else if className == "GetBoxLog" {
+			monsterType, ok := memory.ReadInt32(logDataPtr + getBoxLogMonsterType)
+			if !ok {
+				logPrintf("[INVENTORY:fill] GetBoxLog monster_type unreadable at offset 0x%X\n", getBoxLogMonsterType)
+				logInventoryInteractionPayloadMiss(memory, logDataPtr, className)
+			} else if recordChestDropLog(monsterType, time.Now()) {
+				requestSavePoll(className)
+			}
 		} else if className == "StageClearLog" || className == "StageFailedLog" {
-			logPrintf("[NOTIFY] Stage end event detected (%s). Triggering inventory sync on next tick.\n", className)
-			triggerSavePollNow = true
+			logPrintf("[NOTIFY] Stage end event detected (%s).\n", className)
 		} else if source, ok := inventoryInteractionResultSource(className); ok {
 			if notificationSourceEnabled(source) {
 				if source == notificationSourceSynthesis {
-					triggerSavePollNow = true
+					requestSavePoll(className)
 					val, ok := memory.ReadInt32(logDataPtr + 0xB0)
 					isReady := ok && val > 0
 

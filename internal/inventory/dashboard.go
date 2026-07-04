@@ -1,6 +1,7 @@
 package inventory
 
 import (
+	"math"
 	"sort"
 	"time"
 
@@ -8,15 +9,27 @@ import (
 )
 
 type DashboardOptions struct {
-	MarketScope  string
-	CurrencyCode string
-	PricePrefix  string
-	PriceSuffix  string
-	Refresh      RefreshStatus
-	Now          time.Time
+	MarketScope           string
+	CurrencyCode          string
+	PricePrefix           string
+	PriceSuffix           string
+	Refresh               RefreshStatus
+	Now                   time.Time
+	InventoryFillSchedule ChestDropSchedule
+	InventoryFillTiming   ChestTimingConfig
 }
 
-const stashSlotsPerPage = 100
+const (
+	stashSlotsPerPage = 100
+
+	commonChestDropSeconds         = 240
+	stageChestDropSeconds          = 360
+	commonChestBaseAutoOpenSeconds = 300
+	stageChestBaseAutoOpenSeconds  = 600
+	minChestAutoOpenSeconds        = 1
+
+	inventoryFillEventQueueModel = "event_queue_first_drop_auto_open"
+)
 
 type groupAccumulator struct {
 	item     DashboardItem
@@ -159,8 +172,290 @@ func BuildDashboard(snapshot playerdata.InventorySnapshot, catalog map[int]ItemD
 		MissingPrices:  missingPriceItems(items, 25),
 		Refresh:        options.Refresh,
 		TradeSlots:     snapshot.TradeSlots,
+		InventoryFill:  BuildInventoryFillEstimateWithTiming(snapshot, options.InventoryFillTiming, options.InventoryFillSchedule),
+		ChestCounts:    snapshot.ChestCounts,
 	}
 	return state
+}
+
+func DefaultChestTimingConfig() ChestTimingConfig {
+	return ChestTimingConfig{
+		CommonDropSeconds:         commonChestDropSeconds,
+		StageDropSeconds:          stageChestDropSeconds,
+		CommonBaseAutoOpenSeconds: commonChestBaseAutoOpenSeconds,
+		StageBaseAutoOpenSeconds:  stageChestBaseAutoOpenSeconds,
+	}
+}
+
+func NormalizeChestTimingConfig(config ChestTimingConfig) ChestTimingConfig {
+	defaults := DefaultChestTimingConfig()
+	if config.CommonDropSeconds <= 0 {
+		config.CommonDropSeconds = defaults.CommonDropSeconds
+	}
+	if config.StageDropSeconds <= 0 {
+		config.StageDropSeconds = defaults.StageDropSeconds
+	}
+	if config.CommonBaseAutoOpenSeconds <= 0 {
+		config.CommonBaseAutoOpenSeconds = defaults.CommonBaseAutoOpenSeconds
+	}
+	if config.StageBaseAutoOpenSeconds <= 0 {
+		config.StageBaseAutoOpenSeconds = defaults.StageBaseAutoOpenSeconds
+	}
+	return config
+}
+
+func BuildInventoryFillEstimate(snapshot playerdata.InventorySnapshot, schedules ...ChestDropSchedule) InventoryFillEstimate {
+	return BuildInventoryFillEstimateWithTiming(snapshot, ChestTimingConfig{}, schedules...)
+}
+
+func BuildInventoryFillEstimateWithTiming(snapshot playerdata.InventorySnapshot, timing ChestTimingConfig, schedules ...ChestDropSchedule) InventoryFillEstimate {
+	timing = NormalizeChestTimingConfig(timing)
+	slotCount := snapshot.InventorySlots.Total
+	usedSlots := snapshot.InventorySlots.Used
+	if usedSlots == 0 {
+		usedSlots = countInventoryItems(snapshot.Items)
+	}
+	if slotCount < usedSlots {
+		slotCount = usedSlots
+	}
+	freeSlots := snapshot.InventorySlots.Free
+	if freeSlots == 0 && slotCount > usedSlots {
+		freeSlots = slotCount - usedSlots
+	}
+	if freeSlots < 0 {
+		freeSlots = 0
+	}
+
+	commonReduction := positiveSeconds(snapshot.ChestAutomation.CommonRuneReductionSeconds)
+	stageReduction := positiveSeconds(snapshot.ChestAutomation.StageRuneReductionSeconds)
+
+	var commonAutoOpen int
+	if snapshot.ChestAutomation.HasCommonAutoOpenRune {
+		commonAutoOpen = reducedDuration(timing.CommonBaseAutoOpenSeconds, commonReduction)
+	} else {
+		commonAutoOpen = 0
+	}
+
+	var stageAutoOpen int
+	if snapshot.ChestAutomation.HasStageAutoOpenRune {
+		stageAutoOpen = reducedDuration(timing.StageBaseAutoOpenSeconds, stageReduction)
+	} else {
+		stageAutoOpen = 0
+	}
+
+	commonFillPerSecond := chestItemFillRate(timing.CommonDropSeconds, commonAutoOpen)
+	stageFillPerSecond := chestItemFillRate(timing.StageDropSeconds, stageAutoOpen)
+	netPerSecond := commonFillPerSecond + stageFillPerSecond
+	schedule := normalizedChestDropSchedule(firstChestDropSchedule(schedules), timing)
+
+	estimate := InventoryFillEstimate{
+		Available:                  slotCount > 0,
+		FillModel:                  inventoryFillEventQueueModel,
+		SlotCount:                  slotCount,
+		UsedSlots:                  usedSlots,
+		FreeSlots:                  freeSlots,
+		CommonDropSeconds:          timing.CommonDropSeconds,
+		StageDropSeconds:           timing.StageDropSeconds,
+		NextCommonDropSeconds:      schedule.NextCommonDropSeconds,
+		NextStageDropSeconds:       schedule.NextStageDropSeconds,
+		CommonAutoOpenSeconds:      commonAutoOpen,
+		StageAutoOpenSeconds:       stageAutoOpen,
+		CommonRuneReductionSeconds: commonReduction,
+		StageRuneReductionSeconds:  stageReduction,
+		NetFillPerHour:             netPerSecond * 3600,
+		RuneResolved:               snapshot.ChestAutomation.RuneResolved,
+		HasCommonAutoOpenRune:      snapshot.ChestAutomation.HasCommonAutoOpenRune,
+		HasStageAutoOpenRune:       snapshot.ChestAutomation.HasStageAutoOpenRune,
+		CommonDropObserved:         schedule.CommonDropObserved,
+		StageDropObserved:          schedule.StageDropObserved,
+		CommonDropReady:            schedule.CommonDropReady,
+		StageDropReady:             schedule.StageDropReady,
+		CommonChestCount:           snapshot.ChestCounts.NormalChests,
+		StageChestCount:            snapshot.ChestCounts.StageChests,
+	}
+	if timeToFull, fills := timeToFillSlots(freeSlots, commonAutoOpen, stageAutoOpen, netPerSecond, schedule, snapshot.ChestCounts, timing); fills {
+		estimate.Fills = true
+		estimate.TimeToFullSeconds = timeToFull
+	}
+	return estimate
+}
+
+func firstChestDropSchedule(schedules []ChestDropSchedule) ChestDropSchedule {
+	if len(schedules) == 0 {
+		return ChestDropSchedule{}
+	}
+	return schedules[0]
+}
+
+func normalizedChestDropSchedule(schedule ChestDropSchedule, timing ChestTimingConfig) ChestDropSchedule {
+	if schedule.CommonDropReady {
+		schedule.NextCommonDropSeconds = 0
+	} else if schedule.NextCommonDropSeconds <= 0 {
+		schedule.NextCommonDropSeconds = timing.CommonDropSeconds
+	}
+	if schedule.StageDropReady {
+		schedule.NextStageDropSeconds = 0
+	} else if schedule.NextStageDropSeconds <= 0 {
+		schedule.NextStageDropSeconds = timing.StageDropSeconds
+	}
+	return schedule
+}
+
+func timeToFillSlots(freeSlots int, commonAutoOpenSeconds int, stageAutoOpenSeconds int, itemRate float64, schedule ChestDropSchedule, chestCounts playerdata.ChestCounts, timing ChestTimingConfig) (int, bool) {
+	if freeSlots <= 0 {
+		return 0, false
+	}
+	if itemRate <= 0 {
+		return 0, false
+	}
+	horizon := boundedFillSimulationHorizon(schedule, commonAutoOpenSeconds, stageAutoOpenSeconds, timing)
+	horizon += int(math.Ceil(float64(freeSlots)/itemRate)) + maxInt(commonAutoOpenSeconds, stageAutoOpenSeconds)
+
+	return simulateTimeToFillSlots(freeSlots, schedule, commonAutoOpenSeconds, stageAutoOpenSeconds, horizon, chestCounts, timing)
+}
+
+type fillQueue struct {
+	dropInterval int
+	openInterval int
+	nextDrop     int
+	nextOpen     int
+	queued       int
+}
+
+func simulateTimeToFillSlots(freeSlots int, schedule ChestDropSchedule, commonAutoOpenSeconds int, stageAutoOpenSeconds int, horizon int, chestCounts playerdata.ChestCounts, timing ChestTimingConfig) (int, bool) {
+	initialCommonQueued := chestCounts.NormalChests
+	initialStageQueued := chestCounts.StageChests
+
+	commonNextOpen := inactiveRateStart()
+	if initialCommonQueued > 0 && commonAutoOpenSeconds > 0 {
+		commonNextOpen = commonAutoOpenSeconds
+	}
+	stageNextOpen := inactiveRateStart()
+	if initialStageQueued > 0 && stageAutoOpenSeconds > 0 {
+		stageNextOpen = stageAutoOpenSeconds
+	}
+
+	queues := []fillQueue{
+		{
+			dropInterval: timing.CommonDropSeconds,
+			openInterval: commonAutoOpenSeconds,
+			nextDrop:     schedule.NextCommonDropSeconds,
+			nextOpen:     commonNextOpen,
+			queued:       initialCommonQueued,
+		},
+		{
+			dropInterval: timing.StageDropSeconds,
+			openInterval: stageAutoOpenSeconds,
+			nextDrop:     schedule.NextStageDropSeconds,
+			nextOpen:     stageNextOpen,
+			queued:       initialStageQueued,
+		},
+	}
+
+	filledSlots := 0
+	for {
+		nextEvent := inactiveRateStart()
+		for _, queue := range queues {
+			nextEvent = minInt(nextEvent, queue.nextDrop)
+			nextEvent = minInt(nextEvent, queue.nextOpen)
+		}
+		if nextEvent == inactiveRateStart() || nextEvent > horizon {
+			return 0, false
+		}
+
+		for i := range queues {
+			if queues[i].nextOpen != nextEvent {
+				continue
+			}
+			if queues[i].queued > 0 && queues[i].openInterval > 0 {
+				queues[i].queued--
+				filledSlots++
+			}
+			if queues[i].queued > 0 && queues[i].openInterval > 0 {
+				queues[i].nextOpen = nextEvent + queues[i].openInterval
+			} else {
+				queues[i].nextOpen = inactiveRateStart()
+			}
+		}
+
+		for i := range queues {
+			if queues[i].nextDrop != nextEvent {
+				continue
+			}
+			queues[i].queued++
+			queues[i].nextDrop = nextEvent + queues[i].dropInterval
+			if queues[i].queued == 1 && queues[i].openInterval > 0 {
+				queues[i].nextOpen = nextEvent + queues[i].openInterval
+			}
+		}
+
+		if filledSlots >= freeSlots {
+			return nextEvent, true
+		}
+	}
+}
+
+func boundedFillSimulationHorizon(schedule ChestDropSchedule, commonAutoOpenSeconds int, stageAutoOpenSeconds int, timing ChestTimingConfig) int {
+	lastFirstOpen := maxInt(
+		schedule.NextCommonDropSeconds+commonAutoOpenSeconds,
+		schedule.NextStageDropSeconds+stageAutoOpenSeconds,
+	)
+	return lastFirstOpen + maxInt(timing.CommonDropSeconds, timing.StageDropSeconds) + maxInt(commonAutoOpenSeconds, stageAutoOpenSeconds)
+}
+
+func countInventoryItems(items []playerdata.OwnedItem) int {
+	count := 0
+	for _, item := range items {
+		if item.Location == playerdata.LocationInventory {
+			count++
+		}
+	}
+	return count
+}
+
+func positiveSeconds(value int) int {
+	if value < 0 {
+		return -value
+	}
+	return value
+}
+
+func reducedDuration(baseSeconds int, reductionSeconds int) int {
+	seconds := baseSeconds - reductionSeconds
+	if seconds < minChestAutoOpenSeconds {
+		return minChestAutoOpenSeconds
+	}
+	return seconds
+}
+
+func inactiveRateStart() int {
+	return int(^uint(0) >> 1)
+}
+
+func minInt(left int, right int) int {
+	if left < right {
+		return left
+	}
+	return right
+}
+
+func maxInt(left int, right int) int {
+	if left > right {
+		return left
+	}
+	return right
+}
+
+func chestItemFillRate(dropSeconds int, autoOpenSeconds int) float64 {
+	if dropSeconds <= 0 || autoOpenSeconds <= 0 {
+		return 0
+	}
+	dropRate := 1 / float64(dropSeconds)
+	openRate := 1 / float64(autoOpenSeconds)
+	if dropRate < openRate {
+		return dropRate
+	}
+	return openRate
 }
 
 func dashboardStashPageCount(snapshot playerdata.InventorySnapshot) int {

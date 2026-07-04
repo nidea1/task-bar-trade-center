@@ -3,6 +3,11 @@ package app
 import (
 	"testing"
 	"time"
+
+	"github.com/nidea1/task-bar-trade-center/internal/catalog"
+	"github.com/nidea1/task-bar-trade-center/internal/game"
+	"github.com/nidea1/task-bar-trade-center/internal/inventory"
+	"github.com/nidea1/task-bar-trade-center/internal/playerdata"
 )
 
 func TestInventoryInteractionResultSource(t *testing.T) {
@@ -36,6 +41,186 @@ func TestInventoryInteractionResultSource(t *testing.T) {
 				t.Fatalf("inventoryInteractionResultSource(%q) = %q, %t; want %q, %t", tt.name, source, ok, tt.source, tt.ok)
 			}
 		})
+	}
+}
+
+func TestRequestSavePollPreservesBoxOpenSource(t *testing.T) {
+	originalTriggered := triggerSavePollNow
+	originalSource := triggerSavePollSource
+	originalHasBoxDrop := triggerSavePollHasBoxDrop
+	t.Cleanup(func() {
+		triggerSavePollNow = originalTriggered
+		triggerSavePollSource = originalSource
+		triggerSavePollHasBoxDrop = originalHasBoxDrop
+	})
+
+	triggerSavePollNow = false
+	triggerSavePollSource = ""
+	triggerSavePollHasBoxDrop = false
+	requestSavePoll("StageFailedLog")
+	if !triggerSavePollNow || triggerSavePollSource != "StageFailedLog" {
+		t.Fatalf("failed stage poll state = triggered %t source %q", triggerSavePollNow, triggerSavePollSource)
+	}
+
+	triggerSavePollNow = false
+	triggerSavePollSource = ""
+	triggerSavePollHasBoxDrop = false
+	requestSavePoll("BoxOpenLog")
+	requestSavePoll("GetBoxLog")
+	if triggerSavePollSource != "BoxOpenLog" {
+		t.Fatalf("box open source = %q, want BoxOpenLog", triggerSavePollSource)
+	}
+	if !triggerSavePollHasBoxDrop {
+		t.Fatal("GetBoxLog should mark the pending save poll as a box drop")
+	}
+}
+
+func TestChestDropTrackerUpdatesAfterStageClearChestIncrease(t *testing.T) {
+	originalAllItemMap := activeApp.allItemMap
+	activeApp.allItemMap = map[int]catalog.ItemConfig{
+		910011: {ID: 910011, Name: map[string]string{"en-US": "Normal Monster Box 1"}, Type: "STAGEBOX"},
+		920001: {ID: 920001, Name: map[string]string{"en-US": "Stage Boss Box 1"}, Type: "STAGEBOX"},
+	}
+	t.Cleanup(func() {
+		activeApp.allItemMap = originalAllItemMap
+		resetChestDropTracker()
+	})
+
+	resetChestDropTracker()
+	now := time.Date(2026, 7, 4, 12, 0, 0, 0, time.UTC)
+	before := playerdata.InventorySnapshot{}
+	after := playerdata.InventorySnapshot{
+		Items: []playerdata.OwnedItem{
+			{ItemID: 910011, UniqueID: 1, Location: playerdata.LocationInventory},
+			{ItemID: 920001, UniqueID: 2, Location: playerdata.LocationInventory},
+		},
+	}
+
+	updateChestDropTracker(nil, &before, "", now)
+	initial := currentInventoryFillDropSchedule(now)
+	if initial.CommonDropObserved || initial.StageDropObserved {
+		t.Fatalf("initial observed flags = common %t stage %t, want false/false", initial.CommonDropObserved, initial.StageDropObserved)
+	}
+
+	updateChestDropTracker(&before, &after, "StageClearLog", now.Add(10*time.Second))
+	schedule := currentInventoryFillDropSchedule(now.Add(10 * time.Second))
+	if !schedule.CommonDropObserved || !schedule.StageDropObserved {
+		t.Fatalf("observed flags = common %t stage %t, want true/true", schedule.CommonDropObserved, schedule.StageDropObserved)
+	}
+	if schedule.NextCommonDropSeconds != 240 || schedule.NextStageDropSeconds != 360 {
+		t.Fatalf("next drops = common %d stage %d, want 240/360", schedule.NextCommonDropSeconds, schedule.NextStageDropSeconds)
+	}
+}
+
+func TestChestDropTrackerUpdatesFromGetBoxLogMonsterType(t *testing.T) {
+	resetChestDropTracker()
+	t.Cleanup(resetChestDropTracker)
+
+	now := time.Date(2026, 7, 4, 12, 0, 0, 0, time.UTC)
+	if !recordChestDropLog(getBoxLogMonster, now) {
+		t.Fatal("monster box log should be recorded")
+	}
+	schedule := currentInventoryFillDropSchedule(now)
+	if !schedule.CommonDropObserved || schedule.StageDropObserved {
+		t.Fatalf("observed flags after monster box = common %t stage %t, want true/false", schedule.CommonDropObserved, schedule.StageDropObserved)
+	}
+	if schedule.NextCommonDropSeconds != 240 || schedule.NextStageDropSeconds != 360 {
+		t.Fatalf("next drops after monster box = common %d stage %d, want 240/360", schedule.NextCommonDropSeconds, schedule.NextStageDropSeconds)
+	}
+
+	if !recordChestDropLog(getBoxLogStageBoss, now.Add(30*time.Second)) {
+		t.Fatal("stage boss box log should be recorded")
+	}
+	schedule = currentInventoryFillDropSchedule(now.Add(30 * time.Second))
+	if !schedule.CommonDropObserved || !schedule.StageDropObserved {
+		t.Fatalf("observed flags after stage box = common %t stage %t, want true/true", schedule.CommonDropObserved, schedule.StageDropObserved)
+	}
+	if schedule.NextCommonDropSeconds != 210 || schedule.NextStageDropSeconds != 360 {
+		t.Fatalf("next drops after stage box = common %d stage %d, want 210/360", schedule.NextCommonDropSeconds, schedule.NextStageDropSeconds)
+	}
+
+	if recordChestDropLog(getBoxLogActBoss, now) {
+		t.Fatal("act boss box should not be recorded for inventory fill")
+	}
+}
+
+func TestChestDropTrackerMarksReadyWithoutAutoAdvance(t *testing.T) {
+	resetChestDropTracker()
+	t.Cleanup(resetChestDropTracker)
+
+	now := time.Date(2026, 7, 4, 12, 0, 0, 0, time.UTC)
+	commonChestDropInterval := time.Duration(inventory.DefaultChestTimingConfig().CommonDropSeconds) * time.Second
+	if !recordChestDropLog(getBoxLogMonster, now) {
+		t.Fatal("monster box log should be recorded")
+	}
+
+	schedule := currentInventoryFillDropSchedule(now.Add(commonChestDropInterval + time.Second))
+	if !schedule.CommonDropReady || schedule.NextCommonDropSeconds != 0 {
+		t.Fatalf("common ready schedule = ready %t next %d, want true/0", schedule.CommonDropReady, schedule.NextCommonDropSeconds)
+	}
+
+	schedule = currentInventoryFillDropSchedule(now.Add(2 * commonChestDropInterval))
+	if !schedule.CommonDropReady || schedule.NextCommonDropSeconds != 0 {
+		t.Fatalf("common ready schedule after another interval = ready %t next %d, want true/0", schedule.CommonDropReady, schedule.NextCommonDropSeconds)
+	}
+
+	if !recordChestDropLog(getBoxLogMonster, now.Add(2*commonChestDropInterval)) {
+		t.Fatal("second monster box log should be recorded")
+	}
+	schedule = currentInventoryFillDropSchedule(now.Add(2 * commonChestDropInterval))
+	if schedule.CommonDropReady || schedule.NextCommonDropSeconds != int(commonChestDropInterval/time.Second) {
+		t.Fatalf("common schedule after reset = ready %t next %d, want false/%d",
+			schedule.CommonDropReady,
+			schedule.NextCommonDropSeconds,
+			int(commonChestDropInterval/time.Second),
+		)
+	}
+}
+
+func TestCurrentInventoryFillDropScheduleUsesCustomChestTiming(t *testing.T) {
+	resetChestDropTracker()
+	t.Cleanup(resetChestDropTracker)
+
+	now := time.Date(2026, 7, 4, 12, 0, 0, 0, time.UTC)
+	timing := inventory.ChestTimingConfig{
+		CommonDropSeconds:         300,
+		StageDropSeconds:          420,
+		CommonBaseAutoOpenSeconds: 360,
+		StageBaseAutoOpenSeconds:  700,
+	}
+
+	schedule := currentInventoryFillDropScheduleWithTiming(now, timing)
+
+	if schedule.NextCommonDropSeconds != 300 || schedule.NextStageDropSeconds != 420 {
+		t.Fatalf("next drops = common %d stage %d, want 300/420", schedule.NextCommonDropSeconds, schedule.NextStageDropSeconds)
+	}
+}
+
+func TestCurrentChestTimingConfigUsesActiveGameLayout(t *testing.T) {
+	activeApp.gameLayoutMu.Lock()
+	previousLayout := activeApp.activeGameLayout
+	activeApp.activeGameLayout = game.GameLayout{
+		ChestTiming: game.ChestTiming{
+			CommonChestDropSeconds:         301,
+			CommonChestBaseAutoOpenSeconds: 302,
+			StageChestDropSeconds:          601,
+			StageChestBaseAutoOpenSeconds:  602,
+		},
+	}
+	activeApp.gameLayoutMu.Unlock()
+	t.Cleanup(func() {
+		activeApp.gameLayoutMu.Lock()
+		activeApp.activeGameLayout = previousLayout
+		activeApp.gameLayoutMu.Unlock()
+	})
+
+	timing := currentChestTimingConfig()
+
+	if timing.CommonDropSeconds != 301 || timing.CommonBaseAutoOpenSeconds != 302 {
+		t.Fatalf("common timing = drop %d open %d, want 301/302", timing.CommonDropSeconds, timing.CommonBaseAutoOpenSeconds)
+	}
+	if timing.StageDropSeconds != 601 || timing.StageBaseAutoOpenSeconds != 602 {
+		t.Fatalf("stage timing = drop %d open %d, want 601/602", timing.StageDropSeconds, timing.StageBaseAutoOpenSeconds)
 	}
 }
 
@@ -83,6 +268,85 @@ func TestTradeSlotCooldownNotificationRequiresFutureObservation(t *testing.T) {
 	}
 	if shouldNotifyTradeSlotCooldown(1, future, future.Add(2*time.Second)) {
 		t.Fatal("same due cooldown should notify only once")
+	}
+}
+
+func TestInventoryFullNotificationRequiresObservedTransition(t *testing.T) {
+	originalAppHWND := activeApp.appHWND
+	originalTrayIconAdded := activeApp.trayIconAdded
+	originalPublisher := publishTrayNotification
+	originalPreference := currentDisplayLanguagePreference()
+
+	var receivedTitles []string
+	var receivedBodies []string
+	activeApp.appHWND = 1
+	activeApp.trayIconAdded = true
+	publishTrayNotification = func(title string, message string, _ uintptr) {
+		receivedTitles = append(receivedTitles, title)
+		receivedBodies = append(receivedBodies, message)
+	}
+	applyDisplayLanguagePreference("en-US")
+	resetInventoryFullNotification()
+	clearPendingTrayNotifications()
+	t.Cleanup(func() {
+		activeApp.appHWND = originalAppHWND
+		activeApp.trayIconAdded = originalTrayIconAdded
+		publishTrayNotification = originalPublisher
+		applyDisplayLanguagePreference(originalPreference)
+		resetInventoryFullNotification()
+		clearPendingTrayNotifications()
+	})
+
+	fullSnapshot := playerdata.InventorySnapshot{
+		InventorySlots: playerdata.InventorySlotSummary{Total: 3, Used: 3, Free: 0},
+	}
+	notFullSnapshot := playerdata.InventorySnapshot{
+		InventorySlots: playerdata.InventorySlotSummary{Total: 3, Used: 2, Free: 0},
+	}
+
+	updateInventoryFullNotification(fullSnapshot)
+	flushTrayNotifications()
+	if len(receivedTitles) != 0 {
+		t.Fatalf("first full observation emitted notification: %q", receivedTitles)
+	}
+
+	updateInventoryFullNotification(fullSnapshot)
+	flushTrayNotifications()
+	if len(receivedTitles) != 0 {
+		t.Fatalf("unchanged full inventory emitted notification: %q", receivedTitles)
+	}
+
+	updateInventoryFullNotification(notFullSnapshot)
+	flushTrayNotifications()
+	if len(receivedTitles) != 0 {
+		t.Fatalf("not-full inventory emitted notification: %q", receivedTitles)
+	}
+
+	updateInventoryFullNotification(fullSnapshot)
+	flushTrayNotifications()
+	if len(receivedTitles) != 1 || receivedTitles[0] != "Inventory Full" {
+		t.Fatalf("full transition notification title = %q, want Inventory Full", receivedTitles)
+	}
+	if len(receivedBodies) != 1 || receivedBodies[0] != "Your inventory has no free slots left." {
+		t.Fatalf("full transition notification body = %q", receivedBodies)
+	}
+
+	updateInventoryFullNotification(fullSnapshot)
+	flushTrayNotifications()
+	if len(receivedTitles) != 1 {
+		t.Fatalf("repeated full inventory emitted notification: %q", receivedTitles)
+	}
+}
+
+func TestInventoryFullNotificationUsesTurkishText(t *testing.T) {
+	originalPreference := currentDisplayLanguagePreference()
+	t.Cleanup(func() { applyDisplayLanguagePreference(originalPreference) })
+
+	applyDisplayLanguagePreference("tr-TR")
+	title, body := inventoryFullNotificationContent()
+
+	if title != "Envanter Dolu" || body != "Envanterinde boş slot kalmadı." {
+		t.Fatalf("Turkish inventory full notification = %q / %q", title, body)
 	}
 }
 

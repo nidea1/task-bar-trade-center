@@ -77,6 +77,10 @@ func (app *App) GetDashboardFooterInfo() DashboardFooterInfo {
 	return GetDashboardFooterInfo()
 }
 
+func (app *App) CheckForUpdates() DashboardFooterInfo {
+	return CheckForUpdates()
+}
+
 func (app *App) GetRuntimeState() RuntimeStateInfo {
 	return GetRuntimeState()
 }

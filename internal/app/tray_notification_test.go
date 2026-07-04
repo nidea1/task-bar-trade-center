@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestTrayNotificationsEmitOnlyForDistinctStateTransitions(t *testing.T) {
+func TestTrayNotificationsSuppressPassiveRuntimeStatesAndKeepActionNotifications(t *testing.T) {
 	originalAppHWND := activeApp.appHWND
 	originalTrayIconAdded := activeApp.trayIconAdded
 	originalPublisher := publishTrayNotification
@@ -44,14 +44,20 @@ func TestTrayNotificationsEmitOnlyForDistinctStateTransitions(t *testing.T) {
 
 	setAppStatus(AppStatusWaitingForGame)
 	flushTrayNotifications()
-	if len(receivedTitles) != 1 || !strings.Contains(receivedTitles[0], "TaskBarHero") {
-		t.Fatalf("WaitingForGame notification title = %q", receivedTitles)
+	if len(receivedTitles) != 0 {
+		t.Fatalf("passive WaitingForGame emitted a notification: %q", receivedTitles)
 	}
 
 	setAppStatus(AppStatusWaitingForGame)
 	flushTrayNotifications()
-	if len(received) != 1 {
+	if len(received) != 0 {
 		t.Fatalf("duplicate runtime state emitted a notification: %q", received)
+	}
+
+	setAppStatus(AppStatusReady)
+	flushTrayNotifications()
+	if len(received) != 0 {
+		t.Fatalf("passive Ready emitted a notification: %q", received)
 	}
 
 	setConfigurationStatus(ConfigStatusLocalCache, "diagnostic detail")
@@ -60,8 +66,14 @@ func TestTrayNotificationsEmitOnlyForDistinctStateTransitions(t *testing.T) {
 	setUpdateState(UpdateStatusChecking, "", "", "")
 	setUpdateState(UpdateStatusFailed, "network diagnostic detail", "", "https://example.com/release")
 	flushTrayNotifications()
+	if len(received) != 1 {
+		t.Fatalf("expected only UpdateFailed notification, got = %q", received)
+	}
+
+	setAppStatus(AppStatusAttachFailed)
+	flushTrayNotifications()
 	if len(received) != 2 {
-		t.Fatalf("expected WaitingForGame + UpdateFailed notifications, got = %q", received)
+		t.Fatalf("expected UpdateFailed + AttachFailed notifications, got = %q", received)
 	}
 	allNotificationText := strings.Join(append(receivedTitles, received...), "\n")
 	if strings.Contains(allNotificationText, "diagnostic detail") {
@@ -101,7 +113,7 @@ func TestRuntimeNotificationsAreSuppressedDuringShutdown(t *testing.T) {
 	}
 }
 
-func TestStartupNotificationAndLanguageMenuMapping(t *testing.T) {
+func TestStartupNotificationIsSuppressedAndLanguageMenuMapping(t *testing.T) {
 	originalAppHWND := activeApp.appHWND
 	originalTrayIconAdded := activeApp.trayIconAdded
 	originalPublisher := publishTrayNotification
@@ -127,15 +139,8 @@ func TestStartupNotificationAndLanguageMenuMapping(t *testing.T) {
 
 	notifyApplicationStarted()
 	flushTrayNotifications()
-	if len(receivedTitles) != 1 || receivedTitles[0] != tr("status.starting") {
-		t.Fatalf("startup notification title should be %q, got = %q", tr("status.starting"), receivedTitles)
-	}
-
-	if received[0] != " " {
-		t.Fatalf("startup notification body should be blank, got = %q", received[0])
-	}
-	if strings.Contains(receivedTitles[0]+received[0], AppName) {
-		t.Fatalf("startup notification content should not repeat app name, got title=%q body=%q", receivedTitles[0], received[0])
+	if len(receivedTitles) != 0 || len(received) != 0 {
+		t.Fatalf("startup emitted a notification: title=%q body=%q", receivedTitles, received)
 	}
 
 	if language, ok := appLanguageForMenuCommand(MenuLanguageBase + 8); !ok || language != "ja-JP" {

@@ -6,7 +6,7 @@ interface MetricCardProps {
     icon: React.ReactNode;
     iconColor: string;
     tooltip?: React.ReactNode;
-    tooltipDirection?: "up" | "down";
+    tooltipDirection?: "up" | "down" | "down-left";
 }
 
 export function MetricCard({
@@ -19,7 +19,9 @@ export function MetricCard({
 }: MetricCardProps) {
     const tooltipClass = tooltipDirection === "down"
         ? "metric-tooltip-down"
-        : "metric-tooltip-up";
+        : tooltipDirection === "down-left"
+            ? "metric-tooltip-down-left"
+            : "metric-tooltip-up";
 
     return (
         <div className="game-metric metric-card p-2.5 flex items-center justify-between gap-2.5 group relative">

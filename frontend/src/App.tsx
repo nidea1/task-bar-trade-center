@@ -11,6 +11,7 @@ import {
     SetDisplayLanguage,
     SetMarketScope,
     GetDashboardFooterInfo,
+    CheckForUpdates,
     InstallAvailableUpdate,
     GetDashboardSettings,
     GetRuntimeState,
@@ -79,6 +80,7 @@ import {
     equipmentFilterValue,
     formatPricingUpdateText,
     formatPricingEtaText,
+    formatRemainingDuration,
     languageDisplayCode
 } from './utils/helpers';
 import {
@@ -268,6 +270,48 @@ function App() {
     const dashboardSettingsLoadedRef = useRef(false);
     const dashboardSettingsSnapshotRef = useRef("");
     const notifySourceMenuRef = useRef<HTMLDivElement>(null);
+
+    const [localNextCommonDrop, setLocalNextCommonDrop] = useState<number | null>(null);
+    const [localNextStageDrop, setLocalNextStageDrop] = useState<number | null>(null);
+
+    useEffect(() => {
+        if (state?.inventory_fill?.available) {
+            const commonBackendVal = state.inventory_fill.next_common_drop_seconds;
+            setLocalNextCommonDrop((prev) => {
+                if (prev === null || commonBackendVal === 0 || commonBackendVal > prev + 10) {
+                    return commonBackendVal;
+                }
+                return prev;
+            });
+
+            const stageBackendVal = state.inventory_fill.next_stage_drop_seconds;
+            setLocalNextStageDrop((prev) => {
+                if (prev === null || stageBackendVal === 0 || stageBackendVal > prev + 10) {
+                    return stageBackendVal;
+                }
+                return prev;
+            });
+        } else {
+            setLocalNextCommonDrop(null);
+            setLocalNextStageDrop(null);
+        }
+    }, [
+        state?.inventory_fill?.next_common_drop_seconds,
+        state?.inventory_fill?.next_stage_drop_seconds,
+        state?.inventory_fill?.common_drop_ready,
+        state?.inventory_fill?.stage_drop_ready,
+        state?.inventory_fill?.common_drop_observed,
+        state?.inventory_fill?.stage_drop_observed,
+        state?.inventory_fill?.available
+    ]);
+
+    useEffect(() => {
+        const interval = window.setInterval(() => {
+            setLocalNextCommonDrop((prev) => (prev !== null && prev > 0 ? prev - 1 : prev));
+            setLocalNextStageDrop((prev) => (prev !== null && prev > 0 ? prev - 1 : prev));
+        }, 1000);
+        return () => window.clearInterval(interval);
+    }, []);
 
     const t = (key: string, fallback?: string) => {
         if (translations[key]) {
@@ -593,6 +637,227 @@ function App() {
     const displayedTotalValue = priceMode === "instant"
         ? totals?.instant_sell_value
         : totals?.suggested_listing_value;
+    const inventoryFill = state?.inventory_fill;
+    const formatInventoryFillSeconds = (seconds?: number) => {
+        if (!seconds || seconds <= 0) return "0s";
+        return formatRemainingDuration(seconds, currentLanguage);
+    };
+    const formatInventoryDropCountdown = (seconds: number | null, ready?: boolean) => {
+        if (ready || seconds === 0) {
+            return t("status.ready", localizedFallback(currentLanguage, "Hazır", "Ready"));
+        }
+        if (seconds === null) {
+            return "--";
+        }
+        return formatInventoryFillSeconds(seconds);
+    };
+    const inventoryFillBaseTimeMs = state?.updated_at ? Date.parse(state.updated_at) : Number.NaN;
+    const formatTargetFillTime = (seconds?: number) => {
+        if (!seconds || seconds <= 0) return "--:--";
+        const baseTimeMs = Number.isFinite(inventoryFillBaseTimeMs) ? inventoryFillBaseTimeMs : Date.now();
+        const fillTime = new Date(baseTimeMs + seconds * 1000);
+        const now = new Date();
+        const hours = fillTime.getHours().toString().padStart(2, '0');
+        const minutes = fillTime.getMinutes().toString().padStart(2, '0');
+        const timeStr = `${hours}:${minutes}`;
+
+        const fillDay = new Date(fillTime.getFullYear(), fillTime.getMonth(), fillTime.getDate());
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const diffDays = Math.round((fillDay.getTime() - today.getTime()) / 86400000);
+
+        if (diffDays === 0) {
+            return `${t("value.today", localizedFallback(currentLanguage, "Bugün", "Today"))} ${timeStr}`;
+        } else if (diffDays === 1) {
+            return `${t("value.tomorrow", localizedFallback(currentLanguage, "Yarın", "Tomorrow"))} ${timeStr}`;
+        } else {
+            const day = fillTime.getDate();
+            const month = fillTime.toLocaleString(currentLanguage, { month: 'short' });
+            return `${day} ${month} ${timeStr}`;
+        }
+    };
+    const inventoryFillValue = !inventoryFill?.available
+        ? t("value.na", "N/A")
+        : (!inventoryFill.has_common_auto_open_rune && !inventoryFill.has_stage_auto_open_rune)
+            ? t("dashboard.inventory_fill_no_runes", localizedFallback(currentLanguage, "Rün Eksik", "Rune Missing"))
+            : inventoryFill.free_slots <= 0
+                ? t("dashboard.inventory_fill_full", localizedFallback(currentLanguage, "Dolu", "Full"))
+                : inventoryFill.fills
+                    ? formatTargetFillTime(inventoryFill.time_to_full_seconds)
+                    : t("dashboard.inventory_fill_never", localizedFallback(currentLanguage, "Dolmaz", "Won't fill"));
+    const inventoryFillHasRuneReduction = !!inventoryFill
+        && (inventoryFill.common_rune_reduction_seconds > 0 || inventoryFill.stage_rune_reduction_seconds > 0);
+    const inventoryFillRuneState = inventoryFill?.rune_resolved
+        ? t("value.active", localizedFallback(currentLanguage, "Aktif", "Active"))
+        : inventoryFillHasRuneReduction
+            ? t("value.partial", localizedFallback(currentLanguage, "Kısmi", "Partial"))
+            : t("value.estimated", localizedFallback(currentLanguage, "Tahmini", "Estimated"));
+    const inventoryFillCommonDropState = inventoryFill?.common_drop_observed
+        ? t("value.observed", localizedFallback(currentLanguage, "gözlendi", "observed"))
+        : t("value.default", localizedFallback(currentLanguage, "varsayılan", "default"));
+        const inventoryFillStageDropState = inventoryFill?.stage_drop_observed
+        ? t("value.observed", localizedFallback(currentLanguage, "gözlendi", "observed"))
+        : t("value.default", localizedFallback(currentLanguage, "varsayılan", "default"));
+    const inventoryFillPercentage = inventoryFill
+        ? Math.min(100, Math.max(0, (inventoryFill.used_slots / (inventoryFill.slot_count || 1)) * 100))
+        : 0;
+    const inventoryFillTooltip = inventoryFill?.available ? (
+        <div className="inventory-fill-tooltip text-left text-xs text-[#e1d5bf] select-none p-0.5">
+            {!inventoryFill.has_common_auto_open_rune && !inventoryFill.has_stage_auto_open_rune ? (
+                <div className="tooltip-section pb-1 text-center py-2">
+                    <AlertTriangle className="w-8 h-8 text-[#ffbe2d] mx-auto mb-2 animate-pulse" />
+                    <p className="font-bold text-[#ffbe2d] mb-1">
+                        {t("dashboard.inventory_fill_no_runes_title", localizedFallback(currentLanguage, "Zemberek Rünü Eksik", "Rune of the Mainspring Missing"))}
+                    </p>
+                    <p className="text-[10px] text-[#b5a38b] leading-relaxed">
+                        {t("dashboard.inventory_fill_no_runes_desc", localizedFallback(
+                            currentLanguage,
+                            "Otomatik sandık açma rünü (\"Zemberek Rünü\") bulunamadığı için envanter dolum tahmini yapılamıyor.",
+                            "Automatic chest opening rune (\"Rune of the Mainspring\") is missing. Forecast is unavailable."
+                        ))}
+                    </p>
+                </div>
+            ) : (
+                <>
+                    {/* --- HEADER & PROGRESS --- */}
+                    <div className="tooltip-section pb-2 border-b border-[#2d261f]">
+                        <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[10px] font-bold text-[#e1d5bf] uppercase tracking-wider flex items-center gap-1">
+                                <PackageOpen className="w-3.5 h-3.5 text-[#70d6ff]" />
+                                {t("dashboard.inventory_fill_title", localizedFallback(currentLanguage, "Envanter Dolum Tahmini", "Inventory Forecast"))}
+                            </span>
+                            <span className="text-[10px] font-bold text-[#9a896f]">
+                                {inventoryFill.used_slots}/{inventoryFill.slot_count}
+                            </span>
+                        </div>
+                        <div className="w-full bg-[#030304] border border-[#2d261f] rounded-sm h-2 overflow-hidden mb-1.5">
+                            <div
+                                className="bg-gradient-to-r from-[#70d6ff] to-[#54dc5e] h-full transition-all duration-500 rounded-sm"
+                                style={{ width: `${inventoryFillPercentage}%` }}
+                            />
+                        </div>
+                        <div className="text-[9px] text-[#9a896f] flex justify-between">
+                            <span>{t("dashboard.inventory_fill_free_label", localizedFallback(currentLanguage, "Boş yer", "Free space"))}:</span>
+                            <strong className="text-[#54dc5e] font-bold">{inventoryFill.free_slots} {t("dashboard.inventory_fill_free", localizedFallback(currentLanguage, "boş", "free"))}</strong>
+                        </div>
+                    </div>
+
+                    {/* --- CORE FORECAST (RATE & ETA) --- */}
+                    <div className="tooltip-section py-2 border-b border-[#2d261f] space-y-1.5">
+                        <div className="flex justify-between items-center text-[10px]">
+                            <span className="text-[#9a896f] flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-[#ffbe2d]" />
+                                {t("dashboard.inventory_fill_time", localizedFallback(currentLanguage, "Dolum Süresi", "Time to Fill"))}:
+                            </span>
+                            <strong className="text-[#e1d5bf] font-bold text-right">
+                                {inventoryFill.free_slots <= 0
+                                    ? <span className="text-[#54dc5e]">{t("dashboard.inventory_fill_full", localizedFallback(currentLanguage, "Dolu", "Full"))}</span>
+                                    : inventoryFill.fills
+                                        ? formatInventoryFillSeconds(inventoryFill.time_to_full_seconds)
+                                        : <span className="text-[#e87e30]">{t("dashboard.inventory_fill_never", localizedFallback(currentLanguage, "Dolmaz", "Won't fill"))}</span>
+                                }
+                            </strong>
+                        </div>
+                        {inventoryFill.fills && (
+                            <div className="flex justify-between items-center text-[10px]">
+                                <span className="text-[#9a896f] flex items-center gap-1">
+                                    <Clock className="w-3 h-3 text-[#70d6ff]" />
+                                    {t("dashboard.inventory_fill_target_time", localizedFallback(currentLanguage, "Dolacağı Saat", "Fill Date"))}:
+                                </span>
+                                <strong className="text-[#70d6ff] font-bold text-right">
+                                    {formatTargetFillTime(inventoryFill.time_to_full_seconds)}
+                                </strong>
+                            </div>
+                        )}
+                        <div className="flex justify-between items-center text-[10px]">
+                            <span className="text-[#9a896f] flex items-center gap-1">
+                                <TrendingUp className="w-3 h-3 text-[#54dc5e]" />
+                                {t("dashboard.inventory_fill_net_rate", localizedFallback(currentLanguage, "Net Dolum Hızı", "Net Fill Rate"))}:
+                            </span>
+                            <strong className="text-[#54dc5e] font-bold text-right">
+                                +{inventoryFill.net_fill_per_hour.toFixed(2)} {t("dashboard.inventory_fill_slots_per_hour", localizedFallback(currentLanguage, "slot/sa", "slots/h"))}
+                            </strong>
+                        </div>
+                    </div>
+
+                    {/* --- CONFIGURATION CARDS --- */}
+                    <div className="tooltip-section py-2 border-b border-[#2d261f] space-y-2">
+                        <div className="text-[9px] font-bold text-[#9a896f] uppercase tracking-wider">
+                            {t("dashboard.inventory_fill_settings", localizedFallback(currentLanguage, "Düşüm & Oto-Açış Ayarları", "Drop & Auto-Open Rates"))}
+                        </div>
+
+                        {/* Common configuration */}
+                        <div className="tooltip-config-card space-y-1">
+                            <div className="flex justify-between items-center text-[9px] border-b border-[#2d261f]/40 pb-0.5 mb-1">
+                                <span className="font-bold text-[#b5a38b]">{t("dashboard.inventory_fill_common", localizedFallback(currentLanguage, "Normal Sandık", "Normal Chest"))}</span>
+                                <span className="text-[8px] px-1 tooltip-badge-rune rounded-sm scale-95 origin-right">
+                                    -{formatInventoryFillSeconds(inventoryFill.common_rune_reduction_seconds)}
+                                </span>
+                            </div>
+                            <div className="flex justify-between text-[9px]">
+                                <span className="text-[#9a896f]">{t("dashboard.inventory_fill_drop_interval", localizedFallback(currentLanguage, "Düşüm Süresi", "Drop Interval"))}:</span>
+                                <strong className="text-[#e1d5bf]">{formatInventoryFillSeconds(inventoryFill.common_drop_seconds)}</strong>
+                            </div>
+                            <div className="flex justify-between text-[9px]">
+                                <span className="text-[#9a896f]">{t("dashboard.inventory_fill_auto_open", localizedFallback(currentLanguage, "Oto-Açılış", "Auto Open"))}:</span>
+                                <strong className="text-[#e1d5bf]">{formatInventoryFillSeconds(inventoryFill.common_auto_open_seconds)}</strong>
+                            </div>
+                        </div>
+
+                        {/* Stage configuration */}
+                        <div className="tooltip-config-card space-y-1">
+                            <div className="flex justify-between items-center text-[9px] border-b border-[#2d261f]/40 pb-0.5 mb-1">
+                                <span className="font-bold text-[#b5a38b]">{t("dashboard.inventory_fill_stage", localizedFallback(currentLanguage, "Aşama Sandığı", "Stage Chest"))}</span>
+                                <span className="text-[8px] px-1 tooltip-badge-rune rounded-sm scale-95 origin-right">
+                                    -{formatInventoryFillSeconds(inventoryFill.stage_rune_reduction_seconds)}
+                                </span>
+                            </div>
+                            <div className="flex justify-between text-[9px]">
+                                <span className="text-[#9a896f]">{t("dashboard.inventory_fill_drop_interval", localizedFallback(currentLanguage, "Düşüm Süresi", "Drop Interval"))}:</span>
+                                <strong className="text-[#e1d5bf]">{formatInventoryFillSeconds(inventoryFill.stage_drop_seconds)}</strong>
+                            </div>
+                            <div className="flex justify-between text-[9px]">
+                                <span className="text-[#9a896f]">{t("dashboard.inventory_fill_auto_open", localizedFallback(currentLanguage, "Oto-Açılış", "Auto Open"))}:</span>
+                                <strong className="text-[#e1d5bf]">{formatInventoryFillSeconds(inventoryFill.stage_auto_open_seconds)}</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* --- NEXT ESTIMATED DROPS --- */}
+                    <div className="tooltip-section pt-2 space-y-1.5">
+                        <div className="text-[9px] font-bold text-[#9a896f] uppercase tracking-wider">
+                            {t("dashboard.inventory_fill_next_drops", localizedFallback(currentLanguage, "Sonraki Düşümler", "Next Drops"))}
+                        </div>
+                        <div className="flex justify-between items-center text-[10px]">
+                            <span className="text-[#9a896f]">{t("dashboard.inventory_fill_next_common_short", localizedFallback(currentLanguage, "Normal Sandık", "Normal Chest"))}:</span>
+                            <div className="flex items-center gap-1.5">
+                                <strong className="text-[#e1d5bf] font-bold">
+                                    {formatInventoryDropCountdown(localNextCommonDrop, inventoryFill.common_drop_ready)}
+                                </strong>
+                                {!inventoryFill.common_drop_observed && (
+                                    <span className="text-[8px] px-1 py-0.5 rounded-sm font-medium border tooltip-badge-default">
+                                        {t("value.default", localizedFallback(currentLanguage, "Varsayılan", "Default"))}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                        <div className="flex justify-between items-center text-[10px]">
+                            <span className="text-[#9a896f]">{t("dashboard.inventory_fill_next_stage_short", localizedFallback(currentLanguage, "Aşama Sandığı", "Stage Chest"))}:</span>
+                            <div className="flex items-center gap-1.5">
+                                <strong className="text-[#e1d5bf] font-bold">
+                                    {formatInventoryDropCountdown(localNextStageDrop, inventoryFill.stage_drop_ready)}
+                                </strong>
+                                {!inventoryFill.stage_drop_observed && (
+                                    <span className="text-[8px] px-1 py-0.5 rounded-sm font-medium border tooltip-badge-default">
+                                        {t("value.default", localizedFallback(currentLanguage, "Varsayılan", "Default"))}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </>
+            )}
+        </div>
+    ) : undefined;
     const themeLabel = themeMode === "dark"
         ? t("dashboard.theme_dark", "Dark")
         : t("dashboard.theme_light", "Light");
@@ -750,6 +1015,20 @@ function App() {
         && !installingUpdate;
     const dismissUpdatePrompt = () => {
         setDismissedUpdatePromptKey(updatePromptKey);
+    };
+    const checkForUpdatesFromFooter = () => {
+        CheckForUpdates()
+            .then((info: DashboardFooterInfo | null) => {
+                if (mountedRef.current && info) {
+                    setFooterInfo(info);
+                }
+            })
+            .catch((err: unknown) => {
+                if (mountedRef.current) {
+                    setError(String(err));
+                    loadFooterInfo();
+                }
+            });
     };
     const installUpdateNow = () => {
         setInstallingUpdate(true);
@@ -1144,6 +1423,14 @@ function App() {
                                 icon={<CheckCircle className="w-4 h-4" />}
                                 iconColor="text-[#ffbe2d]"
                             />
+                            <MetricCard
+                                label={t("dashboard.inventory_fill", localizedFallback(currentLanguage, "Envanter Dolumu", "Inventory Fill"))}
+                                value={inventoryFillValue}
+                                icon={<PackageOpen className="w-4 h-4" />}
+                                iconColor="text-[#70d6ff]"
+                                tooltip={inventoryFillTooltip}
+                                tooltipDirection="down-left"
+                            />
                         </section>
 
                         {/* ═══ Equipped Gear by Hero ═══ */}
@@ -1259,6 +1546,7 @@ function App() {
             <DashboardFooter
                 info={footerInfo}
                 isRefreshing={!runtimeReady || isCurrentlyRefreshing}
+                onCheckUpdates={checkForUpdatesFromFooter}
                 currentLanguage={currentLanguage}
                 t={t}
                 syncTimeText={syncTimeText}

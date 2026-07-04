@@ -193,7 +193,11 @@ func configureGameProcess(pid uint32, processHandle uintptr, gameAssemblyBase ui
 	activeApp.tooltipYAOBResolver.Reset()
 	activeApp.tooltipHeightAOBResolver.Reset()
 	resetMarketableInventoryNotifications()
+	resetChestDropTracker()
+	resetInventoryFullNotification()
 	triggerSavePollNow = false
+	triggerSavePollSource = ""
+	triggerSavePollHasBoxDrop = false
 }
 
 func prepareGameSession(processHandle uintptr, gameAssemblyBase uintptr) bool {
@@ -414,6 +418,8 @@ func resetGameProcess(setWaitingStatus bool) {
 	activeApp.tooltipXAOBResolver.Reset()
 	activeApp.tooltipYAOBResolver.Reset()
 	activeApp.tooltipHeightAOBResolver.Reset()
+	resetChestDropTracker()
+	resetInventoryFullNotification()
 	activeApp.inventorySnapshotMu.Lock()
 	activeApp.inventorySnapshotInFlight = nil
 	activeApp.inventorySnapshotBackoffUntil = time.Time{}

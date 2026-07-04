@@ -93,6 +93,34 @@ export interface DashboardFooterInfo {
     release_url: string;
 }
 
+export interface InventoryFillEstimate {
+    available: boolean;
+    fills: boolean;
+    fill_model: string;
+    slot_count: number;
+    used_slots: number;
+    free_slots: number;
+    common_drop_seconds: number;
+    stage_drop_seconds: number;
+    next_common_drop_seconds: number;
+    next_stage_drop_seconds: number;
+    common_auto_open_seconds: number;
+    stage_auto_open_seconds: number;
+    common_rune_reduction_seconds: number;
+    stage_rune_reduction_seconds: number;
+    net_fill_per_hour: number;
+    time_to_full_seconds: number;
+    rune_resolved: boolean;
+    has_common_auto_open_rune: boolean;
+    has_stage_auto_open_rune: boolean;
+    common_drop_observed: boolean;
+    stage_drop_observed: boolean;
+    common_drop_ready: boolean;
+    stage_drop_ready: boolean;
+    common_chest_count: number;
+    stage_chest_count: number;
+}
+
 export interface DashboardState {
     updated_at: string;
     snapshot_read_at: string;
@@ -132,6 +160,12 @@ export interface DashboardState {
     };
     translations?: Record<string, string>;
     trade_slots?: TradeShipSlot[];
+    inventory_fill?: InventoryFillEstimate;
+    chest_counts?: {
+        normal_chests: number;
+        stage_chests: number;
+        total_chests: number;
+    };
 }
 
 export interface TradeShipSlot {
