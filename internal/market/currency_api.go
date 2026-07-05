@@ -1,7 +1,11 @@
 package market
 
 func SupportedCurrencies() []MarketCurrency {
-	return supportedMarketCurrencies
+	currencies := make([]MarketCurrency, len(supportedMarketCurrencies))
+	for index, currency := range supportedMarketCurrencies {
+		currencies[index] = withMarketCurrencyDefaults(currency)
+	}
+	return currencies
 }
 
 func SupportedRegions() []MarketRegion {

@@ -275,6 +275,17 @@ func TestCalculateSuggestedPrice(t *testing.T) {
 			want: 4.99,
 		},
 		{
+			name: "current book at market floor",
+			analysis: MarketAnalysis{
+				LowestSellPrice: 0.03,
+				HighestBuyPrice: 0.02,
+				MinListingPrice: 0.03,
+				HasLowestSell:   true,
+				HasHighestBuy:   true,
+			},
+			want: 0.03,
+		},
+		{
 			name: "order missing uses weekly average",
 			analysis: MarketAnalysis{
 				WeeklyAveragePrice: 10.0,
@@ -283,6 +294,99 @@ func TestCalculateSuggestedPrice(t *testing.T) {
 				HasLastSold:        true,
 			},
 			want: 10.0,
+		},
+		{
+			name: "historical target below market floor",
+			analysis: MarketAnalysis{
+				WeeklyAveragePrice: 0.02,
+				MinListingPrice:    0.03,
+				HasWeeklyAverage:   true,
+			},
+			want: 0.03,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := calculateSuggestedPrice(tt.analysis)
+			if !ok {
+				t.Fatal("expected suggested price")
+			}
+			assertFloatEqual(t, got, tt.want)
+		})
+	}
+}
+
+func TestMarketMinimumListingPriceByCurrency(t *testing.T) {
+	withExchangeRateCache(t, map[string]float64{
+		"USD": 1.0,
+		"GBP": 0.79,
+		"AUD": 1.50,
+		"CNY": 7.25,
+		"JPY": 155.0,
+		"KRW": 1380.0,
+		"VND": 25400.0,
+		"CLP": 940.0,
+		"THB": 36.7,
+	})
+
+	tests := []struct {
+		code          string
+		wantMinimum   float64
+		wantIncrement float64
+	}{
+		{code: "USD", wantMinimum: 0.03, wantIncrement: 0.01},
+		{code: "GBP", wantMinimum: 0.03, wantIncrement: 0.01},
+		{code: "AUD", wantMinimum: 0.06, wantIncrement: 0.01},
+		{code: "CNY", wantMinimum: 0.21, wantIncrement: 0.01},
+		{code: "JPY", wantMinimum: 6, wantIncrement: 1},
+		{code: "KRW", wantMinimum: 30, wantIncrement: 10},
+		{code: "VND", wantMinimum: 1500, wantIncrement: 500},
+		{code: "CLP", wantMinimum: 27, wantIncrement: 1},
+		{code: "THB", wantMinimum: 1.11, wantIncrement: 0.01},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.code, func(t *testing.T) {
+			currency, ok := marketCurrencyForCode(tt.code)
+			if !ok {
+				t.Fatalf("currency %s not found", tt.code)
+			}
+			assertFloatEqual(t, currency.MinListingPrice, tt.wantMinimum)
+			assertFloatEqual(t, currency.PriceIncrement, tt.wantIncrement)
+
+			analysis := unavailableMarketAnalysis("Example", time.Unix(1700000000, 0), currency)
+			assertFloatEqual(t, analysis.MinListingPrice, tt.wantMinimum)
+			assertFloatEqual(t, analysis.PriceIncrement, tt.wantIncrement)
+		})
+	}
+}
+
+func TestCalculateSuggestedPriceUsesCurrencyIncrement(t *testing.T) {
+	tests := []struct {
+		name     string
+		analysis MarketAnalysis
+		want     float64
+	}{
+		{
+			name: "KRW undercuts by ten won",
+			analysis: MarketAnalysis{
+				LowestSellPrice: 40,
+				MinListingPrice: 30,
+				PriceIncrement:  10,
+				HasLowestSell:   true,
+			},
+			want: 30,
+		},
+		{
+			name: "VND undercuts by five hundred dong",
+			analysis: MarketAnalysis{
+				LowestSellPrice: 2000,
+				MinListingPrice: 1500,
+				PriceIncrement:  500,
+				HasLowestSell:   true,
+			},
+			want: 1500,
 		},
 	}
 

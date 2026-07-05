@@ -204,6 +204,17 @@ func TestNewAnalysisFeatures(t *testing.T) {
 				},
 				want: "",
 			},
+			{
+				name: "Minimum listing price is not overvalued against lower history",
+				analysis: MarketAnalysis{
+					LowestSellPrice:    0.03,
+					WeeklyAveragePrice: 0.02,
+					MinListingPrice:    0.03,
+					HasLowestSell:      true,
+					HasWeeklyAverage:   true,
+				},
+				want: "",
+			},
 		}
 
 		for _, tt := range tests {

@@ -3,10 +3,17 @@ package market
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
+)
+
+const (
+	defaultMarketPriceIncrement = 0.01
+	minimumMarketFeeUSD         = 0.01
+	minimumMarketFeeParts       = 3
 )
 
 var supportedMarketCurrencies = []MarketCurrency{
@@ -86,10 +93,73 @@ func marketCurrencyForCode(code string) (MarketCurrency, bool) {
 	code = strings.ToUpper(strings.TrimSpace(code))
 	for _, currency := range supportedMarketCurrencies {
 		if currency.Code == code {
-			return currency, true
+			return withMarketCurrencyDefaults(currency), true
 		}
 	}
 	return MarketCurrency{}, false
+}
+
+func withMarketCurrencyDefaults(currency MarketCurrency) MarketCurrency {
+	if currency.PriceIncrement <= 0 {
+		currency.PriceIncrement = marketPriceIncrement(currency.Code)
+	}
+	if currency.MinListingPrice <= 0 {
+		currency.MinListingPrice = marketMinListingPrice(currency)
+	}
+	return currency
+}
+
+func marketMinListingPrice(currency MarketCurrency) float64 {
+	rate, ok := configuredExchangeRate(currency.Code)
+	if !ok && currency.MinListingPrice > 0 {
+		return currency.MinListingPrice
+	}
+	if !ok {
+		rate = 1
+	}
+	increment := marketCurrencyPriceIncrement(currency)
+	fee := roundToMarketIncrement(minimumMarketFeeUSD*rate, increment)
+	if fee <= 0 {
+		fee = increment
+	}
+	return roundToMarketIncrement(fee*minimumMarketFeeParts, increment)
+}
+
+func marketCurrencyPriceIncrement(currency MarketCurrency) float64 {
+	if currency.PriceIncrement > 0 {
+		return currency.PriceIncrement
+	}
+	return marketPriceIncrement(currency.Code)
+}
+
+func marketPriceIncrement(currencyCode string) float64 {
+	switch strings.ToUpper(strings.TrimSpace(currencyCode)) {
+	case "JPY", "IDR", "CLP":
+		return 1
+	case "KRW":
+		return 10
+	case "VND":
+		return 500
+	default:
+		return defaultMarketPriceIncrement
+	}
+}
+
+func roundToMarketIncrement(value float64, increment float64) float64 {
+	if value <= 0 {
+		return 0
+	}
+	if increment <= 0 {
+		increment = defaultMarketPriceIncrement
+	}
+	rounded := math.Round(value/increment) * increment
+	if rounded < increment {
+		rounded = increment
+	}
+	if increment < 1 {
+		return math.Round(rounded*100) / 100
+	}
+	return math.Round(rounded)
 }
 
 func marketRegionForCurrency(currencyCode string, countryCode string) (MarketRegion, bool) {

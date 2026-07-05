@@ -184,6 +184,11 @@ func normalizeAnalysisCurrencyFormat(analysis *MarketAnalysis, currency MarketCu
 	}
 	analysis.PricePrefix = prefix
 	analysis.PriceSuffix = suffix
+	analysis.PriceIncrement = marketCurrencyPriceIncrement(currency)
+	analysis.MinListingPrice = marketMinListingPrice(currency)
+	if analysis.HasSuggested && analysis.MinListingPrice > 0 && analysis.SuggestedPrice > 0 && analysis.SuggestedPrice < analysis.MinListingPrice {
+		analysis.SuggestedPrice = roundAnalysisPrice(analysis.MinListingPrice, *analysis)
+	}
 }
 
 func marketDataFromSources(marketHashName string, orderBook MarketOrderBook, hasOrderBook bool, history []MarketSalePoint, now time.Time, currency MarketCurrency) MarketData {

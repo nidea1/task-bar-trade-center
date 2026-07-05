@@ -32,11 +32,13 @@ type MarketSalePoint struct {
 }
 
 type MarketAnalysis struct {
-	MarketHashName string
-	IconURL        string
-	PricePrefix    string
-	PriceSuffix    string
-	UpdatedAt      time.Time
+	MarketHashName  string
+	IconURL         string
+	PricePrefix     string
+	PriceSuffix     string
+	PriceIncrement  float64
+	MinListingPrice float64
+	UpdatedAt       time.Time
 
 	SuggestedPrice     float64
 	LowestSellPrice    float64
@@ -83,6 +85,8 @@ type MarketCurrency struct {
 	DefaultCountry  string
 	PricePrefix     string
 	PriceSuffix     string
+	PriceIncrement  float64
+	MinListingPrice float64
 }
 
 type MarketRegion struct {

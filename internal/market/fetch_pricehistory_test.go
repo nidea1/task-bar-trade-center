@@ -137,6 +137,7 @@ func TestScopedListingOrderBookSkipsPricehistory(t *testing.T) {
 	if !data.Analysis.HasSuggested || data.Analysis.PricePrefix != scope.Currency.PricePrefix {
 		t.Fatalf("analysis did not use scoped order book: %+v", data.Analysis)
 	}
+	assertFloatEqual(t, data.Analysis.SuggestedPrice, 0.03)
 }
 
 func TestScopedSuggestedPriceMergesUSDFallbackDetails(t *testing.T) {

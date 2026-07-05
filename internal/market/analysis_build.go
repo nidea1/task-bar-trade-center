@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+const fallbackMinListingPrice = 0.01
+
 func buildMarketAnalysis(marketHashName string, orderBook MarketOrderBook, hasOrderBook bool, history []MarketSalePoint, now time.Time, currency MarketCurrency) MarketAnalysis {
 	analysis := unavailableMarketAnalysis(marketHashName, now, currency)
 	if hasOrderBook {
@@ -112,18 +114,22 @@ func unavailableMarketAnalysis(marketHashName string, now time.Time, currency Ma
 		prefix = "$"
 	}
 	return MarketAnalysis{
-		MarketHashName: marketHashName,
-		PricePrefix:    prefix,
-		PriceSuffix:    suffix,
-		UpdatedAt:      now,
+		MarketHashName:  marketHashName,
+		PricePrefix:     prefix,
+		PriceSuffix:     suffix,
+		PriceIncrement:  marketCurrencyPriceIncrement(currency),
+		MinListingPrice: marketMinListingPrice(currency),
+		UpdatedAt:       now,
 	}
 }
 
 func calculateSuggestedPrice(analysis MarketAnalysis) (float64, bool) {
 	historicalTarget, hasHistoricalTarget := historicalSuggestedTarget(analysis)
+	minListingPrice := analysisMinListingPrice(analysis)
+	priceIncrement := analysisPriceIncrement(analysis)
 
 	if analysis.HasLowestSell && analysis.LowestSellPrice > 0 {
-		target := undercutPrice(analysis.LowestSellPrice)
+		target := undercutPrice(analysis.LowestSellPrice, minListingPrice, priceIncrement)
 		if hasHistoricalTarget && analysis.LowestSellPrice > historicalTarget*1.20 {
 			target = math.Min(target, historicalTarget)
 		}
@@ -131,25 +137,27 @@ func calculateSuggestedPrice(analysis MarketAnalysis) (float64, bool) {
 		if floor > 0 {
 			target = math.Max(target, floor)
 		}
-		ceiling := undercutPrice(analysis.LowestSellPrice)
+		target = math.Max(target, minListingPrice)
+		ceiling := undercutPrice(analysis.LowestSellPrice, minListingPrice, priceIncrement)
 		if target > ceiling {
 			target = ceiling
 		}
 		if target <= 0 {
 			target = analysis.LowestSellPrice
 		}
-		return roundPrice(target), true
+		return roundAnalysisPrice(target, analysis), true
 	}
 
 	if hasHistoricalTarget {
 		target := math.Max(historicalTarget, suggestedFloor(analysis))
-		return roundPrice(target), true
+		target = math.Max(target, minListingPrice)
+		return roundAnalysisPrice(target, analysis), true
 	}
 	if analysis.HasHighestBuy && analysis.HighestBuyPrice > 0 {
-		return roundPrice(analysis.HighestBuyPrice * 1.03), true
+		return roundAnalysisPrice(math.Max(analysis.HighestBuyPrice*1.03, minListingPrice), analysis), true
 	}
 	if analysis.HasLastSold && analysis.LastSoldPrice > 0 {
-		return roundPrice(analysis.LastSoldPrice), true
+		return roundAnalysisPrice(math.Max(analysis.LastSoldPrice, minListingPrice), analysis), true
 	}
 	return 0, false
 }
@@ -214,46 +222,70 @@ func weightedSalePercentile(points []MarketSalePoint, percentile float64) (float
 	return 0, false
 }
 
-func undercutPrice(price float64) float64 {
+func undercutPrice(price float64, minListingPrice float64, priceIncrement float64) float64 {
 	if price <= 0 {
 		return 0
 	}
+	if minListingPrice <= 0 {
+		minListingPrice = fallbackMinListingPrice
+	}
+	if priceIncrement <= 0 {
+		priceIncrement = defaultMarketPriceIncrement
+	}
 	if price < 1 {
-		return math.Max(0.01, price-0.01)
+		return math.Max(minListingPrice, price-priceIncrement)
 	}
 	if price <= 10 {
-		return math.Max(0.01, price-0.01)
+		return math.Max(minListingPrice, price-priceIncrement)
 	}
-	return price * 0.99
+	return math.Max(minListingPrice, price-math.Max(priceIncrement, price*0.01))
 }
 
-func roundPrice(price float64) float64 {
-	return math.Round(price*100) / 100
+func roundAnalysisPrice(price float64, analysis MarketAnalysis) float64 {
+	return roundToMarketIncrement(price, analysisPriceIncrement(analysis))
+}
+
+func analysisMinListingPrice(analysis MarketAnalysis) float64 {
+	if analysis.MinListingPrice > 0 {
+		return analysis.MinListingPrice
+	}
+	return fallbackMinListingPrice
+}
+
+func analysisPriceIncrement(analysis MarketAnalysis) float64 {
+	if analysis.PriceIncrement > 0 {
+		return analysis.PriceIncrement
+	}
+	return defaultMarketPriceIncrement
 }
 
 func calculateDealTag(analysis MarketAnalysis) string {
 	if !analysis.HasLowestSell || analysis.LowestSellPrice <= 0 {
 		return ""
 	}
+	minListingPrice := analysisMinListingPrice(analysis)
+	lowestSellPrice := math.Max(analysis.LowestSellPrice, minListingPrice)
 	hasRef := false
 	isGoodBuy := false
 	isOverpriced := false
 
 	if analysis.HasWeeklyAverage && analysis.WeeklyAveragePrice > 0 {
+		weeklyAveragePrice := math.Max(analysis.WeeklyAveragePrice, minListingPrice)
 		hasRef = true
-		if analysis.LowestSellPrice < analysis.WeeklyAveragePrice*0.85 {
+		if lowestSellPrice < weeklyAveragePrice*0.85 {
 			isGoodBuy = true
 		}
-		if analysis.LowestSellPrice > analysis.WeeklyAveragePrice*1.20 {
+		if lowestSellPrice > weeklyAveragePrice*1.20 {
 			isOverpriced = true
 		}
 	}
 	if analysis.HasRecentSaleP75 && analysis.RecentSaleP75Price > 0 {
+		recentSaleP75Price := math.Max(analysis.RecentSaleP75Price, minListingPrice)
 		hasRef = true
-		if analysis.LowestSellPrice < analysis.RecentSaleP75Price*0.85 {
+		if lowestSellPrice < recentSaleP75Price*0.85 {
 			isGoodBuy = true
 		}
-		if analysis.LowestSellPrice > analysis.RecentSaleP75Price*1.20 {
+		if lowestSellPrice > recentSaleP75Price*1.20 {
 			if isOverpriced || (!analysis.HasWeeklyAverage) {
 				isOverpriced = true
 			}
