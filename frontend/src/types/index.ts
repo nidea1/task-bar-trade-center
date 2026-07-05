@@ -67,12 +67,15 @@ export interface DashboardItem {
     weekly_average_price: number;
     spread_percent: number;
     daily_sales_volume: number;
+    lowest_sell_quantity: number;
     buy_order_count: number;
     sell_order_count: number;
     has_weekly_average: boolean;
     has_spread: boolean;
     has_daily_sales: boolean;
     has_order_book: boolean;
+    has_sell_through: boolean;
+    sell_through_days: number;
     confidence: string;
     has_confidence: boolean;
     sell_score: number;

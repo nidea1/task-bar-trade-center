@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.5] - 2026-07-06
+
+### Changed
+- Reworked the Best Items to Sell Now liquidity signal to score sell-through speed from the lowest-price sell queue divided by daily sales volume instead of raw daily sales thresholds.
+- Replaced newly generated `high_daily_sales` sell reasons with `healthy_sell_through` and added a Sell-through metric to the Best Items cards.
+
+### Fixed
+- Fixed high daily sales tagging for heavily backlogged items, such as items with many low-price listings that would still take weeks to cycle through.
+
+### Tests
+- Added dashboard regression coverage for fast sell-through, long-queue Sapphire-style listings, and missing lowest-price queue data.
+
 ## [0.12.2] - 2026-07-04
 
 ### Added

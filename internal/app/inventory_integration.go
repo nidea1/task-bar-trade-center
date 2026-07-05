@@ -372,6 +372,7 @@ func (provider cacheQuoteProvider) Quote(itemID int) (inventory.PriceQuote, bool
 		WeeklyAveragePrice: analysis.WeeklyAveragePrice,
 		SpreadPercent:      analysis.SpreadPercent,
 		DailySalesVolume:   analysis.DailySalesVolume,
+		LowestSellQuantity: analysis.LowestSellQuantity,
 		BuyOrderCount:      analysis.BuyOrderCount,
 		SellOrderCount:     analysis.SellOrderCount,
 		HasSuggested:       analysis.HasSuggested,

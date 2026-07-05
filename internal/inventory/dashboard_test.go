@@ -15,6 +15,26 @@ func (quotes quoteMap) Quote(itemID int) (PriceQuote, bool) {
 	return quote, ok
 }
 
+func dashboardItemByID(t *testing.T, items []DashboardItem, itemID int) DashboardItem {
+	t.Helper()
+	for _, item := range items {
+		if item.ItemID == itemID {
+			return item
+		}
+	}
+	t.Fatalf("dashboard item %d not found in %+v", itemID, items)
+	return DashboardItem{}
+}
+
+func hasSellReason(item DashboardItem, reason string) bool {
+	for _, existing := range item.SellReasons {
+		if existing == reason {
+			return true
+		}
+	}
+	return false
+}
+
 func TestBuildDashboardGroupsAndValuesInventory(t *testing.T) {
 	now := time.Unix(1700000000, 0)
 	snapshot := playerdata.InventorySnapshot{
@@ -124,6 +144,7 @@ func TestBuildDashboardBestItemsToSellNowUsesMarketSignals(t *testing.T) {
 			WeeklyAveragePrice: 10,
 			SpreadPercent:      6,
 			DailySalesVolume:   120,
+			LowestSellQuantity: 120,
 			BuyOrderCount:      80,
 			HasSuggested:       true,
 			HasWeeklyAverage:   true,
@@ -155,6 +176,15 @@ func TestBuildDashboardBestItemsToSellNowUsesMarketSignals(t *testing.T) {
 	if best.SellScore <= 0 || len(best.SellReasons) == 0 {
 		t.Fatalf("best item missing sell score/reasons: %+v", best)
 	}
+	if !best.HasSellThrough || math.Abs(best.SellThroughDays-1) > 0.001 {
+		t.Fatalf("best sell-through = has %t days %.4f, want true/1", best.HasSellThrough, best.SellThroughDays)
+	}
+	if !hasSellReason(best, "healthy_sell_through") {
+		t.Fatalf("best item reasons = %+v, want healthy_sell_through", best.SellReasons)
+	}
+	if hasSellReason(best, "high_daily_sales") {
+		t.Fatalf("best item should not emit high_daily_sales: %+v", best.SellReasons)
+	}
 }
 
 func TestBuildDashboardBestItemsToSellNowIsNotLimitedToTwelve(t *testing.T) {
@@ -171,16 +201,17 @@ func TestBuildDashboardBestItemsToSellNowIsNotLimitedToTwelve(t *testing.T) {
 		})
 		catalog[id] = ItemDescriptor{Name: "Liquid Item", Marketable: true}
 		quotes[id] = PriceQuote{
-			Suggested:        float64(id),
-			SpreadPercent:    6,
-			DailySalesVolume: 120,
-			BuyOrderCount:    80,
-			HasSuggested:     true,
-			HasSpread:        true,
-			HasDailySales:    true,
-			HasOrderBook:     true,
-			Confidence:       "verified",
-			HasConfidence:    true,
+			Suggested:          float64(id),
+			SpreadPercent:      6,
+			DailySalesVolume:   120,
+			LowestSellQuantity: 120,
+			BuyOrderCount:      80,
+			HasSuggested:       true,
+			HasSpread:          true,
+			HasDailySales:      true,
+			HasOrderBook:       true,
+			Confidence:         "verified",
+			HasConfidence:      true,
 		}
 	}
 
@@ -188,6 +219,77 @@ func TestBuildDashboardBestItemsToSellNowIsNotLimitedToTwelve(t *testing.T) {
 
 	if len(state.BestToSellNow) != 13 {
 		t.Fatalf("best sell item count = %d, want 13", len(state.BestToSellNow))
+	}
+}
+
+func TestBuildDashboardSellThroughScoringUsesLowestSellQueue(t *testing.T) {
+	now := time.Unix(1700000000, 0)
+	snapshot := playerdata.InventorySnapshot{
+		ReadAt: now,
+		Items: []playerdata.OwnedItem{
+			{ItemID: 100, UniqueID: 1, Location: playerdata.LocationInventory, Marketable: true},
+			{ItemID: 200, UniqueID: 2, Location: playerdata.LocationInventory, Marketable: true},
+			{ItemID: 300, UniqueID: 3, Location: playerdata.LocationInventory, Marketable: true},
+		},
+	}
+	catalog := map[int]ItemDescriptor{
+		100: {Name: "Fast Gem", Marketable: true},
+		200: {Name: "Sapphire", Marketable: true},
+		300: {Name: "Missing Queue", Marketable: true},
+	}
+	quotes := quoteMap{
+		100: {
+			Suggested:          1,
+			DailySalesVolume:   1000,
+			LowestSellQuantity: 1000,
+			HasSuggested:       true,
+			HasDailySales:      true,
+			HasOrderBook:       true,
+		},
+		200: {
+			Suggested:          1,
+			DailySalesVolume:   600,
+			LowestSellQuantity: 20000,
+			HasSuggested:       true,
+			HasDailySales:      true,
+			HasOrderBook:       true,
+		},
+		300: {
+			Suggested:        1,
+			DailySalesVolume: 1000,
+			HasSuggested:     true,
+			HasDailySales:    true,
+			HasOrderBook:     true,
+		},
+	}
+
+	state := BuildDashboard(snapshot, catalog, quotes, DashboardOptions{Now: now})
+
+	fast := dashboardItemByID(t, state.Items, 100)
+	if !fast.HasSellThrough || math.Abs(fast.SellThroughDays-1) > 0.001 {
+		t.Fatalf("fast sell-through = has %t days %.4f, want true/1", fast.HasSellThrough, fast.SellThroughDays)
+	}
+	if math.Abs(fast.SellScore-25) > 0.001 {
+		t.Fatalf("fast sell score = %.4f, want 25", fast.SellScore)
+	}
+	if !hasSellReason(fast, "healthy_sell_through") || hasSellReason(fast, "high_daily_sales") {
+		t.Fatalf("fast reasons = %+v, want healthy_sell_through only for liquidity", fast.SellReasons)
+	}
+
+	sapphire := dashboardItemByID(t, state.Items, 200)
+	if !sapphire.HasSellThrough || math.Abs(sapphire.SellThroughDays-33.3333) > 0.001 {
+		t.Fatalf("sapphire sell-through = has %t days %.4f, want true/about 33.3333", sapphire.HasSellThrough, sapphire.SellThroughDays)
+	}
+	if sapphire.SellScore != 0 || len(sapphire.SellReasons) != 0 {
+		t.Fatalf("sapphire should not get liquidity score/reasons: score %.4f reasons %+v", sapphire.SellScore, sapphire.SellReasons)
+	}
+
+	missingQueue := dashboardItemByID(t, state.Items, 300)
+	if missingQueue.HasSellThrough || missingQueue.SellThroughDays != 0 {
+		t.Fatalf("missing queue sell-through = has %t days %.4f, want false/0", missingQueue.HasSellThrough, missingQueue.SellThroughDays)
+	}
+	if missingQueue.SellScore != 0 || hasSellReason(missingQueue, "high_daily_sales") || hasSellReason(missingQueue, "healthy_sell_through") {
+		t.Fatalf("missing queue should not use legacy daily-sales scoring: score %.4f reasons %+v", missingQueue.SellScore, missingQueue.SellReasons)
 	}
 }
 

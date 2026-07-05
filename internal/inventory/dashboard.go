@@ -107,6 +107,7 @@ func BuildDashboard(snapshot playerdata.InventorySnapshot, catalog map[int]ItemD
 			acc.item.WeeklyAveragePrice = quote.WeeklyAveragePrice
 			acc.item.SpreadPercent = quote.SpreadPercent
 			acc.item.DailySalesVolume = quote.DailySalesVolume
+			acc.item.LowestSellQuantity = quote.LowestSellQuantity
 			acc.item.BuyOrderCount = quote.BuyOrderCount
 			acc.item.SellOrderCount = quote.SellOrderCount
 			acc.item.HasWeeklyAverage = quote.HasWeeklyAverage
@@ -145,6 +146,7 @@ func BuildDashboard(snapshot playerdata.InventorySnapshot, catalog map[int]ItemD
 	items := make([]DashboardItem, 0, len(groups))
 	for _, acc := range groups {
 		acc.item.Location = joinLocations(acc.seen)
+		applySellThroughMetric(&acc.item)
 		acc.item.SellScore, acc.item.SellReasons = sellNowScore(acc.item)
 		items = append(items, acc.item)
 	}
@@ -571,17 +573,17 @@ func sellNowScore(item DashboardItem) (float64, []string) {
 	score := 0.0
 	reasons := make([]string, 0, 5)
 
-	if item.HasDailySales && item.DailySalesVolume > 0 {
+	if item.HasSellThrough && item.SellThroughDays > 0 {
 		switch {
-		case item.DailySalesVolume >= 100:
+		case item.SellThroughDays <= 1:
 			score += 25
-		case item.DailySalesVolume >= 30:
+		case item.SellThroughDays <= 3:
 			score += 18
-		case item.DailySalesVolume >= 10:
+		case item.SellThroughDays <= 7:
 			score += 10
 		}
-		if item.DailySalesVolume >= 10 {
-			reasons = append(reasons, "high_daily_sales")
+		if item.SellThroughDays <= 7 {
+			reasons = append(reasons, "healthy_sell_through")
 		}
 	}
 
@@ -632,6 +634,16 @@ func sellNowScore(item DashboardItem) (float64, []string) {
 		return 0, nil
 	}
 	return score, reasons
+}
+
+func applySellThroughMetric(item *DashboardItem) {
+	if !item.HasDailySales || item.DailySalesVolume <= 0 || item.LowestSellQuantity <= 0 {
+		item.HasSellThrough = false
+		item.SellThroughDays = 0
+		return
+	}
+	item.HasSellThrough = true
+	item.SellThroughDays = float64(item.LowestSellQuantity) / float64(item.DailySalesVolume)
 }
 
 func mapHeroKeyToClassID(heroKey int) int {

@@ -70,6 +70,8 @@ export function bestSellReasonLabel(
 ): string {
     const fallback = (() => {
         switch (reason) {
+            case "healthy_sell_through":
+                return localizedFallback(currentLanguage, "Sağlıklı satış hızı", "Healthy sell-through");
             case "high_daily_sales":
                 return localizedFallback(currentLanguage, "Yüksek günlük satış", "High daily sales");
             case "narrow_spread":

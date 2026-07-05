@@ -19,6 +19,7 @@ type PriceQuote struct {
 	WeeklyAveragePrice float64 `json:"weekly_average_price"`
 	SpreadPercent      float64 `json:"spread_percent"`
 	DailySalesVolume   int     `json:"daily_sales_volume"`
+	LowestSellQuantity int     `json:"lowest_sell_quantity"`
 	BuyOrderCount      int     `json:"buy_order_count"`
 	SellOrderCount     int     `json:"sell_order_count"`
 	HasSuggested       bool    `json:"has_suggested"`
@@ -74,12 +75,15 @@ type DashboardItem struct {
 	WeeklyAveragePrice float64  `json:"weekly_average_price"`
 	SpreadPercent      float64  `json:"spread_percent"`
 	DailySalesVolume   int      `json:"daily_sales_volume"`
+	LowestSellQuantity int      `json:"lowest_sell_quantity"`
 	BuyOrderCount      int      `json:"buy_order_count"`
 	SellOrderCount     int      `json:"sell_order_count"`
 	HasWeeklyAverage   bool     `json:"has_weekly_average"`
 	HasSpread          bool     `json:"has_spread"`
 	HasDailySales      bool     `json:"has_daily_sales"`
 	HasOrderBook       bool     `json:"has_order_book"`
+	HasSellThrough     bool     `json:"has_sell_through"`
+	SellThroughDays    float64  `json:"sell_through_days"`
 	Confidence         string   `json:"confidence"`
 	HasConfidence      bool     `json:"has_confidence"`
 	SellScore          float64  `json:"sell_score"`

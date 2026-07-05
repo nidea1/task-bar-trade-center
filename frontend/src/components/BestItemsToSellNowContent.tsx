@@ -13,6 +13,17 @@ interface BestItemsToSellNowContentProps {
     t: (key: string, fallback: string) => string;
 }
 
+function formatSellThroughDays(item: DashboardItem, t: (key: string, fallback: string) => string): string {
+    if (!item.has_sell_through || !Number.isFinite(item.sell_through_days) || item.sell_through_days <= 0) {
+        return "N/A";
+    }
+    const daysSuffix = t("dashboard.days_short", "d");
+    if (item.sell_through_days < 1) {
+        return `<1${daysSuffix}`;
+    }
+    return `~${Math.ceil(item.sell_through_days)}${daysSuffix}`;
+}
+
 export function BestItemsToSellNowContent({
     items,
     state,
@@ -35,6 +46,7 @@ export function BestItemsToSellNowContent({
                     const spreadText = item.has_spread ? `${item.spread_percent.toFixed(1)}%` : "N/A";
                     const dailySalesText = item.has_daily_sales ? formatNumber(item.daily_sales_volume) : "N/A";
                     const buyOrdersText = item.has_order_book ? formatNumber(item.buy_order_count) : "N/A";
+                    const sellThroughText = formatSellThroughDays(item, t);
                     const weeklyAverageText = item.has_weekly_average ? formatPrice(item.weekly_average_price, state, item) : "N/A";
                     const style = { "--rarity-color": meta.color } as React.CSSProperties;
 
@@ -75,6 +87,7 @@ export function BestItemsToSellNowContent({
                                 <span>{t("dashboard.daily_sales", "Daily sales")} <strong>{dailySalesText}</strong></span>
                                 <span>{t("dashboard.spread", "Spread")} <strong>{spreadText}</strong></span>
                                 <span>{t("dashboard.buy_orders", "Buy orders")} <strong>{buyOrdersText}</strong></span>
+                                <span>{t("dashboard.sell_through", "Sell-through")} <strong>{sellThroughText}</strong></span>
                             </div>
 
                             {(item.sell_reasons || []).length > 0 && (
