@@ -810,6 +810,83 @@ func TestResolverDiscoversShiftedSaveDataLayout(t *testing.T) {
 	}
 }
 
+func TestResolverPrefersRuntimeElementClassesOverLargerFalseItemList(t *testing.T) {
+	object := uintptr(0x480000)
+	mem := fakeMemory{
+		ptrs:     make(map[uintptr]uintptr),
+		ints:     make(map[uintptr]int32),
+		uints:    make(map[uintptr]uint64),
+		patterns: make(map[string][]uintptr),
+	}
+	writeClass(mem, "PlayerSaveData", 0x270000, 0x370000, object)
+
+	falseList, falseArray := uintptr(0xA20000), uintptr(0xA21000)
+	itemsList, itemsArray := uintptr(0xA22000), uintptr(0xA23000)
+	stashList, stashArray := uintptr(0xA24000), uintptr(0xA25000)
+	inventoryList, inventoryArray := uintptr(0xA26000), uintptr(0xA27000)
+	currencyList, currencyArray := uintptr(0xA28000), uintptr(0xA29000)
+	mem.ptrs[object+playerItems] = falseList
+	mem.ptrs[object+0xC0] = itemsList
+	mem.ptrs[object+0xD0] = stashList
+	mem.ptrs[object+0xD8] = inventoryList
+	mem.ptrs[object+0xE0] = currencyList
+	writeList(mem, falseList, falseArray, 5)
+	writeList(mem, itemsList, itemsArray, 3)
+	writeList(mem, stashList, stashArray, 1)
+	writeList(mem, inventoryList, inventoryArray, 1)
+	writeList(mem, currencyList, currencyArray, 1)
+
+	falseObjects := []uintptr{0xA30000, 0xA30100, 0xA30200, 0xA30300, 0xA30400}
+	itemObjects := []uintptr{0xA31000, 0xA31100, 0xA31200}
+	stashSlot := uintptr(0xA32000)
+	inventorySlot := uintptr(0xA32100)
+	currencyObject := uintptr(0xA33000)
+	writeClass(mem, "AttributeSaveData", 0x271000, 0x371000, falseObjects...)
+	writeClass(mem, "ItemSaveData", 0x272000, 0x372000, itemObjects...)
+	writeClass(mem, "StashSaveData", 0x273000, 0x373000, stashSlot)
+	writeClass(mem, "InventorySaveData", 0x274000, 0x374000, inventorySlot)
+	writeClass(mem, "CurrencySaveData", 0x275000, 0x375000, currencyObject)
+	mem.ints[0x371000+il2cpp.ClassInstanceSizeOffset] = 0x20
+	mem.ints[0x372000+il2cpp.ClassInstanceSizeOffset] = 0x38
+	mem.ints[0x373000+il2cpp.ClassInstanceSizeOffset] = 0x48
+	mem.ints[0x374000+il2cpp.ClassInstanceSizeOffset] = 0x48
+	mem.ints[0x375000+il2cpp.ClassInstanceSizeOffset] = 0x40
+
+	for index, entry := range falseObjects {
+		writeItemWithOffsets(mem, falseArray, index, entry, 0x10, 0x18, int32(100+index), uint64(1000+index))
+	}
+	for index, entry := range itemObjects {
+		writeItemWithOffsets(mem, itemsArray, index, entry, 0x24, 0x30, int32(200+index), uint64(2000+index))
+	}
+	writeSlotWithOffsets(mem, stashArray, 0, stashSlot, 0x28, 0x40, 250, 2000)
+	writeSlotWithOffsets(mem, inventoryArray, 0, inventorySlot, 0x28, 0x40, 0, 0)
+	writeCurrencyWithOffsets(mem, currencyArray, 0, currencyObject, 0x2C, 0x38, goldKey, 777)
+
+	resolver := NewResolver(map[int]ItemMetadata{
+		100: {}, 101: {}, 102: {}, 103: {}, 104: {},
+		200: {Marketable: true}, 201: {Marketable: true}, 202: {Marketable: true},
+	})
+	snapshot, ok := resolver.ReadSnapshotCore(mem, time.Unix(1700000000, 0))
+	if !ok {
+		t.Fatal("expected class-aware snapshot")
+	}
+	item, ok := findOwnedItem(snapshot.Items, 200)
+	if !ok || item.Location != LocationStash || item.SlotIndex != 250 {
+		t.Fatalf("stash item = %+v, ok=%v, want class-identified ItemSaveData item", item, ok)
+	}
+	if snapshot.Gold != 777 {
+		t.Fatalf("gold = %d, want 777", snapshot.Gold)
+	}
+	cache := resolver.ExportCache()
+	if cache.Layout.ItemsOffset != 0xC0 || cache.Layout.StashOffset != 0xD0 || cache.Layout.InventoryOffset != 0xD8 {
+		t.Fatalf("class-aware layout = %+v", cache.Layout)
+	}
+	if cache.Layout.ItemKeyOffset != 0x24 || cache.Layout.ItemUniqueIDOffset != 0x30 ||
+		cache.Layout.SlotIndexOffset != 0x28 || cache.Layout.SlotUniqueIDOffset != 0x40 {
+		t.Fatalf("instance-bounded field layout = %+v", cache.Layout)
+	}
+}
+
 func findOwnedItem(items []OwnedItem, itemID int) (OwnedItem, bool) {
 	for _, item := range items {
 		if item.ItemID == itemID {
@@ -827,6 +904,12 @@ func pointerPattern(address uintptr) string {
 
 func writeClass(memory fakeMemory, name string, nameAddr uintptr, classPtr uintptr, objects ...uintptr) {
 	memory.patterns[name+"\x00"] = []uintptr{nameAddr}
+	for index := 0; index < 96; index++ {
+		memory.ints[nameAddr+uintptr(index)] = 0
+	}
+	for index, value := range []byte(name) {
+		memory.ints[nameAddr+uintptr(index)] = int32(value)
+	}
 	memory.patterns[pointerPattern(nameAddr)] = []uintptr{classPtr + il2cpp.ClassNameOffset}
 	memory.ptrs[classPtr+il2cpp.ClassNameOffset] = nameAddr
 	memory.ptrs[classPtr+il2cpp.ClassElementClassOffset] = classPtr

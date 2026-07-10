@@ -6,6 +6,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.7] - 2026-07-10
+
+### Changed
+- Changed dynamic `PlayerSaveData` layout discovery to identify item, currency, hero, inventory, stash, and trade lists by their runtime IL2CPP element classes instead of relying only on data-shape heuristics.
+- Bounded nested field discovery by each IL2CPP class instance size so adjacent objects cannot be mistaken for fields when layouts move.
+- Preserved the fixed layout as a fast path while validating its runtime list classes before accepting it.
+
+### Fixed
+- Fixed false inventory layouts caused by larger lookalike lists such as `AttributeSaveData` being selected instead of `ItemSaveData` after game updates.
+- Fixed dynamically discovered inventory slot fields being overwritten by legacy fixed offsets.
+- Invalidated resolver caches created before class-aware layout validation.
+
+### Tests
+- Added regression coverage for class-aware list selection, misleading lookalike data, shifted nested fields, and instance-size-bounded field scanning.
+
 ## [0.12.6] - 2026-07-10
 
 ### Fixed

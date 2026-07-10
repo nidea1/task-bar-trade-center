@@ -12,7 +12,7 @@ import (
 	filestore "github.com/nidea1/task-bar-trade-center/internal/storage"
 )
 
-const inventoryResolverCacheVersion = 2
+const inventoryResolverCacheVersion = 3
 
 type inventoryResolverDiskCache struct {
 	Version           int                       `json:"version"`

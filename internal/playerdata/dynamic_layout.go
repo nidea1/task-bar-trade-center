@@ -63,8 +63,10 @@ func (layout saveDataLayout) valid() bool {
 }
 
 type objectListCandidate struct {
-	offset uintptr
-	info   listInfo
+	offset       uintptr
+	info         listInfo
+	elementClass string
+	classKnown   bool
 }
 
 type itemListShape struct {
@@ -123,9 +125,15 @@ func (resolver *Resolver) discoverObjectLayout(memory Memory, object uintptr) (s
 		return saveDataLayout{}, candidate{}, false
 	}
 
+	itemCandidates := lists
+	typedItemList, itemClassKnown := findListByElementClass(lists, "ItemSaveData")
+	if itemClassKnown {
+		itemCandidates = []objectListCandidate{typedItemList}
+	}
+
 	var itemList objectListCandidate
 	var itemShape itemListShape
-	for _, list := range lists {
+	for _, list := range itemCandidates {
 		shape, ok := resolver.analyzeItemList(memory, list.info)
 		if !ok {
 			continue
@@ -139,11 +147,15 @@ func (resolver *Resolver) discoverObjectLayout(memory Memory, object uintptr) (s
 		return saveDataLayout{}, candidate{}, false
 	}
 
-	layout := saveDataLayout{
-		itemsOffset:        itemList.offset,
-		itemKeyOffset:      itemShape.keyOffset,
-		itemUniqueIDOffset: itemShape.uniqueIDOffset,
-	}
+	layout := defaultSaveDataLayout()
+	layout.currenciesOffset = 0
+	layout.heroesOffset = 0
+	layout.inventoryOffset = 0
+	layout.stashOffset = 0
+	layout.tradeSlotsOffset = 0
+	layout.itemsOffset = itemList.offset
+	layout.itemKeyOffset = itemShape.keyOffset
+	layout.itemUniqueIDOffset = itemShape.uniqueIDOffset
 	uniqueToItem, validItems := resolver.readItemSaveDataListWithLayout(memory, itemList.info, layout)
 	if validItems < 3 {
 		return saveDataLayout{}, candidate{}, false
@@ -151,22 +163,62 @@ func (resolver *Resolver) discoverObjectLayout(memory Memory, object uintptr) (s
 
 	score := validItems
 	locationEvidence := 0
-	var slotLists []slotListCandidate
-	for _, list := range lists {
-		if list.offset == layout.itemsOffset {
-			continue
-		}
-		shape, ok := analyzeSlotList(memory, list.info, uniqueToItem)
-		if !ok {
-			continue
-		}
-		slotLists = append(slotLists, slotListCandidate{objectListCandidate: list, shape: shape})
-		score += shape.known * 3
-		locationEvidence += shape.known
+	structuralEvidence := 0
+	if itemClassKnown {
+		structuralEvidence++
 	}
-	applySlotListsToLayout(&layout, slotLists)
 
-	if heroList, heroShape, ok := analyzeBestHeroList(memory, lists, uniqueToItem, layout.itemsOffset); ok {
+	inventoryList, inventoryClassKnown := findListByElementClass(lists, "InventorySaveData")
+	stashList, stashClassKnown := findListByElementClass(lists, "StashSaveData")
+	if inventoryClassKnown || stashClassKnown {
+		var typedSlotShapes []slotListCandidate
+		if inventoryClassKnown {
+			layout.inventoryOffset = inventoryList.offset
+			structuralEvidence++
+			if shape, ok := analyzeSlotList(memory, inventoryList.info, uniqueToItem); ok {
+				typedSlotShapes = append(typedSlotShapes, slotListCandidate{objectListCandidate: inventoryList, shape: shape})
+				score += shape.known * 3
+				locationEvidence += shape.known
+			}
+		}
+		if stashClassKnown {
+			layout.stashOffset = stashList.offset
+			structuralEvidence++
+			if shape, ok := analyzeSlotList(memory, stashList.info, uniqueToItem); ok {
+				typedSlotShapes = append(typedSlotShapes, slotListCandidate{objectListCandidate: stashList, shape: shape})
+				score += shape.known * 3
+				locationEvidence += shape.known
+			}
+		}
+		applyTypedSlotShape(&layout, typedSlotShapes)
+	} else {
+		var slotLists []slotListCandidate
+		for _, list := range lists {
+			if list.offset == layout.itemsOffset {
+				continue
+			}
+			shape, ok := analyzeSlotList(memory, list.info, uniqueToItem)
+			if !ok {
+				continue
+			}
+			slotLists = append(slotLists, slotListCandidate{objectListCandidate: list, shape: shape})
+			score += shape.known * 3
+			locationEvidence += shape.known
+		}
+		applySlotListsToLayout(&layout, slotLists)
+	}
+
+	heroList, heroClassKnown := findListByElementClass(lists, "HeroSaveData")
+	if heroClassKnown {
+		layout.heroesOffset = heroList.offset
+		structuralEvidence++
+		if heroShape, ok := analyzeHeroList(memory, heroList.info, uniqueToItem); ok {
+			layout.heroKeyOffset = heroShape.keyOffset
+			layout.heroEquippedItems = heroShape.equippedItemsOffset
+			score += heroShape.known * 3
+			locationEvidence += heroShape.known
+		}
+	} else if heroList, heroShape, ok := analyzeBestHeroList(memory, lists, uniqueToItem, layout.itemsOffset); ok {
 		layout.heroesOffset = heroList.offset
 		layout.heroKeyOffset = heroShape.keyOffset
 		layout.heroEquippedItems = heroShape.equippedItemsOffset
@@ -175,7 +227,17 @@ func (resolver *Resolver) discoverObjectLayout(memory Memory, object uintptr) (s
 	}
 
 	var gold uint64
-	if currencyList, currencyShape, ok := analyzeBestCurrencyList(memory, lists, layout.itemsOffset); ok {
+	currencyList, currencyClassKnown := findListByElementClass(lists, "CurrencySaveData")
+	if currencyClassKnown {
+		layout.currenciesOffset = currencyList.offset
+		structuralEvidence++
+		if currencyShape, ok := analyzeCurrencyList(memory, currencyList.info); ok {
+			layout.currencyKeyOffset = currencyShape.keyOffset
+			layout.currencyQuantityOffset = currencyShape.quantityOffset
+			gold = currencyShape.gold
+			score += 10
+		}
+	} else if currencyList, currencyShape, ok := analyzeBestCurrencyList(memory, lists, layout.itemsOffset); ok {
 		layout.currenciesOffset = currencyList.offset
 		layout.currencyKeyOffset = currencyShape.keyOffset
 		layout.currencyQuantityOffset = currencyShape.quantityOffset
@@ -183,20 +245,31 @@ func (resolver *Resolver) discoverObjectLayout(memory Memory, object uintptr) (s
 		score += 10
 	}
 
-	if tradeList, tradeShape, ok := analyzeBestTradeSlotList(memory, lists, layout.itemsOffset); ok {
+	tradeList, tradeClassKnown := findListByElementClass(lists, "RemakeTradingStashSaveData", "TradingStashSaveData")
+	if tradeClassKnown {
+		layout.tradeSlotsOffset = tradeList.offset
+		structuralEvidence++
+		if tradeShape, ok := analyzeTradeSlotList(memory, tradeList.info); ok {
+			layout.tradeSlotIndexOffset = tradeShape.indexOffset
+			layout.tradeSlotCooldown = tradeShape.cooldownOffset
+			layout.tradeSlotStateOffset = tradeShape.stateOffset
+		}
+	} else if tradeList, tradeShape, ok := analyzeBestTradeSlotList(memory, lists, layout.itemsOffset); ok {
 		layout.tradeSlotsOffset = tradeList.offset
 		layout.tradeSlotIndexOffset = tradeShape.indexOffset
 		layout.tradeSlotCooldown = tradeShape.cooldownOffset
 		layout.tradeSlotStateOffset = tradeShape.stateOffset
 	}
 
+	score += structuralEvidence * 2
 	next := candidate{object: object, score: score, gold: gold, layout: layout}
-	return layout, next, locationEvidence > 0
+	return layout, next, locationEvidence > 0 || structuralEvidence >= 2
 }
 
 func discoverObjectLists(memory Memory, object uintptr) []objectListCandidate {
 	lists := make([]objectListCandidate, 0)
 	seen := make(map[uintptr]struct{})
+	classNames := make(map[uintptr]string)
 	for offset := uintptr(dynamicObjectFieldStart); offset <= dynamicObjectFieldEnd; offset += 8 {
 		listPtr := readPtr(memory, object+offset)
 		if listPtr == 0 {
@@ -210,9 +283,86 @@ func discoverObjectLists(memory Memory, object uintptr) []objectListCandidate {
 		if !info.ok {
 			continue
 		}
-		lists = append(lists, objectListCandidate{offset: offset, info: info})
+		className, classKnown := dominantListElementClass(memory, info, classNames)
+		lists = append(lists, objectListCandidate{offset: offset, info: info, elementClass: className, classKnown: classKnown})
 	}
 	return lists
+}
+
+func findListByElementClass(lists []objectListCandidate, names ...string) (objectListCandidate, bool) {
+	for _, name := range names {
+		var best objectListCandidate
+		for _, list := range lists {
+			if !list.classKnown || list.elementClass != name {
+				continue
+			}
+			if best.offset == 0 || list.info.size > best.info.size {
+				best = list
+			}
+		}
+		if best.offset != 0 {
+			return best, true
+		}
+	}
+	return objectListCandidate{}, false
+}
+
+func dominantListElementClass(memory Memory, list listInfo, cache map[uintptr]string) (string, bool) {
+	counts := make(map[string]int)
+	limit := sampleLimit(list.size, 16)
+	for index := 0; index < limit; index++ {
+		object, ok := listObjectAt(memory, list, index)
+		if !ok {
+			continue
+		}
+		classPtr, ok := memory.ReadUintptr(object + il2cpp.ObjectClassOffset)
+		if !ok || classPtr == 0 {
+			continue
+		}
+		name, exists := cache[classPtr]
+		if !exists {
+			name, ok = readClassName(memory, classPtr)
+			if !ok {
+				continue
+			}
+			cache[classPtr] = name
+		}
+		counts[name]++
+	}
+
+	bestName := ""
+	bestCount := 0
+	for name, count := range counts {
+		if count > bestCount {
+			bestName = name
+			bestCount = count
+		}
+	}
+	return bestName, bestCount > 0
+}
+
+func readClassName(memory Memory, classPtr uintptr) (string, bool) {
+	reader, ok := memory.(byteMemory)
+	if !ok {
+		return "", false
+	}
+	namePtr, ok := memory.ReadUintptr(classPtr + il2cpp.ClassNameOffset)
+	if !ok || !tbhmem.PlausibleAddress(namePtr) {
+		return "", false
+	}
+	buffer := make([]byte, 96)
+	if !reader.ReadBytes(namePtr, buffer) {
+		return "", false
+	}
+	for index, value := range buffer {
+		if value == 0 {
+			return string(buffer[:index]), index > 0
+		}
+		if value < 0x20 || value > 0x7E {
+			return "", false
+		}
+	}
+	return "", false
 }
 
 type itemFieldPair struct {
@@ -276,7 +426,7 @@ func (resolver *Resolver) analyzeItemList(memory Memory, list listInfo) (itemLis
 
 func (resolver *Resolver) knownItemKeyOffsets(memory Memory, obj uintptr) []uintptr {
 	offsets := make([]uintptr, 0, 2)
-	for offset := uintptr(dynamicEntryFieldStart); offset <= dynamicEntryFieldEnd; offset += 4 {
+	for offset, end := uintptr(dynamicEntryFieldStart), objectFieldEnd(memory, obj, 4); offset <= end; offset += 4 {
 		value, ok := memory.ReadInt32(obj + offset)
 		if !ok || !resolver.knownItemID(value) {
 			continue
@@ -299,7 +449,7 @@ func (resolver *Resolver) knownItemID(value int32) bool {
 
 func nonZeroUint64Offsets(memory Memory, obj uintptr) []uintptr {
 	offsets := make([]uintptr, 0, 2)
-	for offset := uintptr(dynamicEntryFieldStart); offset <= dynamicEntryFieldEnd; offset += 8 {
+	for offset, end := uintptr(dynamicEntryFieldStart), objectFieldEnd(memory, obj, 8); offset <= end; offset += 8 {
 		value, ok := memory.ReadUint64(obj + offset)
 		if !ok || value == 0 {
 			continue
@@ -321,7 +471,7 @@ func analyzeSlotList(memory Memory, list listInfo, uniqueToItem map[uint64]int) 
 		if !ok {
 			continue
 		}
-		for offset := uintptr(dynamicEntryFieldStart); offset <= dynamicEntryFieldEnd; offset += 8 {
+		for offset, end := uintptr(dynamicEntryFieldStart), objectFieldEnd(memory, obj, 8); offset <= end; offset += 8 {
 			uniqueID, ok := memory.ReadUint64(obj + offset)
 			if !ok || uniqueID == 0 {
 				continue
@@ -376,7 +526,7 @@ func detectSlotIndexOffset(memory Memory, list listInfo, uniqueOffset uintptr, u
 		if _, exists := uniqueToItem[uniqueID]; !exists {
 			continue
 		}
-		for offset := uintptr(dynamicEntryFieldStart); offset <= dynamicEntryFieldEnd; offset += 4 {
+		for offset, end := uintptr(dynamicEntryFieldStart), objectFieldEnd(memory, obj, 4); offset <= end; offset += 4 {
 			if fieldsOverlap(offset, 4, uniqueOffset, 8) {
 				continue
 			}
@@ -445,6 +595,30 @@ func applySlotListsToLayout(layout *saveDataLayout, slots []slotListCandidate) {
 	}
 }
 
+func applyTypedSlotShape(layout *saveDataLayout, slots []slotListCandidate) {
+	if len(slots) == 0 {
+		return
+	}
+	sort.Slice(slots, func(i, j int) bool {
+		return slots[i].shape.known > slots[j].shape.known
+	})
+	layout.slotUniqueIDOffset = slots[0].shape.uniqueIDOffset
+	layout.slotIndexOffset = slots[0].shape.indexOffset
+}
+
+func listElementClassMatches(memory Memory, list listInfo, names ...string) (bool, bool) {
+	name, known := dominantListElementClass(memory, list, make(map[uintptr]string))
+	if !known {
+		return false, false
+	}
+	for _, expected := range names {
+		if name == expected {
+			return true, true
+		}
+	}
+	return false, true
+}
+
 func analyzeBestHeroList(memory Memory, lists []objectListCandidate, uniqueToItem map[uint64]int, itemListOffset uintptr) (objectListCandidate, heroListShape, bool) {
 	var bestList objectListCandidate
 	var bestShape heroListShape
@@ -475,7 +649,7 @@ func analyzeHeroList(memory Memory, list listInfo, uniqueToItem map[uint64]int) 
 		if !ok {
 			continue
 		}
-		for offset := uintptr(dynamicEntryFieldStart); offset <= dynamicEntryFieldEnd; offset += 8 {
+		for offset, end := uintptr(dynamicEntryFieldStart), objectFieldEnd(memory, hero, 8); offset <= end; offset += 8 {
 			arrayPtr, ok := memory.ReadUintptr(hero + offset)
 			if !ok {
 				continue
@@ -504,7 +678,7 @@ func analyzeHeroList(memory Memory, list listInfo, uniqueToItem map[uint64]int) 
 
 func detectHeroKeyOffset(memory Memory, list listInfo, arrayOffset uintptr, uniqueToItem map[uint64]int) uintptr {
 	best := heroKeyScore{}
-	for offset := uintptr(dynamicEntryFieldStart); offset <= dynamicEntryFieldEnd; offset += 4 {
+	for offset, end := uintptr(dynamicEntryFieldStart), listFieldEnd(memory, list, 4); offset <= end; offset += 4 {
 		if fieldsOverlap(offset, 4, arrayOffset, 8) {
 			continue
 		}
@@ -676,12 +850,12 @@ func analyzeCurrencyList(memory Memory, list listInfo) (currencyListShape, bool)
 		if !ok {
 			continue
 		}
-		for keyOffset := uintptr(dynamicEntryFieldStart); keyOffset <= dynamicEntryFieldEnd; keyOffset += 4 {
+		for keyOffset, keyEnd := uintptr(dynamicEntryFieldStart), objectFieldEnd(memory, obj, 4); keyOffset <= keyEnd; keyOffset += 4 {
 			key, ok := memory.ReadInt32(obj + keyOffset)
 			if !ok || key != goldKey {
 				continue
 			}
-			for quantityOffset := uintptr(dynamicEntryFieldStart); quantityOffset <= dynamicEntryFieldEnd; quantityOffset += 8 {
+			for quantityOffset, quantityEnd := uintptr(dynamicEntryFieldStart), objectFieldEnd(memory, obj, 8); quantityOffset <= quantityEnd; quantityOffset += 8 {
 				if fieldsOverlap(keyOffset, 4, quantityOffset, 8) {
 					continue
 				}
@@ -750,7 +924,7 @@ func analyzeTradeSlotList(memory Memory, list listInfo) (tradeSlotListShape, boo
 		if !ok {
 			continue
 		}
-		for offset := uintptr(dynamicEntryFieldStart); offset <= dynamicEntryFieldEnd; offset += 4 {
+		for offset, end := uintptr(dynamicEntryFieldStart), objectFieldEnd(memory, slot, 4); offset <= end; offset += 4 {
 			value, ok := memory.ReadInt32(slot + offset)
 			if !ok {
 				continue
@@ -762,7 +936,7 @@ func analyzeTradeSlotList(memory Memory, list listInfo) (tradeSlotListShape, boo
 				stateCounts[offset]++
 			}
 		}
-		for offset := uintptr(dynamicEntryFieldStart); offset <= dynamicEntryFieldEnd; offset += 8 {
+		for offset, end := uintptr(dynamicEntryFieldStart), objectFieldEnd(memory, slot, 8); offset <= end; offset += 8 {
 			value, ok := memory.ReadUint64(slot + offset)
 			if !ok {
 				continue
@@ -815,6 +989,34 @@ func bestCountedOffset(counts map[uintptr]int, excluded uintptr) (uintptr, int) 
 		}
 	}
 	return bestOffset, bestCount
+}
+
+func objectFieldEnd(memory Memory, object uintptr, width uintptr) uintptr {
+	fallback := uintptr(dynamicEntryFieldEnd)
+	classPtr, ok := memory.ReadUintptr(object + il2cpp.ObjectClassOffset)
+	if !ok || classPtr == 0 {
+		return fallback
+	}
+	instanceSize, ok := memory.ReadInt32(classPtr + il2cpp.ClassInstanceSizeOffset)
+	if !ok || instanceSize < dynamicEntryFieldStart+int32(width) {
+		return fallback
+	}
+	end := uintptr(instanceSize) - width
+	if end > fallback {
+		return fallback
+	}
+	return end
+}
+
+func listFieldEnd(memory Memory, list listInfo, width uintptr) uintptr {
+	limit := sampleLimit(list.size, 16)
+	for index := 0; index < limit; index++ {
+		object, ok := listObjectAt(memory, list, index)
+		if ok {
+			return objectFieldEnd(memory, object, width)
+		}
+	}
+	return dynamicEntryFieldEnd
 }
 
 func listObjectAt(memory Memory, list listInfo, index int) (uintptr, bool) {

@@ -299,6 +299,9 @@ func (resolver *Resolver) validateObject(memory Memory, object uintptr) (candida
 }
 
 func (resolver *Resolver) validateObjectWithLayout(memory Memory, object uintptr, layout saveDataLayout) (candidate, bool) {
+	if !layoutMatchesKnownListClasses(memory, object, layout) {
+		return candidate{}, false
+	}
 	items := readObjectListInfo(memory, object, layout.itemsOffset, 200000)
 	if !items.ok || items.size <= 0 {
 		return candidate{}, false
@@ -351,6 +354,9 @@ func (resolver *Resolver) readObject(memory Memory, object uintptr, now time.Tim
 }
 
 func (resolver *Resolver) readObjectWithLayout(memory Memory, object uintptr, now time.Time, includeRuntimeTradeSlots bool, layout saveDataLayout) (InventorySnapshot, bool) {
+	if !layoutMatchesKnownListClasses(memory, object, layout) {
+		return InventorySnapshot{}, false
+	}
 	items := readObjectListInfo(memory, object, layout.itemsOffset, 200000)
 	if !items.ok {
 		return InventorySnapshot{}, false
@@ -405,6 +411,35 @@ func (resolver *Resolver) readObjectWithLayout(memory Memory, object uintptr, no
 		Items:           owned,
 		TradeSlots:      tradeSlots,
 	}, true
+}
+
+func layoutMatchesKnownListClasses(memory Memory, object uintptr, layout saveDataLayout) bool {
+	checks := []struct {
+		offset uintptr
+		max    int
+		names  []string
+	}{
+		{layout.itemsOffset, 200000, []string{"ItemSaveData"}},
+		{layout.currenciesOffset, 1000, []string{"CurrencySaveData"}},
+		{layout.heroesOffset, 1000, []string{"HeroSaveData"}},
+		{layout.inventoryOffset, 200000, []string{"InventorySaveData"}},
+		{layout.stashOffset, 200000, []string{"StashSaveData"}},
+		{layout.tradeSlotsOffset, 100, []string{"RemakeTradingStashSaveData", "TradingStashSaveData"}},
+	}
+	for _, check := range checks {
+		if check.offset == 0 {
+			continue
+		}
+		list := readObjectListInfo(memory, object, check.offset, check.max)
+		if !list.ok || list.size == 0 {
+			continue
+		}
+		matches, known := listElementClassMatches(memory, list, check.names...)
+		if known && !matches {
+			return false
+		}
+	}
+	return true
 }
 
 func readChestCounts(memory Memory, object uintptr) ChestCounts {
@@ -472,7 +507,9 @@ func readObjectListInfo(memory Memory, object uintptr, offset uintptr, maxAllowe
 func (resolver *Resolver) readInventorySaveDataList(memory Memory, object uintptr, layout saveDataLayout) (objectListCandidate, saveDataLayout, string, bool) {
 	if list, ok := resolver.findInventorySaveDataList(memory, object); ok {
 		inventoryLayout := layout
-		inventoryLayout.slotUniqueIDOffset = slotUniqueID
+		if inventoryLayout.slotUniqueIDOffset == 0 {
+			inventoryLayout.slotUniqueIDOffset = slotUniqueID
+		}
 		inventoryLayout.slotIndexOffset = 0
 		return list, inventoryLayout, "InventorySaveData", true
 	}

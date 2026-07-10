@@ -8,6 +8,7 @@ const (
 	ClassNameOffset         = 0x10
 	ClassElementClassOffset = 0x40
 	ClassCastClassOffset    = 0x48
+	ClassInstanceSizeOffset = 0xF8
 
 	ListItemsOffset = 0x10
 	ListSizeOffset  = 0x18
