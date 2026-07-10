@@ -45,6 +45,18 @@ func (memory fakeMemory) ScanPattern(pattern []byte, _ int) ([]uintptr, uint64) 
 	return memory.patterns[string(pattern)], 0
 }
 
+func TestDefaultSaveDataLayoutMatchesCurrentGameLayout(t *testing.T) {
+	layout := defaultSaveDataLayout()
+	if layout.currenciesOffset != 0x58 || layout.heroesOffset != 0x60 ||
+		layout.inventoryOffset != 0x88 || layout.stashOffset != 0x90 ||
+		layout.tradeSlotsOffset != 0x98 || layout.itemsOffset != 0xB0 {
+		t.Fatalf("PlayerSaveData offsets = %+v, want July 2026 layout", layout)
+	}
+	if layout.heroEquippedItems != 0x30 {
+		t.Fatalf("HeroSaveData equipped items offset = 0x%X, want 0x30", layout.heroEquippedItems)
+	}
+}
+
 func TestResolverReadsPlayerSaveDataSnapshot(t *testing.T) {
 	nameAddr := uintptr(0x200000)
 	classPtr := uintptr(0x300000)
@@ -891,7 +903,7 @@ func writeHeroWithOldAndActualKey(memory fakeMemory, array uintptr, index int, h
 	equipped := hero + 0x1000
 	memory.ptrs[array+il2cpp.ArrayDataOffset+uintptr(index*8)] = hero
 	memory.ints[hero+heroKey] = oldKey
-	memory.ints[hero+0x34] = actualKey
+	memory.ints[hero+0x3C] = actualKey
 	memory.ptrs[hero+heroEquippedItems] = equipped
 	memory.ptrs[equipped+il2cpp.ArrayMaxOffset] = 1
 	memory.uints[equipped+il2cpp.ArrayDataOffset] = unique
@@ -1218,4 +1230,3 @@ func TestResolverCacheImportExport(t *testing.T) {
 		t.Fatalf("resolver2.cachedObject = 0x%X, want 0x%X", resolver2.cachedObject, newObject)
 	}
 }
-

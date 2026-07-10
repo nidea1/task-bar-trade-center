@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.6] - 2026-07-10
+
+### Fixed
+- Fixed dashboard inventory detection after a TaskBarHero update shifted the `PlayerSaveData` list offsets and the `HeroSaveData` equipped-items offset.
+- Invalidated stale inventory resolver caches so layouts discovered against the previous game build are not reused.
+
+### Tests
+- Added regression coverage for the updated July 2026 save-data layout.
+
 ## [0.12.5] - 2026-07-06
 
 ### Changed

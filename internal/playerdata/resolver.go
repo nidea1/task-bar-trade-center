@@ -11,19 +11,19 @@ import (
 const (
 	stashSlotsPerPage = 100
 
-	playerCurrencies = 0x50
-	playerHeroes     = 0x58
-	playerInventory  = 0x80
-	playerStash      = 0x88
-	playerTradeSlots = 0x90
-	playerItems      = 0xA8
+	playerCurrencies = 0x58
+	playerHeroes     = 0x60
+	playerInventory  = 0x88
+	playerStash      = 0x90
+	playerTradeSlots = 0x98
+	playerItems      = 0xB0
 
 	currencyKey      = 0x10
 	currencyQuantity = 0x18
 	goldKey          = 100001
 
 	heroKey           = 0x10
-	heroEquippedItems = 0x28
+	heroEquippedItems = 0x30
 
 	itemSaveItemKey  = 0x10
 	itemSaveUniqueID = 0x18
