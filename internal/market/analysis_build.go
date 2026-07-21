@@ -45,6 +45,7 @@ func buildMarketAnalysis(marketHashName string, orderBook MarketOrderBook, hasOr
 		weeklyTotal := 0.0
 		dailyPriceTotal := 0.0
 		dailyPriceVolume := 0
+		dailySales := make([]MarketSalePoint, 0, len(history))
 		recentSales := make([]MarketSalePoint, 0, len(history))
 
 		for _, point := range history {
@@ -56,6 +57,7 @@ func buildMarketAnalysis(marketHashName string, orderBook MarketOrderBook, hasOr
 				if point.Price > 0 && point.Volume > 0 {
 					dailyPriceTotal += point.Price * float64(point.Volume)
 					dailyPriceVolume += point.Volume
+					dailySales = append(dailySales, point)
 				}
 			}
 			if point.Time >= weekStart && point.Volume > 0 && point.Price > 0 {
@@ -65,6 +67,12 @@ func buildMarketAnalysis(marketHashName string, orderBook MarketOrderBook, hasOr
 			}
 		}
 		analysis.HasDailySales = true
+		analysis.SteamVolume = analysis.DailySalesVolume
+		analysis.HasSteamVolume = true
+		if median, ok := weightedSalePercentile(dailySales, 0.50); ok {
+			analysis.SteamMedianPrice = median
+			analysis.HasSteamMedian = true
+		}
 		if weeklyVolume > 0 {
 			analysis.WeeklyAveragePrice = weeklyTotal / float64(weeklyVolume)
 			analysis.HasWeeklyAverage = true

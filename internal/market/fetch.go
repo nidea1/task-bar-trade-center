@@ -14,10 +14,11 @@ import (
 )
 
 const (
-	SteamAppID          = 3678970
-	steamRequestTimeout = 6 * time.Second
-	steamRequestSpacing = 2500 * time.Millisecond
-	steamRequestJitter  = 0.15
+	SteamAppID                    = 3678970
+	steamRequestTimeout           = 6 * time.Second
+	steamSearchPageRequestTimeout = 15 * time.Second
+	steamRequestSpacing           = 2500 * time.Millisecond
+	steamRequestJitter            = 0.15
 )
 
 type RequestPriority int
@@ -63,6 +64,8 @@ func newSteamRateLimiter() *steamRateLimiter {
 
 var steamRequestLimiter = newSteamRateLimiter()
 
+var steamHTTPTransport = newSteamHTTPTransport()
+
 var steamRequestMetricLogger = struct {
 	sync.RWMutex
 	log func(SteamRequestMetric)
@@ -74,6 +77,23 @@ func SetSteamRequestMetricLogger(logger func(SteamRequestMetric)) {
 	steamRequestMetricLogger.Unlock()
 }
 
+func newSteamHTTPTransport() http.RoundTripper {
+	base, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return http.DefaultTransport
+	}
+	transport := base.Clone()
+	// Steam's compressed cache variant can return a successful React shell
+	// without the listing's SSR market data. Omitting Accept-Encoding selects
+	// the complete response; DisableCompression prevents Go from adding gzip.
+	transport.DisableCompression = true
+	return transport
+}
+
+func newSteamHTTPClient(timeout time.Duration) *http.Client {
+	return &http.Client{Timeout: timeout, Transport: steamHTTPTransport}
+}
+
 func FetchData(config catalog.ItemConfig, marketHashName string, now time.Time, scope MarketScope) (MarketData, error) {
 	return FetchDataWithPriority(config, marketHashName, now, scope, RequestPriorityNormal)
 }
@@ -83,16 +103,13 @@ func FetchDataWithPriority(config catalog.ItemConfig, marketHashName string, now
 	if err != nil {
 		return data, err
 	}
-	if scope == defaultMarketScope() || hasCompleteMarketAnalysis(data.Analysis) {
+	if scope == defaultMarketScope() || hasCompleteMarketAnalysis(data.Analysis) || data.Analysis.USDDataFallbackAttempted {
 		return data, nil
 	}
 
 	data.Analysis.USDDataFallbackAttempted = true
 	usdData, usdErr := fetchDataForScope(config, marketHashName, now, defaultMarketScope(), priority)
 	if usdErr != nil {
-		if se, ok := usdErr.(*SteamError); ok && se.StatusCode == 429 {
-			return data, usdErr
-		}
 		return data, nil
 	}
 	return mergeMarketDataWithUSDFallback(data, usdData, scope), nil
@@ -156,103 +173,82 @@ func ItemOrdersHistogramURL(itemNameID string, scope MarketScope) string {
 	)
 }
 
-func PriceOverviewURL(marketHashName string, scope MarketScope) string {
-	return fmt.Sprintf(
-		"https://steamcommunity.com/market/priceoverview/?country=%s&currency=%d&appid=%d&market_hash_name=%s",
-		url.QueryEscape(scope.Region.CountryCode),
-		scope.Currency.SteamCurrencyID,
-		SteamAppID,
-		url.QueryEscape(marketHashName),
-	)
+func MarketSearchPageURL(marketHashName string) string {
+	query := url.Values{}
+	query.Set("q", marketHashName)
+	query.Set("appid", fmt.Sprint(SteamAppID))
+	query.Set("country", "US")
+	query.Set("currency", "1")
+	query.Set("l", "english")
+	return "https://steamcommunity.com/market/search?" + query.Encode()
 }
 
 func fetchDataForScope(config catalog.ItemConfig, marketHashName string, now time.Time, scope MarketScope, priority RequestPriority) (MarketData, error) {
-	client := &http.Client{Timeout: steamRequestTimeout}
-	referer := ListingURLForScope(config, scope)
-	var requestErrors []string
-
-	var orderBook MarketOrderBook
-	hasOrderBook := false
-	var history []MarketSalePoint
-
-	var iconURL string
-	listingBody, _, err := steamGetWithPriority(client, referer, "", priority)
+	client := newSteamHTTPClient(steamRequestTimeout)
+	listingURL := ListingURLForScope(config, scope)
+	listingBody, _, err := steamGetWithPriority(client, listingURL, "", priority)
 	if err != nil {
-		if se, ok := err.(*SteamError); ok && se.StatusCode == 429 {
-			return MarketData{}, err
-		}
-		requestErrors = append(requestErrors, "listing: "+err.Error())
-	} else {
-		iconURL = ParseIconURL(listingBody)
-		if isSSRListingForScope(listingBody, scope) {
-			orderBook, hasOrderBook = parseSSRItemOrderBook(listingBody, scope.Currency)
-			history = parseSSRPriceHistory(listingBody)
-			if len(history) == 0 {
-				history = parseLegacySaleHistoryFromListing(listingBody)
-			}
-		}
-
-		if !hasOrderBook {
-			itemNameID := parseItemNameID(listingBody)
-			if itemNameID != "" {
-				body, _, err := fetchItemOrdersHistogram(client, itemNameID, referer, scope, priority)
-				if err != nil {
-					if se, ok := err.(*SteamError); ok && se.StatusCode == 429 {
-						return MarketData{}, err
-					}
-					requestErrors = append(requestErrors, "histogram: "+err.Error())
-				} else {
-					orderBook, hasOrderBook = parseItemOrdersHistogramResponse(body)
-					if !hasOrderBook {
-						requestErrors = append(requestErrors, "histogram: response did not contain order data")
-					}
-				}
-			}
-		}
+		return MarketData{}, fmt.Errorf("listing: %w", err)
 	}
 
-	if len(history) > 0 || hasOrderBook {
-		data := marketDataFromBaseHistory(marketHashName, orderBook, hasOrderBook, history, now, scope.Currency)
-		data.Analysis.IconURL = iconURL
-		if len(history) > 0 || data.Analysis.HasSuggested {
-			return data, nil
-		}
-	}
-
-	body, _, err := fetchPriceOverview(client, marketHashName, scope, priority)
-	if err != nil {
-		if se, ok := err.(*SteamError); ok && se.StatusCode == 429 {
-			return MarketData{}, err
-		}
-		requestErrors = append(requestErrors, "priceoverview: "+err.Error())
-	} else if data, ok := marketDataFromPriceOverview(marketHashName, body, now, scope.Currency); ok {
-		data.Analysis.IconURL = iconURL
+	iconURL := ParseIconURL(listingBody)
+	data, listingErr := marketDataFromListingSSR(marketHashName, listingBody, iconURL, now, scope)
+	if listingErr == nil {
 		return data, nil
-	} else {
-		requestErrors = append(requestErrors, "priceoverview: response did not contain price data")
 	}
 
+	searchClient := newSteamHTTPClient(steamSearchPageRequestTimeout)
+	searchBody, _, searchErr := steamGetWithPriority(searchClient, MarketSearchPageURL(marketHashName), listingURL, priority)
+	if searchErr != nil {
+		return MarketData{}, fmt.Errorf("%v; market search page: %w", listingErr, searchErr)
+	}
+	usdData, ok := marketDataFromSearchHTML(marketHashName, searchBody, now, defaultMarketScope().Currency)
+	if !ok {
+		return MarketData{}, fmt.Errorf("%v; market search page did not contain an exact price match", listingErr)
+	}
+	usdData.Analysis.IconURL = iconURL
+	if scope.Currency.Code == "USD" {
+		return usdData, nil
+	}
+	local := MarketData{CachedAt: now, Analysis: unavailableMarketAnalysis(marketHashName, now, scope.Currency)}
+	local.Analysis.IconURL = iconURL
+	data = mergeMarketDataWithUSDFallback(local, usdData, scope)
+	data.Analysis.PriceSource = "market-search-html-usd"
+	return data, nil
+}
+
+func marketDataFromListingSSR(marketHashName string, listingBody []byte, iconURL string, now time.Time, scope MarketScope) (MarketData, error) {
+	listingCurrency, hasListingCurrency := ssrListingCurrency(listingBody)
+	if !hasListingCurrency {
+		return MarketData{}, fmt.Errorf("listing SSR did not contain a supported currency")
+	}
+	if listingCurrency.SteamCurrencyID != scope.Currency.SteamCurrencyID && listingCurrency.Code != "USD" {
+		return MarketData{}, fmt.Errorf(
+			"listing SSR currency mismatch: got %s, want %s or USD",
+			listingCurrency.Code,
+			scope.Currency.Code,
+		)
+	}
+
+	orderBook, hasOrderBook := parseSSRItemOrderBook(listingBody, listingCurrency)
+	history := parseSSRPriceHistory(listingBody)
 	if len(history) == 0 {
-		body, _, err := fetchSaleHistory(client, marketHashName, referer, priority)
-		if err != nil {
-			requestErrors = append(requestErrors, "pricehistory: "+err.Error())
-		} else {
-			history = parseSaleHistoryResponse(body)
-			if len(history) == 0 {
-				requestErrors = append(requestErrors, "pricehistory: response did not contain sale data")
-			}
-		}
+		history = parseLegacySaleHistoryFromListing(listingBody)
 	}
-	if hasOrderBook || len(history) > 0 {
-		data := marketDataFromBaseHistory(marketHashName, orderBook, hasOrderBook, history, now, scope.Currency)
-		data.Analysis.IconURL = iconURL
-		return data, nil
+	if !hasOrderBook && len(history) == 0 {
+		return MarketData{}, fmt.Errorf("listing SSR did not contain order book or sale history")
 	}
 
-	if len(requestErrors) == 0 {
-		return MarketData{}, fmt.Errorf("no market data available")
+	data := marketDataFromBaseHistory(marketHashName, orderBook, hasOrderBook, history, now, listingCurrency)
+	data.Analysis.PriceSource = "listing-ssr"
+	data.Analysis.IconURL = iconURL
+	if listingCurrency.Code == "USD" && scope.Currency.Code != "USD" {
+		local := MarketData{CachedAt: now, Analysis: unavailableMarketAnalysis(marketHashName, now, scope.Currency)}
+		local.Analysis.IconURL = iconURL
+		data = mergeMarketDataWithUSDFallback(local, data, scope)
+		data.Analysis.PriceSource = "listing-ssr-usd"
 	}
-	return MarketData{}, fmt.Errorf("%s", strings.Join(requestErrors, "; "))
+	return data, nil
 }
 
 func fetchItemOrdersHistogram(client *http.Client, itemNameID string, referer string, scope MarketScope, priority RequestPriority) ([]byte, int, error) {
@@ -261,10 +257,6 @@ func fetchItemOrdersHistogram(client *http.Client, itemNameID string, referer st
 
 func fetchSaleHistory(client *http.Client, marketHashName string, referer string, priority RequestPriority) ([]byte, int, error) {
 	return steamGetWithPriority(client, PriceHistoryURL(marketHashName), referer, priority)
-}
-
-func fetchPriceOverview(client *http.Client, marketHashName string, scope MarketScope, priority RequestPriority) ([]byte, int, error) {
-	return steamGetWithPriority(client, PriceOverviewURL(marketHashName, scope), "", priority)
 }
 
 type SteamError struct {
@@ -282,11 +274,11 @@ func getEndpointFromURL(targetURL string) string {
 	if strings.Contains(targetURL, "/pricehistory") {
 		return "pricehistory"
 	}
-	if strings.Contains(targetURL, "/priceoverview") {
-		return "priceoverview"
-	}
 	if strings.Contains(targetURL, "/itemordershistogram") {
 		return "itemordershistogram"
+	}
+	if strings.Contains(targetURL, "/market/search") {
+		return "search-page"
 	}
 	if strings.Contains(targetURL, "/listings/") {
 		return "listings"

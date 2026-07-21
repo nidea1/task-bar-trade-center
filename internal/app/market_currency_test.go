@@ -149,7 +149,6 @@ func TestMarketScopeURLBuilders(t *testing.T) {
 			if !ok {
 				t.Fatalf("market.ScopeFor(%q, %q) failed", tt.currency, tt.country)
 			}
-			assertMarketURLScope(t, priceOverviewURL("Minor Ruby", scope), scope, tt.wantID)
 			assertMarketURLScope(t, itemOrdersHistogramURL("12345", scope), scope, tt.wantID)
 			assertMarketURLHasNoScope(t, priceHistoryURL("Minor Ruby"))
 			assertMarketURLScope(t, steamMarketListingURLForScope(catalog.ItemConfig{Name: map[string]string{"en-US": "Minor Ruby"}}, scope), scope, tt.wantID)
@@ -193,7 +192,7 @@ func assertMarketURLHasNoScope(t *testing.T, rawURL string) {
 	}
 }
 
-func TestPriceOverviewFormattingAndCacheMigration(t *testing.T) {
+func TestSteamPriceFormattingAndCacheMigration(t *testing.T) {
 	for _, tt := range []struct {
 		input      string
 		wantPrice  float64
@@ -211,11 +210,6 @@ func TestPriceOverviewFormattingAndCacheMigration(t *testing.T) {
 		}
 	}
 
-	data, ok := market.DataFromPriceOverview("Minor Ruby", []byte(`{"success":true,"median_price":"0,05€","volume":"4"}`), time.Now(), market.MarketCurrency{Code: "EUR", PriceSuffix: "€"})
-	if !ok || data.Analysis.PricePrefix != "" || data.Analysis.PriceSuffix != "€" {
-		t.Fatalf("median-only EUR format = %+v, ok=%t", data.Analysis, ok)
-	}
-
 	now := time.Now().UTC()
 	eurDE, _ := market.ScopeFor("EUR", "DE")
 	eurFR, _ := market.ScopeFor("EUR", "FR")
@@ -225,8 +219,16 @@ func TestPriceOverviewFormattingAndCacheMigration(t *testing.T) {
 	}
 
 	normalized, migrated := normalizePriceCache(map[string]market.MarketData{
-		"Minor Ruby":                         {CachedAt: now},
-		market.CacheKey(eurDE, "Minor Ruby"): {CachedAt: now},
+		"Minor Ruby": {CachedAt: now},
+		market.CacheKey(eurDE, "Minor Ruby"): {
+			CachedAt: now,
+			Analysis: market.MarketAnalysis{
+				WeeklyAveragePrice: 0.05,
+				HasWeeklyAverage:   true,
+				DailySalesVolume:   4,
+				HasDailySales:      true,
+			},
+		},
 	})
 	if !migrated {
 		t.Fatal("legacy cache was not marked as migrated")
@@ -236,6 +238,10 @@ func TestPriceOverviewFormattingAndCacheMigration(t *testing.T) {
 	}
 	if _, exists := normalized[market.CacheKey(eurDE, "Minor Ruby")]; !exists {
 		t.Fatal("scoped cache entry was not preserved")
+	}
+	migratedAnalysis := normalized[market.CacheKey(eurDE, "Minor Ruby")].Analysis
+	if !migratedAnalysis.HasSteamMedian || !migratedAnalysis.HasSteamVolume || migratedAnalysis.HasWeeklyAverage || migratedAnalysis.HasDailySales {
+		t.Fatalf("scoped cache semantics were not migrated: %+v", migratedAnalysis)
 	}
 }
 

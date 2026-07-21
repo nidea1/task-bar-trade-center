@@ -1,6 +1,9 @@
 package app
 
 import (
+	"github.com/nidea1/task-bar-trade-center/internal/catalog"
+	"github.com/nidea1/task-bar-trade-center/internal/market"
+	"github.com/nidea1/task-bar-trade-center/internal/playerdata"
 	"github.com/nidea1/task-bar-trade-center/internal/win32"
 
 	"encoding/json"
@@ -279,32 +282,83 @@ func TestRequestElevatedRestartReportsLaunchFailureWithoutClosing(t *testing.T) 
 	}
 }
 
-func TestHandleGameClosedPromptsForAppExit(t *testing.T) {
-	originalShowYesNoMessageBoxMock := showYesNoMessageBoxMock
-	originalStatus := activeApp.appStatus.Load()
-	originalShutdownRequested := activeApp.shutdownRequested.Load()
+func TestHandleGameClosedResetsSessionForReattach(t *testing.T) {
+	originalApp := activeApp
 	t.Cleanup(func() {
-		showYesNoMessageBoxMock = originalShowYesNoMessageBoxMock
-		activeApp.appStatus.Store(originalStatus)
-		activeApp.shutdownRequested.Store(originalShutdownRequested)
+		activeApp = originalApp
 	})
-	activeApp.shutdownRequested.Store(false)
+	activeApp = &App{
+		gameProcessID:       29256,
+		gameAssemblyBase:    0x1234,
+		inventoryResolver:   playerdata.NewResolver(nil),
+		lastSnapshot:        &playerdata.InventorySnapshot{},
+		allItemMap:          make(map[int]catalog.ItemConfig),
+		itemMap:             make(map[int]catalog.ItemConfig),
+		priceCache:          make(map[string]market.MarketData),
+		marketFetchInFlight: make(map[string]*marketFetchCall),
+	}
+	activeApp.gameReady.Store(true)
+	activeApp.appStatus.Store(AppStatusReady)
+	activeApp.runtimeState = RuntimeStateInfo{Ready: true, Phase: runtimePhaseReady}
 
-	showYesNoMessageBoxMock = func(title, message string) bool {
-		if title != tr("dialog.game_closed.title") {
-			t.Errorf("title = %q", title)
-		}
-		if message != tr("dialog.game_closed.body") {
-			t.Errorf("message = %q", message)
-		}
-		return false
+	if handleGameClosed(29256) {
+		t.Fatal("normal game exit requested monitor shutdown")
 	}
 
-	if handleGameClosed() {
-		t.Fatal("handleGameClosed requested shutdown after the user chose to keep the app open")
+	if activeApp.gameProcessID != 0 || activeApp.gameAssemblyBase != 0 {
+		t.Fatalf("game session was not cleared: pid=%d base=0x%X", activeApp.gameProcessID, activeApp.gameAssemblyBase)
+	}
+	if activeApp.inventoryResolver != nil || activeApp.lastSnapshot != nil {
+		t.Fatal("inventory resolver state was not cleared")
+	}
+	if activeApp.gameReady.Load() {
+		t.Fatal("gameReady remained true after detach")
 	}
 	if activeApp.appStatus.Load() != AppStatusWaitingForGame {
 		t.Fatalf("status = %d, want waiting for game", activeApp.appStatus.Load())
+	}
+	state := currentRuntimeState()
+	if state.Ready || state.Phase != runtimePhaseWaiting {
+		t.Fatalf("runtime state = %+v, want waiting and not ready", state)
+	}
+}
+
+func TestCanReadInventorySnapshotRejectsExitedProcess(t *testing.T) {
+	originalApp := activeApp
+	originalHasGameProcessExited := hasGameProcessExited
+	t.Cleanup(func() {
+		activeApp = originalApp
+		hasGameProcessExited = originalHasGameProcessExited
+	})
+
+	activeApp = &App{gameProcessID: 29256, gameProcessHandle: 0x1234}
+	hasGameProcessExited = func(processHandle uintptr) bool {
+		if processHandle != 0x1234 {
+			t.Fatalf("process handle = 0x%X, want 0x1234", processHandle)
+		}
+		return true
+	}
+
+	if canReadInventorySnapshot() {
+		t.Fatal("exited process was accepted as an inventory source")
+	}
+}
+
+func TestHandleGameClosedStopsMonitorDuringAppShutdown(t *testing.T) {
+	originalApp := activeApp
+	t.Cleanup(func() {
+		activeApp = originalApp
+	})
+
+	activeApp = &App{gameProcessID: 29256, gameAssemblyBase: 0x1234}
+	activeApp.shutdownRequested.Store(true)
+	activeApp.appStatus.Store(AppStatusReady)
+
+	if !handleGameClosed(29256) {
+		t.Fatal("app shutdown did not stop the game monitor")
+	}
+	if activeApp.appStatus.Load() == AppStatusWaitingForGame {
+		t.Fatal("app shutdown changed status to waiting for game")
 	}
 }
 
@@ -347,35 +401,4 @@ func TestRequestAppShutdown_PostsWMCloseToAppHWND(t *testing.T) {
 	_ = postedHWND
 	_ = postedMsg
 	_ = callCount
-}
-
-func TestHandleGameClosedUsesRequestAppShutdown(t *testing.T) {
-	// Verify that handleGameClosed calls requestAppShutdown (posts WM_CLOSE)
-	// instead of directly calling PostQuitMessage from a background goroutine.
-	originalShowYesNoMessageBoxMock := showYesNoMessageBoxMock
-	originalAppHWND := activeApp.appHWND
-	originalStatus := activeApp.appStatus.Load()
-	originalShutdownRequested := activeApp.shutdownRequested.Load()
-	t.Cleanup(func() {
-		showYesNoMessageBoxMock = originalShowYesNoMessageBoxMock
-		activeApp.appHWND = originalAppHWND
-		activeApp.appStatus.Store(originalStatus)
-		activeApp.shutdownRequested.Store(originalShutdownRequested)
-	})
-	activeApp.shutdownRequested.Store(false)
-	activeApp.appStatus.Store(AppStatusReady)
-
-	// Set activeApp.appHWND to 0 so requestAppShutdown is a safe no-op
-	activeApp.appHWND = 0
-
-	showYesNoMessageBoxMock = func(title, message string) bool {
-		return true // User clicks "Yes" to close
-	}
-
-	if !handleGameClosed() {
-		t.Fatal("handleGameClosed should return true when user confirms exit")
-	}
-	if activeApp.appStatus.Load() == AppStatusWaitingForGame {
-		t.Fatal("handleGameClosed should not show waiting-for-game status when the app is closing")
-	}
 }

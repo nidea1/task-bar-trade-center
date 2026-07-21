@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nidea1/task-bar-trade-center/internal/game"
 	"github.com/nidea1/task-bar-trade-center/internal/il2cpp"
 	"github.com/nidea1/task-bar-trade-center/internal/inventory"
 	"github.com/nidea1/task-bar-trade-center/internal/market"
@@ -121,7 +120,8 @@ func withCurrentDashboardRuntimeFields(state inventory.DashboardState) inventory
 }
 
 func canReadInventorySnapshot() bool {
-	return activeApp.gameProcessHandle != 0 && activeApp.gameProcessID != 0
+	processHandle := activeApp.gameProcessHandle
+	return processHandle != 0 && activeApp.gameProcessID != 0 && !hasGameProcessExited(processHandle)
 }
 
 func readInventoryDashboardStateLocked() (inventory.DashboardState, error) {
@@ -252,6 +252,9 @@ func readInventorySnapshotUncoordinated(includeRuntimeTradeSlots bool, processID
 	if !ok {
 		status = "failed"
 		logPrintf("[INVENTORY:resolve] snapshot include_runtime_trade_slots=%t duration=%s status=%s\n", includeRuntimeTradeSlots, time.Since(startedAt), status)
+		if activeApp.gameProcessID != processID || activeApp.gameProcessHandle != processHandle || hasGameProcessExited(processHandle) {
+			return playerdata.InventorySnapshot{}, fmt.Errorf("game process is not attached")
+		}
 		return playerdata.InventorySnapshot{}, fmt.Errorf("PlayerSaveData could not be resolved")
 	}
 	saveInventoryResolverCache(processHandle, gameAssemblyBase, resolver)
@@ -370,19 +373,24 @@ func (provider cacheQuoteProvider) Quote(itemID int) (inventory.PriceQuote, bool
 		Suggested:          analysis.SuggestedPrice,
 		Instant:            analysis.HighestBuyPrice,
 		WeeklyAveragePrice: analysis.WeeklyAveragePrice,
+		SteamMedianPrice:   analysis.SteamMedianPrice,
 		SpreadPercent:      analysis.SpreadPercent,
 		DailySalesVolume:   analysis.DailySalesVolume,
+		SteamVolume:        analysis.SteamVolume,
 		LowestSellQuantity: analysis.LowestSellQuantity,
 		BuyOrderCount:      analysis.BuyOrderCount,
 		SellOrderCount:     analysis.SellOrderCount,
 		HasSuggested:       analysis.HasSuggested,
 		HasInstant:         analysis.HasHighestBuy,
 		HasWeeklyAverage:   analysis.HasWeeklyAverage,
+		HasSteamMedian:     analysis.HasSteamMedian,
 		HasSpread:          analysis.HasSpread,
 		HasDailySales:      analysis.HasDailySales,
+		HasSteamVolume:     analysis.HasSteamVolume,
 		HasOrderBook:       analysis.HasOrderBook,
 		Confidence:         analysis.Confidence,
 		HasConfidence:      analysis.HasConfidence,
+		PriceIsEstimated:   analysis.PriceIsEstimated,
 		PricePrefix:        analysis.PricePrefix,
 		PriceSuffix:        analysis.PriceSuffix,
 		UpdatedAt:          analysis.UpdatedAt.Format(time.RFC3339),
@@ -418,7 +426,7 @@ func monitorInventoryNotifications(processHandle uintptr) {
 
 	for {
 		time.Sleep(logPollInterval)
-		if processHandle == 0 || game.HasProcessExited(processHandle) || activeApp.gameProcessHandle != processHandle {
+		if processHandle == 0 || hasGameProcessExited(processHandle) || activeApp.gameProcessHandle != processHandle {
 			return
 		}
 

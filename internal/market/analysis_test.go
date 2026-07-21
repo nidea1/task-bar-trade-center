@@ -120,6 +120,42 @@ func TestMergeMarketDataWithUSDFallbackCopiesIconURL(t *testing.T) {
 	}
 }
 
+func TestNormalizeCachedLegacySteamMetrics(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	data := MarketData{
+		CachedAt: now,
+		Analysis: MarketAnalysis{
+			MarketHashName:     "Example",
+			PricePrefix:        "$",
+			MinListingPrice:    0.03,
+			PriceIncrement:     0.01,
+			LowestSellPrice:    1.00,
+			HasLowestSell:      true,
+			SuggestedPrice:     0.50,
+			HasSuggested:       true,
+			WeeklyAveragePrice: 0.50,
+			HasWeeklyAverage:   true,
+			DailySalesVolume:   42,
+			HasDailySales:      true,
+			UpdatedAt:          now,
+		},
+	}
+
+	normalized, changed := normalizeCachedMarketData(data)
+	if !changed {
+		t.Fatal("legacy Steam metrics cache was not migrated")
+	}
+	analysis := normalized.Analysis
+	if analysis.HasWeeklyAverage || analysis.HasDailySales || !analysis.HasSteamMedian || !analysis.HasSteamVolume {
+		t.Fatalf("normalized cache semantics = %+v", analysis)
+	}
+	assertFloatEqual(t, analysis.SteamMedianPrice, 0.50)
+	if analysis.SteamVolume != 42 {
+		t.Fatalf("normalized Steam volume = %d, want 42", analysis.SteamVolume)
+	}
+	assertFloatEqual(t, analysis.SuggestedPrice, 0.99)
+}
+
 func TestLegacyCacheCompatibilityAndStaleFallback(t *testing.T) {
 	now := time.Now().UTC()
 	var diskCache map[string]MarketData

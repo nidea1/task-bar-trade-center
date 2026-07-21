@@ -1,11 +1,11 @@
 package market
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -34,43 +34,32 @@ func TestPriceHistoryURLOmitsCountryAndCurrency(t *testing.T) {
 	}
 }
 
-func TestScopedPriceOverviewSkipsPricehistory(t *testing.T) {
-	originalTransport := http.DefaultTransport
+func TestLoaderDataListingSkipsLegacyMarketJSONEndpoints(t *testing.T) {
+	originalTransport := steamHTTPTransport
 	originalLimiter := steamRequestLimiter
 	t.Cleanup(func() {
-		http.DefaultTransport = originalTransport
+		steamHTTPTransport = originalTransport
 		steamRequestLimiter = originalLimiter
-		SetSteamRequestMetricLogger(nil)
-	})
-
-	var priceHistoryRequests int
-	SetSteamRequestMetricLogger(func(metric SteamRequestMetric) {
-		if metric.Endpoint != "pricehistory" {
-			return
-		}
-		priceHistoryRequests++
 	})
 
 	steamRequestLimiter = newSteamRateLimiter()
-	http.DefaultTransport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+	listingRequests := 0
+	steamHTTPTransport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		resetSteamRequestLimiterForTest()
-		switch {
-		case strings.Contains(request.URL.Path, "/market/listings/"):
-			return testHTTPResponse(http.StatusOK, `<html></html>`), nil
-		case strings.Contains(request.URL.Path, "/market/pricehistory/"):
-			t.Fatalf("pricehistory should not be requested when scoped priceoverview has price data")
-			return testHTTPResponse(http.StatusBadRequest, `[]`), nil
-		case strings.Contains(request.URL.Path, "/market/priceoverview/"):
-			return testHTTPResponse(http.StatusOK, `{"success":true,"lowest_price":"\u00a30.26","median_price":"\u00a30.30","volume":"42"}`), nil
-		default:
+		if encoding := request.Header.Get("Accept-Encoding"); encoding != "" {
+			t.Fatalf("Accept-Encoding = %q, want omitted header", encoding)
+		}
+		if !strings.Contains(request.URL.Path, "/market/listings/") {
 			t.Fatalf("unexpected request URL: %s", request.URL.String())
 			return testHTTPResponse(http.StatusNotFound, ""), nil
 		}
+		listingRequests++
+		return testHTTPResponse(http.StatusOK, loaderDataListingFixture(1, 25, 27, 1_700_000_000, true)), nil
 	})
 
-	scope, ok := marketScopeFor("GBP", "GB")
+	scope, ok := marketScopeFor("USD", "US")
 	if !ok {
-		t.Fatal("expected GBP/GB scope")
+		t.Fatal("expected USD/US scope")
 	}
 	config := catalog.ItemConfig{
 		ID:   116002,
@@ -84,19 +73,22 @@ func TestScopedPriceOverviewSkipsPricehistory(t *testing.T) {
 	if !data.Analysis.HasSuggested {
 		t.Fatalf("analysis did not contain suggested price: %+v", data.Analysis)
 	}
-	if data.Analysis.PricePrefix != scope.Currency.PricePrefix || data.Analysis.PriceSuffix != scope.Currency.PriceSuffix {
-		t.Fatalf("analysis format = %q/%q, want %q/%q", data.Analysis.PricePrefix, data.Analysis.PriceSuffix, scope.Currency.PricePrefix, scope.Currency.PriceSuffix)
+	if !data.Analysis.HasOrderBook || !data.Analysis.HasSaleHistory || !data.Analysis.HasSteamMedian || !data.Analysis.HasSteamVolume {
+		t.Fatalf("loaderData metrics were not populated: %+v", data.Analysis)
 	}
-	if priceHistoryRequests != 0 {
-		t.Fatalf("pricehistory requests = %d, want 0", priceHistoryRequests)
+	if data.Analysis.PriceSource != "listing-ssr" {
+		t.Fatalf("price source = %q, want listing-ssr", data.Analysis.PriceSource)
+	}
+	if listingRequests != 1 {
+		t.Fatalf("listing requests = %d, want 1", listingRequests)
 	}
 }
 
 func TestScopedListingOrderBookSkipsPricehistory(t *testing.T) {
-	originalTransport := http.DefaultTransport
+	originalTransport := steamHTTPTransport
 	originalLimiter := steamRequestLimiter
 	t.Cleanup(func() {
-		http.DefaultTransport = originalTransport
+		steamHTTPTransport = originalTransport
 		steamRequestLimiter = originalLimiter
 		SetSteamRequestMetricLogger(nil)
 	})
@@ -107,7 +99,7 @@ func TestScopedListingOrderBookSkipsPricehistory(t *testing.T) {
 	}
 
 	steamRequestLimiter = newSteamRateLimiter()
-	http.DefaultTransport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+	steamHTTPTransport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		resetSteamRequestLimiterForTest()
 		switch {
 		case strings.Contains(request.URL.Path, "/market/listings/"):
@@ -141,10 +133,10 @@ func TestScopedListingOrderBookSkipsPricehistory(t *testing.T) {
 }
 
 func TestScopedSuggestedPriceMergesUSDFallbackDetails(t *testing.T) {
-	originalTransport := http.DefaultTransport
+	originalTransport := steamHTTPTransport
 	originalLimiter := steamRequestLimiter
 	t.Cleanup(func() {
-		http.DefaultTransport = originalTransport
+		steamHTTPTransport = originalTransport
 		steamRequestLimiter = originalLimiter
 	})
 
@@ -155,32 +147,22 @@ func TestScopedSuggestedPriceMergesUSDFallbackDetails(t *testing.T) {
 	usdScope := defaultMarketScope()
 
 	steamRequestLimiter = newSteamRateLimiter()
-	http.DefaultTransport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+	listingRequests := 0
+	steamHTTPTransport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		resetSteamRequestLimiterForTest()
-		switch {
-		case strings.Contains(request.URL.Path, "/market/listings/"):
-			if request.URL.Query().Get("currency") == fmt.Sprint(scope.Currency.SteamCurrencyID) {
-				return testHTTPResponse(http.StatusOK, `<html></html>`), nil
-			}
-			if request.URL.Query().Get("currency") == fmt.Sprint(usdScope.Currency.SteamCurrencyID) {
-				body := fmt.Sprintf(`<script>JSON.parse("{\"state\":{\"data\":{\"amtMaxBuyOrder\":80,\"amtMinSellOrder\":101,\"eCurrency\":%d,\"cBuyOrders\":4,\"cSellOrders\":5,\"rgCompactBuyOrders\":[80,6],\"rgCompactSellOrders\":[101,7]},\"queryKey\":[\"market\",\"orderbook\",3678970,\"Astral Diamond\"]}}")</script>
-<script>JSON.parse("{\"state\":{\"data\":{\"history\":[{\"time\":1700000000,\"price_median\":1.00,\"purchases\":3}]},\"queryKey\":[\"market\",\"pricehistory\",3678970,\"Astral Diamond\"]}}")</script>`, usdScope.Currency.SteamCurrencyID)
-				return testHTTPResponse(http.StatusOK, body), nil
-			}
-			t.Fatalf("unexpected listing scope: %s", request.URL.String())
-			return testHTTPResponse(http.StatusNotFound, ""), nil
-		case strings.Contains(request.URL.Path, "/market/priceoverview/"):
-			if request.URL.Query().Get("currency") != fmt.Sprint(scope.Currency.SteamCurrencyID) {
-				t.Fatalf("unexpected priceoverview scope: %s", request.URL.String())
-			}
-			return testHTTPResponse(http.StatusOK, `{"success":true,"lowest_price":"\u00a30.51","median_price":"\u00a30.55","volume":"42"}`), nil
-		case strings.Contains(request.URL.Path, "/market/pricehistory/"):
-			t.Fatalf("pricehistory endpoint should not be requested in this fallback flow")
-			return testHTTPResponse(http.StatusBadRequest, `[]`), nil
-		default:
+		if !strings.Contains(request.URL.Path, "/market/listings/") {
 			t.Fatalf("unexpected request URL: %s", request.URL.String())
 			return testHTTPResponse(http.StatusNotFound, ""), nil
 		}
+		listingRequests++
+		if request.URL.Query().Get("currency") == fmt.Sprint(scope.Currency.SteamCurrencyID) {
+			return testHTTPResponse(http.StatusOK, loaderDataListingFixture(scope.Currency.SteamCurrencyID, 40, 51, 0, false)), nil
+		}
+		if request.URL.Query().Get("currency") == fmt.Sprint(usdScope.Currency.SteamCurrencyID) {
+			return testHTTPResponse(http.StatusOK, loaderDataListingFixture(usdScope.Currency.SteamCurrencyID, 80, 101, 1_700_000_000, true)), nil
+		}
+		t.Fatalf("unexpected listing scope: %s", request.URL.String())
+		return testHTTPResponse(http.StatusNotFound, ""), nil
 	})
 
 	config := catalog.ItemConfig{
@@ -206,40 +188,31 @@ func TestScopedSuggestedPriceMergesUSDFallbackDetails(t *testing.T) {
 	if analysis.USDFallbackMetrics == 0 {
 		t.Fatalf("USD fallback fields were not marked: %+v", analysis)
 	}
+	if listingRequests != 2 {
+		t.Fatalf("listing requests = %d, want 2 scoped listing requests", listingRequests)
+	}
 }
 
-func TestPricehistoryFailureLogsMinimalDiagnosticDetails(t *testing.T) {
-	originalTransport := http.DefaultTransport
+func TestListingWithoutMarketDataUsesOnlyHTMLSearchFallback(t *testing.T) {
+	originalTransport := steamHTTPTransport
 	originalLimiter := steamRequestLimiter
 	t.Cleanup(func() {
-		http.DefaultTransport = originalTransport
+		steamHTTPTransport = originalTransport
 		steamRequestLimiter = originalLimiter
-		SetSteamRequestMetricLogger(nil)
-	})
-
-	var priceHistoryQuery string
-	var metricsMu sync.Mutex
-	var priceHistoryMetric SteamRequestMetric
-	SetSteamRequestMetricLogger(func(metric SteamRequestMetric) {
-		if metric.Endpoint != "pricehistory" {
-			return
-		}
-		metricsMu.Lock()
-		priceHistoryMetric = metric
-		metricsMu.Unlock()
 	})
 
 	steamRequestLimiter = newSteamRateLimiter()
-	http.DefaultTransport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+	listingRequests := 0
+	searchPageRequests := 0
+	steamHTTPTransport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		resetSteamRequestLimiterForTest()
 		switch {
 		case strings.Contains(request.URL.Path, "/market/listings/"):
+			listingRequests++
 			return testHTTPResponse(http.StatusOK, `<html></html>`), nil
-		case strings.Contains(request.URL.Path, "/market/priceoverview/"):
-			return testHTTPResponse(http.StatusOK, `{"success":false}`), nil
-		case strings.Contains(request.URL.Path, "/market/pricehistory/"):
-			priceHistoryQuery = request.URL.RawQuery
-			return testHTTPResponse(http.StatusBadRequest, `{"success":false,"error":"bad request"}`), nil
+		case request.URL.Path == "/market/search":
+			searchPageRequests++
+			return testHTTPResponse(http.StatusOK, `<html></html>`), nil
 		default:
 			t.Fatalf("unexpected request URL: %s", request.URL.String())
 			return testHTTPResponse(http.StatusNotFound, ""), nil
@@ -259,19 +232,52 @@ func TestPricehistoryFailureLogsMinimalDiagnosticDetails(t *testing.T) {
 	if err == nil {
 		t.Fatal("fetchDataForScope returned nil error")
 	}
-	if strings.Contains(priceHistoryQuery, "country=") || strings.Contains(priceHistoryQuery, "currency=") {
-		t.Fatalf("pricehistory query contains scoped params: %s", priceHistoryQuery)
+	if listingRequests != 1 || searchPageRequests != 1 {
+		t.Fatalf("listing/search page requests = %d/%d, want 1/1", listingRequests, searchPageRequests)
 	}
+	if strings.Contains(err.Error(), "priceoverview") || strings.Contains(err.Error(), "search/render") {
+		t.Fatalf("legacy endpoint leaked into error: %v", err)
+	}
+}
 
-	metricsMu.Lock()
-	metric := priceHistoryMetric
-	metricsMu.Unlock()
-	if metric.StatusCode != http.StatusBadRequest || metric.AppID != "3678970" || metric.MarketHashName != "Astral Diamond" {
-		t.Fatalf("pricehistory metric = %+v", metric)
+func TestListingShellFallsBackToSearchHTMLPrice(t *testing.T) {
+	originalTransport := steamHTTPTransport
+	originalLimiter := steamRequestLimiter
+	t.Cleanup(func() {
+		steamHTTPTransport = originalTransport
+		steamRequestLimiter = originalLimiter
+	})
+
+	steamRequestLimiter = newSteamRateLimiter()
+	steamHTTPTransport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		resetSteamRequestLimiterForTest()
+		switch {
+		case strings.Contains(request.URL.Path, "/market/listings/"):
+			return testHTTPResponse(http.StatusOK, `<html></html>`), nil
+		case request.URL.Path == "/market/search":
+			if query := request.URL.Query(); query.Get("q") != "Astral Diamond" || query.Get("appid") != "3678970" || query.Get("country") != "US" || query.Get("currency") != "1" {
+				t.Fatalf("search page query is not deterministic: %s", request.URL.RawQuery)
+			}
+			return testHTTPResponse(http.StatusOK, loaderDataSearchFixture("Astral Diamond", SteamAppID, 1, "$0.12", 42)), nil
+		default:
+			t.Fatalf("unexpected request URL: %s", request.URL.String())
+			return testHTTPResponse(http.StatusNotFound, ""), nil
+		}
+	})
+
+	config := catalog.ItemConfig{ID: 116002, Type: "MATERIAL", Name: map[string]string{"en-US": "Astral Diamond"}}
+	data, err := fetchDataForScope(config, "Astral Diamond", time.Unix(1_700_000_000, 0), defaultMarketScope(), RequestPriorityHigh)
+	if err != nil {
+		t.Fatalf("fetchDataForScope returned error: %v", err)
 	}
-	if metric.URL == "" || !strings.Contains(metric.ResponseBody, "bad request") {
-		t.Fatalf("pricehistory metric did not include URL/body: %+v", metric)
+	analysis := data.Analysis
+	if !analysis.HasLowestSell || !analysis.HasSuggested || analysis.PriceSource != "market-search-html" {
+		t.Fatalf("HTML search fallback analysis = %+v", analysis)
 	}
+	if analysis.HasOrderBook || analysis.HasSaleHistory || analysis.HasSteamMedian || analysis.HasSteamVolume {
+		t.Fatalf("HTML search fallback invented unavailable metrics: %+v", analysis)
+	}
+	assertFloatEqual(t, analysis.LowestSellPrice, 0.12)
 }
 
 func TestBaseHistoryConvertsToTargetCurrency(t *testing.T) {
@@ -347,4 +353,42 @@ func withExchangeRateCache(t *testing.T, rates map[string]float64) {
 		exchangeRateCache = original
 		exchangeRateMu.Unlock()
 	})
+}
+
+func loaderDataListingFixture(currencyID int, highestBuyCents int, lowestSellCents int, historyTime int64, includeHistory bool) string {
+	queries := fmt.Sprintf(
+		`{"state":{"data":{"amtMaxBuyOrder":%d,"amtMinSellOrder":%d,"eCurrency":%d,"cBuyOrders":12,"cSellOrders":3,"rgCompactBuyOrders":[%d,10],"rgCompactSellOrders":[%d,8]}},"queryKey":["market","orderbook",%d,"Astral Diamond"]}`,
+		highestBuyCents,
+		lowestSellCents,
+		currencyID,
+		highestBuyCents,
+		lowestSellCents,
+		SteamAppID,
+	)
+	if includeHistory {
+		queries += fmt.Sprintf(
+			`,{"state":{"data":{"ecurrency":%d,"prices":[{"time":%d,"price_median":1.0,"purchases":3}]}},"queryKey":["market","pricehistory",%d,"Astral Diamond"]}`,
+			currencyID,
+			historyTime,
+			SteamAppID,
+		)
+	}
+	dehydratedState := `{"queries":[` + queries + `]}`
+	loaderEntry, _ := json.Marshal(map[string]any{"dehydratedState": dehydratedState})
+	loaderData, _ := json.Marshal([]string{string(loaderEntry)})
+	return `<script>window.SSR={};window.SSR.loaderData = ` + string(loaderData) + `;</script>`
+}
+
+func loaderDataSearchFixture(marketHashName string, appID int, currencyID int, formattedPrice string, sellOrders int) string {
+	dehydratedState := fmt.Sprintf(
+		`{"queries":[{"state":{"data":{"pages":[{"start":0,"total_count":1,"results":[{"strHash":%q,"cSellOrders":%d,"cBuyOrders":0,"eCurrency":%d,"strMinSellSubtotal":%q,"asset_description":{"appid":%d}}]}]}}}]}`,
+		marketHashName,
+		sellOrders,
+		currencyID,
+		formattedPrice,
+		appID,
+	)
+	loaderEntry, _ := json.Marshal(map[string]any{"searchState": dehydratedState})
+	loaderData, _ := json.Marshal([]string{string(loaderEntry)})
+	return `<script>window.SSR={};window.SSR.loaderData = ` + string(loaderData) + `;</script>`
 }

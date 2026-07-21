@@ -1,6 +1,7 @@
 package market
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -77,6 +78,73 @@ func TestParseSSRMarketData(t *testing.T) {
 	if !ok || isSSRListingForScope(body, eur) {
 		t.Fatal("USD SSR data must not apply to the EUR/DE scope")
 	}
+}
+
+func TestParseSSRMarketDataFromLoaderData(t *testing.T) {
+	dehydratedState := map[string]any{
+		"queries": []any{
+			map[string]any{
+				"state": map[string]any{"data": map[string]any{
+					"amtMaxBuyOrder":      255,
+					"amtMinSellOrder":     257,
+					"eCurrency":           1,
+					"cBuyOrders":          12,
+					"cSellOrders":         3,
+					"rgCompactBuyOrders":  []int{255, 10},
+					"rgCompactSellOrders": []int{257, 8},
+				}},
+				"queryKey": []any{"market", "pricehistory", SteamAppID, "Example"},
+			},
+			map[string]any{
+				"state": map[string]any{"data": map[string]any{
+					"ecurrency": 1,
+					"prices": []any{
+						struct {
+							Time        int64   `json:"time"`
+							PriceMedian float64 `json:"price_median"`
+							Purchases   int     `json:"purchases"`
+						}{Time: 1700000000, PriceMedian: 2.51, Purchases: 4},
+					},
+				}},
+				"queryKey": []any{"market", "pricehistory", SteamAppID, "Example"},
+			},
+		},
+	}
+	dehydratedJSON, err := json.Marshal(dehydratedState)
+	if err != nil {
+		t.Fatalf("marshal dehydrated state: %v", err)
+	}
+	loaderEntry, err := json.Marshal(map[string]any{"dehydratedState": string(dehydratedJSON)})
+	if err != nil {
+		t.Fatalf("marshal loader entry: %v", err)
+	}
+	loaderData, err := json.Marshal([]string{string(loaderEntry)})
+	if err != nil {
+		t.Fatalf("marshal loader data: %v", err)
+	}
+	body := []byte(`<script>window.SSR={};window.SSR.loaderData = ` + string(loaderData) + `;</script>`)
+
+	usd, ok := marketScopeFor("USD", "US")
+	if !ok {
+		t.Fatal("expected USD/US scope to exist")
+	}
+	if !isSSRListingForScope(body, usd) {
+		t.Fatal("loaderData currency was not detected")
+	}
+	orderBook, ok := parseSSRItemOrderBook(body, usd.Currency)
+	if !ok {
+		t.Fatal("loaderData order book was not parsed")
+	}
+	assertFloatEqual(t, orderBook.HighestBuyPrice, 2.55)
+	assertFloatEqual(t, orderBook.LowestSellPrice, 2.57)
+	if orderBook.HighestBuyQuantity != 10 || orderBook.LowestSellQuantity != 8 {
+		t.Fatalf("loaderData top quantities = %d/%d, want 10/8", orderBook.HighestBuyQuantity, orderBook.LowestSellQuantity)
+	}
+	history := parseSSRPriceHistory(body)
+	if len(history) != 1 || history[0].Volume != 4 {
+		t.Fatalf("loaderData history = %+v, want one point with volume 4", history)
+	}
+	assertFloatEqual(t, history[0].Price, 2.51)
 }
 
 func TestParseSSRMarketDataWithNullPrices(t *testing.T) {
@@ -213,9 +281,40 @@ func TestSaleHistoryAnalysis(t *testing.T) {
 	if analysis.DailySalesVolume != 2 {
 		t.Fatalf("daily sales = %d, want 2", analysis.DailySalesVolume)
 	}
+	if !analysis.HasSteamVolume || analysis.SteamVolume != 2 {
+		t.Fatalf("Steam 24h volume = %d (available=%t), want 2", analysis.SteamVolume, analysis.HasSteamVolume)
+	}
+	if !analysis.HasSteamMedian {
+		t.Fatal("Steam 24h median was not derived from sale history")
+	}
+	assertFloatEqual(t, analysis.SteamMedianPrice, 10.0)
 	assertFloatEqual(t, analysis.WeeklyAveragePrice, 16.0)
 	assertFloatEqual(t, analysis.RecentSaleP75Price, 20.0)
 	assertFloatEqual(t, analysis.LastSoldPrice, 10.0)
+}
+
+func TestMarketSearchHTMLRequiresExactNameAndAppID(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	body := []byte(loaderDataSearchFixture("Example (Legendary) A", SteamAppID, 1, "$0.12", 42))
+	data, ok := marketDataFromSearchHTML("Example (Legendary) A", body, now, defaultMarketScope().Currency)
+	if !ok {
+		t.Fatal("HTML search result did not parse")
+	}
+	analysis := data.Analysis
+	assertFloatEqual(t, analysis.LowestSellPrice, 0.12)
+	if !analysis.HasLowestSell || !analysis.HasSuggested || analysis.SellOrderCount != 42 || analysis.PriceSource != "market-search-html" {
+		t.Fatalf("HTML search analysis = %+v", analysis)
+	}
+	if analysis.HasOrderBook || analysis.HasSaleHistory || analysis.HasSteamMedian || analysis.HasSteamVolume {
+		t.Fatalf("HTML search result invented unavailable metrics: %+v", analysis)
+	}
+	if _, ok := marketDataFromSearchHTML("example (Legendary) A", body, now, defaultMarketScope().Currency); ok {
+		t.Fatal("case-mismatched HTML search result was accepted")
+	}
+	wrongAppBody := []byte(loaderDataSearchFixture("Example (Legendary) A", SteamAppID+1, 1, "$0.12", 42))
+	if _, ok := marketDataFromSearchHTML("Example (Legendary) A", wrongAppBody, now, defaultMarketScope().Currency); ok {
+		t.Fatal("wrong-AppID HTML search result was accepted")
+	}
 }
 
 func TestCalculateSuggestedPrice(t *testing.T) {

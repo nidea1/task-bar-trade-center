@@ -12,6 +12,8 @@ type PriceView struct {
 	HighestBuy     string
 	DailySales     string
 	WeeklyAvg      string
+	SteamMedian    string
+	SteamVolume    string
 	LastSold       string
 	Updated        string
 	Trend          string
@@ -119,6 +121,12 @@ func CalculateRequiredHeight(data PriceView, mode int32, compactMode int32) int3
 		if data.WeeklyAvg != "" {
 			y += 17
 		}
+		if data.SteamMedian != "" {
+			y += 17
+		}
+		if data.SteamVolume != "" {
+			y += 17
+		}
 		if data.SaleP75 != "" {
 			y += 17
 		}
@@ -184,6 +192,12 @@ func ParsePriceView(text string, suggestedKey string) PriceView {
 	}
 	if v, ok := lineMap["Daily Sales"]; ok {
 		view.DailySales = v
+	}
+	if v, ok := lineMap["Steam Median"]; ok {
+		view.SteamMedian = v
+	}
+	if v, ok := lineMap["Steam Volume"]; ok {
+		view.SteamVolume = v
 	}
 	if v, ok := lineMap["Updated"]; ok {
 		view.Updated = v

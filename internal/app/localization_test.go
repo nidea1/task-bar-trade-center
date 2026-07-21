@@ -80,6 +80,11 @@ func TestSemanticOverlayIsRenderedInCurrentLanguage(t *testing.T) {
 		HasSuggested:     true,
 		DailySalesVolume: 9,
 		HasDailySales:    true,
+		SteamMedianPrice: 12.25,
+		HasSteamMedian:   true,
+		SteamVolume:      18,
+		HasSteamVolume:   true,
+		PriceIsEstimated: true,
 		Confidence:       "verified",
 		DealTag:          "undervalued",
 		VolumeActivity:   "active",
@@ -93,6 +98,9 @@ func TestSemanticOverlayIsRenderedInCurrentLanguage(t *testing.T) {
 	}
 	if !strings.Contains(view.DailySales, "adet") {
 		t.Fatalf("localized daily sales = %q", view.DailySales)
+	}
+	if view.SteamMedian == "" || !strings.Contains(view.SteamVolume, "adet") || view.FallbackNotice == "" {
+		t.Fatalf("localized Steam overview view = %+v", view)
 	}
 }
 

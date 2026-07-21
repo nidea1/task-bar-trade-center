@@ -17,19 +17,24 @@ type PriceQuote struct {
 	Suggested          float64 `json:"suggested"`
 	Instant            float64 `json:"instant"`
 	WeeklyAveragePrice float64 `json:"weekly_average_price"`
+	SteamMedianPrice   float64 `json:"steam_median_price"`
 	SpreadPercent      float64 `json:"spread_percent"`
 	DailySalesVolume   int     `json:"daily_sales_volume"`
+	SteamVolume        int     `json:"steam_volume"`
 	LowestSellQuantity int     `json:"lowest_sell_quantity"`
 	BuyOrderCount      int     `json:"buy_order_count"`
 	SellOrderCount     int     `json:"sell_order_count"`
 	HasSuggested       bool    `json:"has_suggested"`
 	HasInstant         bool    `json:"has_instant"`
 	HasWeeklyAverage   bool    `json:"has_weekly_average"`
+	HasSteamMedian     bool    `json:"has_steam_median"`
 	HasSpread          bool    `json:"has_spread"`
 	HasDailySales      bool    `json:"has_daily_sales"`
+	HasSteamVolume     bool    `json:"has_steam_volume"`
 	HasOrderBook       bool    `json:"has_order_book"`
 	Confidence         string  `json:"confidence"`
 	HasConfidence      bool    `json:"has_confidence"`
+	PriceIsEstimated   bool    `json:"price_is_estimated"`
 	PricePrefix        string  `json:"price_prefix"`
 	PriceSuffix        string  `json:"price_suffix"`
 	UpdatedAt          string  `json:"updated_at"`
@@ -73,19 +78,24 @@ type DashboardItem struct {
 	TotalInstant       float64  `json:"total_instant"`
 	HasPrice           bool     `json:"has_price"`
 	WeeklyAveragePrice float64  `json:"weekly_average_price"`
+	SteamMedianPrice   float64  `json:"steam_median_price"`
 	SpreadPercent      float64  `json:"spread_percent"`
 	DailySalesVolume   int      `json:"daily_sales_volume"`
+	SteamVolume        int      `json:"steam_volume"`
 	LowestSellQuantity int      `json:"lowest_sell_quantity"`
 	BuyOrderCount      int      `json:"buy_order_count"`
 	SellOrderCount     int      `json:"sell_order_count"`
 	HasWeeklyAverage   bool     `json:"has_weekly_average"`
+	HasSteamMedian     bool     `json:"has_steam_median"`
 	HasSpread          bool     `json:"has_spread"`
 	HasDailySales      bool     `json:"has_daily_sales"`
+	HasSteamVolume     bool     `json:"has_steam_volume"`
 	HasOrderBook       bool     `json:"has_order_book"`
 	HasSellThrough     bool     `json:"has_sell_through"`
 	SellThroughDays    float64  `json:"sell_through_days"`
 	Confidence         string   `json:"confidence"`
 	HasConfidence      bool     `json:"has_confidence"`
+	PriceIsEstimated   bool     `json:"price_is_estimated"`
 	SellScore          float64  `json:"sell_score"`
 	SellReasons        []string `json:"sell_reasons"`
 	PricePrefix        string   `json:"price_prefix"`

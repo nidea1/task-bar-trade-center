@@ -45,9 +45,15 @@ export function BestItemsToSellNowContent({
                     const score = Math.round(item.sell_score || 0);
                     const spreadText = item.has_spread ? `${item.spread_percent.toFixed(1)}%` : "N/A";
                     const dailySalesText = item.has_daily_sales ? formatNumber(item.daily_sales_volume) : "N/A";
+                    const steamVolumeText = item.has_steam_volume ? formatNumber(item.steam_volume) : "N/A";
                     const buyOrdersText = item.has_order_book ? formatNumber(item.buy_order_count) : "N/A";
                     const sellThroughText = formatSellThroughDays(item, t);
                     const weeklyAverageText = item.has_weekly_average ? formatPrice(item.weekly_average_price, state, item) : "N/A";
+                    const steamMedianText = item.has_steam_median ? formatPrice(item.steam_median_price, state, item) : "N/A";
+                    const unitPriceText = formatPrice(itemUnitValue(item, priceMode), state, item);
+                    const displayedPrice = item.price_is_estimated
+                        ? `${unitPriceText} (${t("value.estimated", "Estimated")})`
+                        : unitPriceText;
                     const style = { "--rarity-color": meta.color } as React.CSSProperties;
 
                     return (
@@ -73,7 +79,7 @@ export function BestItemsToSellNowContent({
                                         <ExternalLink className="w-3 h-3" />
                                     </div>
                                     <div className="best-sell-price">
-                                        <span>{formatPrice(itemUnitValue(item, priceMode), state, item)}</span>
+                                        <span>{displayedPrice}</span>
                                         <span>{t("dashboard.weekly_avg", "Weekly avg")} {weeklyAverageText}</span>
                                     </div>
                                 </div>
@@ -88,6 +94,8 @@ export function BestItemsToSellNowContent({
                                 <span>{t("dashboard.spread", "Spread")} <strong>{spreadText}</strong></span>
                                 <span>{t("dashboard.buy_orders", "Buy orders")} <strong>{buyOrdersText}</strong></span>
                                 <span>{t("dashboard.sell_through", "Sell-through")} <strong>{sellThroughText}</strong></span>
+                                <span>{t("dashboard.steam_median", "Steam 24h median")} <strong>{steamMedianText}</strong></span>
+                                <span>{t("dashboard.steam_volume", "Steam 24h volume")} <strong>{steamVolumeText}</strong></span>
                             </div>
 
                             {(item.sell_reasons || []).length > 0 && (

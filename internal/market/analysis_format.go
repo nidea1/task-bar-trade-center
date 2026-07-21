@@ -21,6 +21,8 @@ func buildMarketOverlayText(analysis MarketAnalysis) string {
 	builder.WriteString("Lowest Sell: " + formatAnalysisPrice(analysis.LowestSellPrice, analysis.HasLowestSell, analysis) + "\r\n")
 	builder.WriteString("Highest Buy: " + formatAnalysisPrice(analysis.HighestBuyPrice, analysis.HasHighestBuy, analysis) + "\r\n")
 	builder.WriteString("Weekly Avg: " + formatAnalysisPrice(analysis.WeeklyAveragePrice, analysis.HasWeeklyAverage, analysis) + "\r\n")
+	builder.WriteString("Steam 24h Median: " + formatAnalysisPrice(analysis.SteamMedianPrice, analysis.HasSteamMedian, analysis) + "\r\n")
+	builder.WriteString("Steam 24h Volume: " + formatAnalysisVolume(analysis.SteamVolume, analysis.HasSteamVolume, "") + "\r\n")
 	builder.WriteString("Sale P75: " + formatAnalysisPrice(analysis.RecentSaleP75Price, analysis.HasRecentSaleP75, analysis) + "\r\n")
 	builder.WriteString("Spread: " + formatSpread(analysis) + "\r\n")
 	builder.WriteString("Trend: " + formatTrendPercent(analysis.TrendPercent, analysis.HasTrend) + "\r\n")

@@ -81,9 +81,14 @@ func loadPriceCacheFromDisk() int {
 func normalizePriceCache(diskCache map[string]market.MarketData) (map[string]market.MarketData, bool) {
 	normalized := make(map[string]market.MarketData, len(diskCache))
 	legacy := make(map[string]market.MarketData)
+	migrated := false
 	for cacheKey, data := range diskCache {
 		if cacheKey == "" || data.CachedAt.IsZero() {
 			continue
+		}
+		if normalizedData, changed := market.NormalizeCachedData(data); changed {
+			data = normalizedData
+			migrated = true
 		}
 		if _, _, ok := market.ParseCacheKey(cacheKey); ok {
 			normalized[cacheKey] = data
@@ -98,7 +103,7 @@ func normalizePriceCache(diskCache map[string]market.MarketData) (map[string]mar
 			normalized[cacheKey] = data
 		}
 	}
-	return normalized, len(legacy) > 0
+	return normalized, migrated || len(legacy) > 0
 }
 
 func writePriceCacheFileLocked() {

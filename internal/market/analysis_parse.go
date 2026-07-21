@@ -68,7 +68,7 @@ func parseSSRItemOrderBook(body []byte, currency MarketCurrency) (MarketOrderBoo
 	}, true
 }
 
-func isSSRListingForScope(body []byte, scope MarketScope) bool {
+func ssrListingCurrency(body []byte) (MarketCurrency, bool) {
 	text := searchableListingText(body)
 	matches := ssrCurrencyPattern.FindAllStringSubmatch(text, -1)
 	for _, match := range matches {
@@ -76,11 +76,19 @@ func isSSRListingForScope(body []byte, scope MarketScope) bool {
 			continue
 		}
 		currencyID, ok := parseInt(match[1])
-		if ok && currencyID == scope.Currency.SteamCurrencyID {
-			return true
+		if !ok {
+			continue
+		}
+		if currency, exists := marketCurrencyForSteamID(currencyID); exists {
+			return currency, true
 		}
 	}
-	return false
+	return MarketCurrency{}, false
+}
+
+func isSSRListingForScope(body []byte, scope MarketScope) bool {
+	currency, ok := ssrListingCurrency(body)
+	return ok && currency.SteamCurrencyID == scope.Currency.SteamCurrencyID
 }
 
 func parseSSRPriceHistory(body []byte) []MarketSalePoint {
@@ -186,51 +194,56 @@ func parseSaleHistoryResponse(body []byte) []MarketSalePoint {
 	return parseSaleHistoryValue(raw)
 }
 
-func marketDataFromPriceOverview(marketHashName string, body []byte, now time.Time, currency MarketCurrency) (MarketData, bool) {
-	var payload struct {
-		Success     bool   `json:"success"`
-		LowestPrice string `json:"lowest_price"`
-		MedianPrice string `json:"median_price"`
-		Volume      string `json:"volume"`
-	}
-	if err := json.Unmarshal(body, &payload); err != nil {
-		return MarketData{}, false
-	}
-	if !payload.Success && payload.LowestPrice == "" && payload.MedianPrice == "" {
-		return MarketData{}, false
-	}
-
-	analysis := unavailableMarketAnalysis(marketHashName, now, currency)
-	priceFormatSet := false
-	if lowest, pricePrefix, priceSuffix, ok := parseSteamFormattedPrice(payload.LowestPrice); ok {
-		analysis.LowestSellPrice = lowest
-		analysis.HasLowestSell = true
-		analysis.PricePrefix = pricePrefix
-		analysis.PriceSuffix = priceSuffix
-		priceFormatSet = true
-	}
-	if median, pricePrefix, priceSuffix, ok := parseSteamFormattedPrice(payload.MedianPrice); ok {
-		analysis.WeeklyAveragePrice = median
-		analysis.HasWeeklyAverage = true
-		if !priceFormatSet {
-			analysis.PricePrefix = pricePrefix
-			analysis.PriceSuffix = priceSuffix
+func marketDataFromSearchHTML(marketHashName string, body []byte, now time.Time, currency MarketCurrency) (MarketData, bool) {
+	text := searchableListingText(body)
+	for _, match := range searchHTMLResultPattern.FindAllStringSubmatch(text, -1) {
+		if len(match) != 6 {
+			continue
 		}
-	}
-	if volume, ok := parseFirstInt(payload.Volume); ok {
-		analysis.DailySalesVolume = volume
-		analysis.HasDailySales = true
-	}
-	if suggested, ok := calculateSuggestedPrice(analysis); ok {
-		analysis.SuggestedPrice = suggested
-		analysis.HasSuggested = true
-	}
-	normalizeAnalysisCurrencyFormat(&analysis, currency)
+		name, ok := decodeJSONStringFragment(match[1])
+		if !ok || name != marketHashName {
+			continue
+		}
+		appID, ok := parseInt(match[5])
+		if !ok || appID != SteamAppID {
+			continue
+		}
+		currencyID, ok := parseInt(match[3])
+		if !ok || currencyID != currency.SteamCurrencyID {
+			continue
+		}
+		formattedPrice, ok := decodeJSONStringFragment(match[4])
+		if !ok {
+			continue
+		}
+		lowestSell, _, _, ok := parseSteamFormattedPrice(formattedPrice)
+		if !ok || lowestSell <= 0 {
+			continue
+		}
 
-	return MarketData{
-		CachedAt: now,
-		Analysis: analysis,
-	}, true
+		analysis := unavailableMarketAnalysis(marketHashName, now, currency)
+		analysis.PriceSource = "market-search-html"
+		analysis.LowestSellPrice = lowestSell
+		analysis.HasLowestSell = true
+		if sellOrders, ok := parseInt(match[2]); ok {
+			analysis.SellOrderCount = sellOrders
+		}
+		if suggested, ok := calculateSuggestedPrice(analysis); ok {
+			analysis.SuggestedPrice = suggested
+			analysis.HasSuggested = true
+		}
+		normalizeAnalysisCurrencyFormat(&analysis, currency)
+		return MarketData{CachedAt: now, Analysis: analysis}, true
+	}
+	return MarketData{}, false
+}
+
+func decodeJSONStringFragment(value string) (string, bool) {
+	var decoded string
+	if err := json.Unmarshal([]byte(`"`+value+`"`), &decoded); err != nil {
+		return "", false
+	}
+	return decoded, true
 }
 
 func ParseIconURL(body []byte) string {

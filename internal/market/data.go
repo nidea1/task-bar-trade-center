@@ -102,23 +102,23 @@ func mergeMarketDataWithUSDFallback(local MarketData, usd MarketData, targetScop
 			local.OrderBook.PricePrefix = targetScope.Currency.PricePrefix
 			local.OrderBook.PriceSuffix = targetScope.Currency.PriceSuffix
 		}
-		if !analysis.HasLowestSell && usdAnalysis.HasLowestSell {
-			analysis.LowestSellPrice = usdAnalysis.LowestSellPrice * rate
-			analysis.HasLowestSell = true
-			analysis.LowestSellQuantity = usdAnalysis.LowestSellQuantity
-			analysis.USDFallbackMetrics |= usdFallbackLowestSell
-		}
-		if !analysis.HasHighestBuy && usdAnalysis.HasHighestBuy {
-			analysis.HighestBuyPrice = usdAnalysis.HighestBuyPrice * rate
-			analysis.HasHighestBuy = true
-			analysis.HighestBuyQuantity = usdAnalysis.HighestBuyQuantity
-			analysis.USDFallbackMetrics |= usdFallbackHighestBuy
-		}
 		if !analysis.HasSpread && usdAnalysis.HasSpread {
 			analysis.SpreadPercent = usdAnalysis.SpreadPercent
 			analysis.HasSpread = true
 			analysis.IsWideSpread = usdAnalysis.IsWideSpread
 		}
+	}
+	if !analysis.HasLowestSell && usdAnalysis.HasLowestSell {
+		analysis.LowestSellPrice = usdAnalysis.LowestSellPrice * rate
+		analysis.HasLowestSell = true
+		analysis.LowestSellQuantity = usdAnalysis.LowestSellQuantity
+		analysis.USDFallbackMetrics |= usdFallbackLowestSell
+	}
+	if !analysis.HasHighestBuy && usdAnalysis.HasHighestBuy {
+		analysis.HighestBuyPrice = usdAnalysis.HighestBuyPrice * rate
+		analysis.HasHighestBuy = true
+		analysis.HighestBuyQuantity = usdAnalysis.HighestBuyQuantity
+		analysis.USDFallbackMetrics |= usdFallbackHighestBuy
 	}
 
 	if usdAnalysis.HasSaleHistory {
@@ -167,13 +167,34 @@ func mergeMarketDataWithUSDFallback(local MarketData, usd MarketData, targetScop
 		analysis.SuggestedPrice = usdAnalysis.SuggestedPrice * rate
 		analysis.HasSuggested = true
 		analysis.USDFallbackMetrics |= usdFallbackSuggested
+		analysis.PriceSource = usdAnalysis.PriceSource
+	}
+	hadSteamMedian := analysis.HasSteamMedian
+	mergeSteamOverviewFields(analysis, usdAnalysis, rate)
+	if currencyCode != "USD" && !hadSteamMedian && analysis.HasSteamMedian {
+		analysis.PriceIsEstimated = true
 	}
 	if analysis.USDFallbackMetrics != 0 {
 		analysis.Confidence = "estimated"
 		analysis.HasConfidence = true
+		analysis.PriceIsEstimated = true
 	}
 	normalizeAnalysisCurrencyFormat(analysis, targetScope.Currency)
 	return local
+}
+
+func mergeSteamOverviewFields(target *MarketAnalysis, source MarketAnalysis, rate float64) {
+	if rate <= 0 {
+		rate = 1
+	}
+	if !target.HasSteamMedian && source.HasSteamMedian {
+		target.SteamMedianPrice = source.SteamMedianPrice * rate
+		target.HasSteamMedian = true
+	}
+	if !target.HasSteamVolume && source.HasSteamVolume {
+		target.SteamVolume = source.SteamVolume
+		target.HasSteamVolume = true
+	}
 }
 
 func normalizeAnalysisCurrencyFormat(analysis *MarketAnalysis, currency MarketCurrency) {

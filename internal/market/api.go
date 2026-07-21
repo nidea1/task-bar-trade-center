@@ -10,6 +10,10 @@ func StaleAnalysis(data MarketData, exists bool) (MarketAnalysis, bool) {
 	return staleMarketAnalysis(data, exists)
 }
 
+func NormalizeCachedData(data MarketData) (MarketData, bool) {
+	return normalizeCachedMarketData(data)
+}
+
 func UnavailableAnalysis(marketHashName string, now time.Time, currency MarketCurrency) MarketAnalysis {
 	return unavailableMarketAnalysis(marketHashName, now, currency)
 }
@@ -68,10 +72,6 @@ func ParseItemOrdersHistogramResponse(body []byte) (MarketOrderBook, bool) {
 
 func ParseSaleHistoryResponse(body []byte) []MarketSalePoint {
 	return parseSaleHistoryResponse(body)
-}
-
-func DataFromPriceOverview(marketHashName string, body []byte, now time.Time, currency MarketCurrency) (MarketData, bool) {
-	return marketDataFromPriceOverview(marketHashName, body, now, currency)
 }
 
 func DataFromSources(marketHashName string, orderBook MarketOrderBook, hasOrderBook bool, history []MarketSalePoint, now time.Time, currency MarketCurrency) MarketData {

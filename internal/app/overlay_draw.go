@@ -117,6 +117,14 @@ func drawDetailOverlay(hdc uintptr, rect win32.RECT) {
 			drawMarketStat(hdc, tr("hud.weekly_average"), data.WeeklyAvg, win32.RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
 			y += 17
 		}
+		if data.SteamMedian != "" {
+			drawMarketStat(hdc, tr("hud.steam_median"), data.SteamMedian, win32.RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
+			y += 17
+		}
+		if data.SteamVolume != "" {
+			drawMarketStat(hdc, tr("hud.steam_volume"), data.SteamVolume, win32.RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
+			y += 17
+		}
 		if data.SaleP75 != "" {
 			drawMarketStat(hdc, tr("hud.sale_p75"), data.SaleP75, win32.RECT{Left: bodyLeft, Top: y, Right: bodyRight, Bottom: y + 16})
 			y += 17
@@ -304,17 +312,22 @@ func priceOverlayViewFromAnalysis(analysis market.MarketAnalysis) overlay.PriceV
 	}
 
 	view := overlay.PriceView{
-		Suggested:  formatOverlayAnalysisPrice(analysis.SuggestedPrice, analysis.HasSuggested, analysis, market.USDFallbackSuggested),
-		LowestSell: lowestSellStr,
-		HighestBuy: highestBuyStr,
-		DailySales: market.FormatAnalysisVolume(analysis.DailySalesVolume, analysis.HasDailySales, analysis.VolumeActivity),
-		WeeklyAvg:  formatOverlayAnalysisPrice(analysis.WeeklyAveragePrice, analysis.HasWeeklyAverage, analysis, market.USDFallbackWeeklyAverage),
-		LastSold:   formatOverlayAnalysisPrice(analysis.LastSoldPrice, analysis.HasLastSold, analysis, market.USDFallbackLastSold),
-		Trend:      market.FormatTrendPercent(analysis.TrendPercent, analysis.HasTrend),
-		Spread:     market.FormatSpread(analysis),
-		Orders:     market.FormatOrderCounts(analysis.BuyOrderCount, analysis.SellOrderCount, analysis.HasOrderBook),
-		DealTag:    analysis.DealTag,
-		Confidence: analysis.Confidence,
+		Suggested:   formatOverlayAnalysisPrice(analysis.SuggestedPrice, analysis.HasSuggested, analysis, market.USDFallbackSuggested),
+		LowestSell:  lowestSellStr,
+		HighestBuy:  highestBuyStr,
+		DailySales:  market.FormatAnalysisVolume(analysis.DailySalesVolume, analysis.HasDailySales, analysis.VolumeActivity),
+		WeeklyAvg:   formatOverlayAnalysisPrice(analysis.WeeklyAveragePrice, analysis.HasWeeklyAverage, analysis, market.USDFallbackWeeklyAverage),
+		SteamMedian: formatOverlayAnalysisPrice(analysis.SteamMedianPrice, analysis.HasSteamMedian, analysis, 0),
+		SteamVolume: market.FormatAnalysisVolume(analysis.SteamVolume, analysis.HasSteamVolume, ""),
+		LastSold:    formatOverlayAnalysisPrice(analysis.LastSoldPrice, analysis.HasLastSold, analysis, market.USDFallbackLastSold),
+		Trend:       market.FormatTrendPercent(analysis.TrendPercent, analysis.HasTrend),
+		Spread:      market.FormatSpread(analysis),
+		Orders:      market.FormatOrderCounts(analysis.BuyOrderCount, analysis.SellOrderCount, analysis.HasOrderBook),
+		DealTag:     analysis.DealTag,
+		Confidence:  analysis.Confidence,
+	}
+	if analysis.PriceIsEstimated {
+		view.FallbackNotice = tr("hud.estimated_local_price")
 	}
 	if analysis.HasRecentSaleP75 {
 		view.SaleP75 = formatOverlayAnalysisPrice(analysis.RecentSaleP75Price, true, analysis, market.USDFallbackSaleP75)

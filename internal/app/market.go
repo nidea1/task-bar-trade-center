@@ -216,12 +216,8 @@ func itemOrdersHistogramURL(itemNameID string, scope market.MarketScope) string 
 	return market.ItemOrdersHistogramURL(itemNameID, scope)
 }
 
-func priceOverviewURL(marketHashName string, scope market.MarketScope) string {
-	return market.PriceOverviewURL(marketHashName, scope)
-}
-
 func logMarketPrice(config catalog.ItemConfig, scope market.MarketScope, marketHashName string, analysis market.MarketAnalysis, source string) {
-	logPrintf("[MARKET:%s] [%s] %s (ID: %d, grade: %s, type: %s) | %s => suggested=%s\n", source, market.FormatScope(scope), config.Name["en-US"], config.ID, config.Grade, config.Type, marketHashName, market.FormatAnalysisPrice(analysis.SuggestedPrice, analysis.HasSuggested, analysis))
+	logPrintf("[MARKET:%s] [%s] %s (ID: %d, grade: %s, type: %s) | %s => suggested=%s price_source=%s estimated=%t\n", source, market.FormatScope(scope), config.Name["en-US"], config.ID, config.Grade, config.Type, marketHashName, market.FormatAnalysisPrice(analysis.SuggestedPrice, analysis.HasSuggested, analysis), analysis.PriceSource, analysis.PriceIsEstimated)
 }
 
 func updatePriceOverlay(itemID int, scope market.MarketScope, analysis market.MarketAnalysis) {

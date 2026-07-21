@@ -13,7 +13,55 @@ func searchableListingText(body []byte) string {
 	var builder strings.Builder
 	builder.WriteString(raw)
 	appendDecodedJSONParseStrings(&builder, raw, 0)
+	appendDecodedSSRLoaderData(&builder, raw)
 	return builder.String()
+}
+
+func appendDecodedSSRLoaderData(builder *strings.Builder, text string) {
+	for _, match := range ssrLoaderDataPattern.FindAllStringIndex(text, -1) {
+		if len(match) != 2 || match[1] >= len(text) {
+			continue
+		}
+		decoder := json.NewDecoder(strings.NewReader(text[match[1]:]))
+		var values []json.RawMessage
+		if err := decoder.Decode(&values); err != nil {
+			continue
+		}
+		for _, rawValue := range values {
+			appendDecodedListingJSON(builder, rawValue, 0)
+		}
+	}
+}
+
+func appendDecodedListingJSON(builder *strings.Builder, raw []byte, depth int) {
+	if depth > 6 || len(raw) == 0 {
+		return
+	}
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return
+	}
+	appendDecodedListingValue(builder, value, depth)
+}
+
+func appendDecodedListingValue(builder *strings.Builder, value any, depth int) {
+	if depth > 6 {
+		return
+	}
+	switch typed := value.(type) {
+	case string:
+		builder.WriteByte('\n')
+		builder.WriteString(typed)
+		appendDecodedListingJSON(builder, []byte(typed), depth+1)
+	case []any:
+		for _, child := range typed {
+			appendDecodedListingValue(builder, child, depth+1)
+		}
+	case map[string]any:
+		for _, child := range typed {
+			appendDecodedListingValue(builder, child, depth+1)
+		}
+	}
 }
 
 func appendDecodedJSONParseStrings(builder *strings.Builder, text string, depth int) {

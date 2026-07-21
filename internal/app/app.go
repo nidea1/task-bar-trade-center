@@ -15,6 +15,8 @@ import (
 
 const initialInventoryPrepareTimeout = 60 * time.Second
 
+var hasGameProcessExited = game.HasProcessExited
+
 type inventoryPrepareResult struct {
 	state inventory.DashboardState
 	err   error
@@ -120,7 +122,7 @@ func attachGameAndWatchHoveredItems() {
 		gameAssemblyBase, gameStillRunning := waitForGameAssembly(pHandle)
 		if !gameStillRunning {
 			win32.ProcCloseHandle.Call(pHandle)
-			if handleGameClosed() {
+			if handleGameClosed(pid) {
 				return
 			}
 			continue
@@ -129,7 +131,7 @@ func attachGameAndWatchHoveredItems() {
 
 		configureGameProcess(pid, pHandle, gameAssemblyBase)
 		if !prepareGameSession(pHandle, gameAssemblyBase) {
-			if handleGameClosed() {
+			if handleGameClosed(pid) {
 				return
 			}
 			continue
@@ -137,7 +139,7 @@ func attachGameAndWatchHoveredItems() {
 		go preScanTooltipAOB()
 		go monitorInventoryNotifications(pHandle)
 		watchHoveredItems(pHandle, gameAssemblyBase)
-		if handleGameClosed() {
+		if handleGameClosed(pid) {
 			return
 		}
 	}
@@ -169,7 +171,7 @@ func openGameProcess(pid uint32) (uintptr, bool) {
 func waitForGameAssembly(processHandle uintptr) (uintptr, bool) {
 	var gameAssemblyBase uintptr
 	for gameAssemblyBase == 0 {
-		if game.HasProcessExited(processHandle) {
+		if hasGameProcessExited(processHandle) {
 			return 0, false
 		}
 		gameAssemblyBase = game.ModuleBaseAddress(processHandle, "GameAssembly.dll")
@@ -212,7 +214,7 @@ func prepareGameSession(processHandle uintptr, gameAssemblyBase uintptr) bool {
 	defer ticker.Stop()
 
 	for {
-		if processHandle == 0 || game.HasProcessExited(processHandle) || activeApp.gameProcessHandle != processHandle || activeApp.gameAssemblyBase != gameAssemblyBase {
+		if processHandle == 0 || hasGameProcessExited(processHandle) || activeApp.gameProcessHandle != processHandle || activeApp.gameAssemblyBase != gameAssemblyBase {
 			return false
 		}
 
@@ -242,7 +244,7 @@ func resolveInventoryDashboardUntilReady(processHandle uintptr, gameAssemblyBase
 	go func() {
 		var lastErr string
 		for {
-			if processHandle == 0 || game.HasProcessExited(processHandle) || activeApp.gameProcessHandle != processHandle || activeApp.gameAssemblyBase != gameAssemblyBase {
+			if processHandle == 0 || hasGameProcessExited(processHandle) || activeApp.gameProcessHandle != processHandle || activeApp.gameAssemblyBase != gameAssemblyBase {
 				resultCh <- inventoryPrepareResult{err: fmt.Errorf("game process changed during inventory preparation")}
 				return
 			}
@@ -276,7 +278,7 @@ func publishPreparedInventoryWhenReady(resultCh <-chan inventoryPrepareResult, p
 		logPrintf("[PREPARE] Background inventory resolve stopped: %v\n", result.err)
 		return
 	}
-	if processHandle == 0 || game.HasProcessExited(processHandle) || activeApp.gameProcessHandle != processHandle || activeApp.gameAssemblyBase != gameAssemblyBase {
+	if processHandle == 0 || hasGameProcessExited(processHandle) || activeApp.gameProcessHandle != processHandle || activeApp.gameAssemblyBase != gameAssemblyBase {
 		return
 	}
 	publishInventoryDashboardState(result.state, "game-prepared-background")
@@ -291,7 +293,7 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 	aobResolver := game.HoveredItemAOBResolver{}
 
 	for {
-		if game.HasProcessExited(pHandle) {
+		if hasGameProcessExited(pHandle) || activeApp.gameProcessHandle != pHandle || activeApp.shutdownRequested.Load() {
 			return
 		}
 
@@ -374,25 +376,14 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 	}
 }
 
-func handleGameClosed() bool {
-	shouldClose := askGameClosedOnUIThread()
-	if shouldClose {
-		activeApp.shutdownRequested.Store(true)
-	}
-	resetGameProcess(!shouldClose)
-	if !shouldClose {
-		return false
-	}
-	requestAppShutdown()
-	return true
-}
-
-func askGameClosedOnUIThread() bool {
-	if activeApp.appHWND == 0 {
-		return showYesNoMessageBox(tr("dialog.game_closed.title"), tr("dialog.game_closed.body"))
-	}
-	result, _, _ := win32.ProcSendMessageW.Call(activeApp.appHWND, WM_APP_GAME_CLOSED_PROMPT, 0, 0)
-	return result != 0
+func handleGameClosed(processID uint32) bool {
+	// Do not block the attach loop with a modal prompt. Keeping the stale process
+	// handle alive while waiting for user input lets dashboard refreshes read from
+	// an exited process and prevents a newly launched game from being discovered.
+	shutdownRequested := activeApp.shutdownRequested.Load()
+	logPrintf("[GAME] process exited: pid=%d; detaching=%t waiting_for_relaunch=%t.\n", processID, true, !shutdownRequested)
+	resetGameProcess(!shutdownRequested)
+	return shutdownRequested
 }
 
 func resetGameProcess(setWaitingStatus bool) {

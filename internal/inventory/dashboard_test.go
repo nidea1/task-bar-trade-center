@@ -35,6 +35,32 @@ func hasSellReason(item DashboardItem, reason string) bool {
 	return false
 }
 
+func TestSteamOverviewMetricsAreInformationalOnly(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	snapshot := playerdata.InventorySnapshot{
+		ReadAt: now,
+		Items:  []playerdata.OwnedItem{{ItemID: 100, UniqueID: 1, Location: playerdata.LocationInventory, Marketable: true}},
+	}
+	catalog := map[int]ItemDescriptor{100: {Name: "Steam-only Item", Marketable: true}}
+	quotes := quoteMap{100: {
+		Suggested:        1,
+		HasSuggested:     true,
+		SteamMedianPrice: 2,
+		SteamVolume:      10_000,
+		HasSteamMedian:   true,
+		HasSteamVolume:   true,
+	}}
+
+	state := BuildDashboard(snapshot, catalog, quotes, DashboardOptions{Now: now})
+	item := dashboardItemByID(t, state.Items, 100)
+	if !item.HasSteamMedian || !item.HasSteamVolume || item.SteamMedianPrice != 2 || item.SteamVolume != 10_000 {
+		t.Fatalf("Steam overview fields were not propagated: %+v", item)
+	}
+	if item.HasWeeklyAverage || item.HasDailySales || item.HasSellThrough || item.SellScore != 0 || len(item.SellReasons) != 0 {
+		t.Fatalf("Steam overview fields affected analytics: %+v", item)
+	}
+}
+
 func TestBuildDashboardGroupsAndValuesInventory(t *testing.T) {
 	now := time.Unix(1700000000, 0)
 	snapshot := playerdata.InventorySnapshot{

@@ -99,6 +99,15 @@ func marketCurrencyForCode(code string) (MarketCurrency, bool) {
 	return MarketCurrency{}, false
 }
 
+func marketCurrencyForSteamID(currencyID int) (MarketCurrency, bool) {
+	for _, currency := range supportedMarketCurrencies {
+		if currency.SteamCurrencyID == currencyID {
+			return withMarketCurrencyDefaults(currency), true
+		}
+	}
+	return MarketCurrency{}, false
+}
+
 func withMarketCurrencyDefaults(currency MarketCurrency) MarketCurrency {
 	if currency.PriceIncrement <= 0 {
 		currency.PriceIncrement = marketPriceIncrement(currency.Code)

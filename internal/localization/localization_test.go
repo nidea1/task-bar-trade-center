@@ -13,6 +13,8 @@ func TestBestItemsDashboardTranslationsExistInRawLocaleFiles(t *testing.T) {
 		"dashboard.weekly_avg",
 		"dashboard.score",
 		"dashboard.daily_sales",
+		"dashboard.steam_median",
+		"dashboard.steam_volume",
 		"dashboard.spread",
 		"dashboard.buy_orders",
 		"dashboard.sell_reason.high_daily_sales",
@@ -20,6 +22,9 @@ func TestBestItemsDashboardTranslationsExistInRawLocaleFiles(t *testing.T) {
 		"dashboard.sell_reason.high_buy_orders",
 		"dashboard.sell_reason.high_confidence",
 		"dashboard.sell_reason.above_weekly_average",
+		"hud.estimated_local_price",
+		"hud.steam_median",
+		"hud.steam_volume",
 	}
 
 	for _, locale := range SupportedLocales {

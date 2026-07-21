@@ -6,6 +6,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.8] - 2026-07-21
+
+### Added
+- Added explicit Steam 24-hour median and volume fields to the detailed price overlay and inventory dashboard, with labels in all 18 supported languages.
+- Added estimated-price indicators for USD market data converted into the selected local currency.
+
+### Changed
+- Replaced the Steam `priceoverview`, `pricehistory`, `itemordershistogram`, and `search/render` request chain with the listing page's React SSR order book and price history data.
+- Added an exact-name and AppID-validated Steam Market search-page fallback that supplies only the lowest sell price when listing SSR data is unavailable.
+- Requested the complete uncompressed Steam listing response because Steam's compressed cache variant can return a successful page shell without SSR market data.
+- Derived Steam median and volume from the listing's actual last-24-hour sales history instead of treating `priceoverview` median and volume as weekly average and daily sales metrics.
+- Accepted USD listing SSR for non-USD scopes, converted it through the existing exchange-rate cache, and marked the resulting local price as estimated.
+- Migrated legacy cached weekly-average and daily-sales values into the corrected Steam median and volume fields when no real sale history is available.
+
+### Fixed
+- Fixed repeated Steam Market HTTP 429 failures preventing prices from loading immediately after launch or after long retry intervals ([#8](https://github.com/nidea1/task-bar-trade-center/issues/8), [#9](https://github.com/nidea1/task-bar-trade-center/issues/9)).
+- Fixed successful Steam HTTP 200 responses being rejected when Go's automatic gzip request selected a data-less cached page variant.
+- Fixed Steam median and volume incorrectly affecting weekly average, daily sales, sell-through, confidence, and sell-score calculations.
+- Fixed TBTC retaining an exited TaskBarHero process handle, which prevented automatic attachment to a relaunched game and caused `PlayerSaveData could not be resolved` refresh errors.
+
+### Tests
+- Added regression coverage for React `loaderData` parsing, SSR currency conversion, exact search fallback matching, legacy endpoint avoidance, cache migration, localized labels, overlay dimensions, and exited-process reattachment.
+- Verified the listing flow against live Steam Market data and added transport coverage that prevents compressed shell-only responses.
+
+### Acknowledgements
+- Thanks to [@ctvjxrf143](https://github.com/ctvjxrf143) and [@shaiyumg](https://github.com/shaiyumg) for reporting the Steam Market 429 failures and providing diagnostic logs.
+
 ## [0.12.7] - 2026-07-10
 
 ### Changed

@@ -38,6 +38,7 @@ type MarketAnalysis struct {
 	PriceSuffix     string
 	PriceIncrement  float64
 	MinListingPrice float64
+	PriceSource     string
 	UpdatedAt       time.Time
 
 	SuggestedPrice     float64
@@ -46,9 +47,11 @@ type MarketAnalysis struct {
 	LowestSellQuantity int
 	HighestBuyQuantity int
 	WeeklyAveragePrice float64
+	SteamMedianPrice   float64
 	RecentSaleP75Price float64
 	LastSoldPrice      float64
 	DailySalesVolume   int
+	SteamVolume        int
 	BuyOrderCount      int
 	SellOrderCount     int
 
@@ -64,9 +67,11 @@ type MarketAnalysis struct {
 	HasLowestSell            bool
 	HasHighestBuy            bool
 	HasWeeklyAverage         bool
+	HasSteamMedian           bool
 	HasRecentSaleP75         bool
 	HasLastSold              bool
 	HasDailySales            bool
+	HasSteamVolume           bool
 	HasOrderBook             bool
 	HasSaleHistory           bool
 	HasTrend                 bool
@@ -75,6 +80,7 @@ type MarketAnalysis struct {
 	HasConfidence            bool
 	HasWeeklyDailyAvgVolume  bool
 	IsWideSpread             bool
+	PriceIsEstimated         bool
 	USDFallbackMetrics       uint16
 	USDDataFallbackAttempted bool
 }
