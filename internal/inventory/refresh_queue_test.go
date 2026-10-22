@@ -3,6 +3,7 @@ package inventory
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -28,16 +29,75 @@ func TestRefreshQueueProcessesEachIDOnce(t *testing.T) {
 
 func TestRefreshQueueBacksOffOnRateLimit(t *testing.T) {
 	rateErr := errors.New("status 429 too many requests")
+	var attempts int
+	recovered := make(chan struct{})
 	queue := NewRefreshQueue(func(_ context.Context, _ int) error {
-		return rateErr
+		attempts++
+		if attempts == 1 {
+			return rateErr
+		}
+		close(recovered)
+		return nil
 	}, func(err error) bool { return err == rateErr })
 	queue.baseDelay = 0
+	queue.backoffs = []time.Duration{100 * time.Millisecond}
 
 	queue.Enqueue([]int{10})
 	waitForQueue(t, queue)
 	status := queue.Status()
 	if status.BackoffUntil == "" || status.LastError == "" {
 		t.Fatalf("status = %+v, want backoff and error", status)
+	}
+	select {
+	case <-recovered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("queue did not automatically resume after backoff")
+	}
+	waitForQueue(t, queue)
+}
+
+type timedRateLimit struct{ until time.Time }
+
+func (err timedRateLimit) Error() string      { return "429" }
+func (err timedRateLimit) RetryAt() time.Time { return err.until }
+
+func TestRefreshQueueRetainsNewItemsDuringSharedCooldown(t *testing.T) {
+	backoff := make(chan time.Time, 1)
+	fetched := make(chan int, 3)
+	var attempts int
+	queue := NewRefreshQueue(func(_ context.Context, id int) error {
+		attempts++
+		if attempts == 1 {
+			return fmt.Errorf("listing: %w", timedRateLimit{time.Now().Add(100 * time.Millisecond)})
+		}
+		fetched <- id
+		return nil
+	}, func(err error) bool { var limit timedRateLimit; return errors.As(err, &limit) })
+	queue.baseDelay = 0
+	queue.backoffs = []time.Duration{time.Hour}
+	queue.OnBackoff = func(_ int, _ error, _ int, until time.Time) { backoff <- until }
+	queue.Enqueue([]int{1})
+	deadline := <-backoff
+	if added := queue.Enqueue([]int{2}); added != 1 {
+		t.Fatalf("added=%d during cooldown, want 1", added)
+	}
+	queue.TriggerBackoff(2, timedRateLimit{deadline})
+	if !queue.BackoffUntil().Equal(deadline) {
+		t.Fatal("duplicate cooldown extended the deadline")
+	}
+	for _, want := range []int{1, 2} {
+		select {
+		case got := <-fetched:
+			if got != want {
+				t.Fatalf("fetched=%d want=%d", got, want)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("queue failed to resume item %d using shared deadline", want)
+		}
+	}
+	waitForQueue(t, queue)
+	if queue.Status().BackoffUntil != "" {
+		t.Fatal("expired backoff was not cleared")
 	}
 }
 

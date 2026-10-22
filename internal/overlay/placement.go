@@ -7,6 +7,21 @@ import (
 	"github.com/nidea1/task-bar-trade-center/internal/win32"
 )
 
+// PlaceBelowTooltip uses actual screen bounds, without empirical calibrations.
+func PlaceBelowTooltip(tooltip, screen win32.RECT, height int32, cfg PlacementConfig) win32.RECT {
+	width := ClampInt32(tooltip.Right-tooltip.Left, cfg.MinWidth, cfg.MaxWidth)
+	width = min(width, screen.Right-screen.Left)
+	height = min(height, screen.Bottom-screen.Top)
+	left := tooltip.Left + (tooltip.Right-tooltip.Left-width)/2
+	left = ClampInt32(left, screen.Left, screen.Right-width)
+	top := tooltip.Bottom
+	if top+height > screen.Bottom {
+		top = tooltip.Top - height
+	}
+	top = ClampInt32(top, screen.Top, screen.Bottom-height)
+	return win32.RECT{Left: left, Top: top, Right: left + width, Bottom: top + height}
+}
+
 func PlaceByTooltipRect(
 	tooltipRect win32.RECT,
 	screen win32.RECT,

@@ -25,12 +25,13 @@ The application operates on a hybrid architecture designed for minimal system im
 
 - **📊 Real-Time Inventory Dashboard:**
   - **Customizable Hotkey Toggle:** Reassign the system-wide shortcut key for toggling the dashboard (e.g. `Ctrl + F2`, `Alt + Shift + K`) using the pulsing keyboard capturer UI (previously fixed to `F2`).
-  - **Game Window Scale:** Adjust overlay scale factors (`1x`, `1.25x`, `1.5x`) dynamically from settings to prevent overlaps or layout wrapping at different display DPIs.
+  - **Automatic Game Scale:** The overlay follows the game tooltip’s actual position and scale automatically; no manual scale setting is required.
   - **Portfolio Valuation:** Tracks total value (Suggested Listing vs. Instant Sell) of your inventory, stash pages, equipped gear, and gold.
   - **All Marketable Items:** A searchable list of all marketable items with locations, count, item grade/type, confidence metrics, and pricing.
   - **Best to Sell Now:** Uses an algorithm to score and suggest which items are best to sell based on sales volume, spread, and market demand, with advanced dashboard filters for class, type, search query, and equipped state.
   - **Sync & Queue Status:** Visually shows background API sync progress with ETA, backoff countdowns, and queue tracking.
   - **Missing Prices Tracker:** Flags items that haven't been priced yet.
+  - **Region-Aware Chest Forecast:** Detects the current region automatically and uses 3/5 minute normal/blue chest drops in normal regions or 4/6 minutes in PlagueLands (Nightmare, Hell, and Torment), including separate auto-open stats.
 - **👁️ Cursor-Attached Price Overlay HUD:**
   - Automatically draws a compact pricing HUD near the game tooltip as you hover over items in-game.
   - **Detail Mode:** Shows comprehensive statistics including suggested pricing, weekly averages, daily volume, trend percentages, spreads, buy/sell orders, and a deal assessment tag (e.g. "Undervalued", "Overvalued").

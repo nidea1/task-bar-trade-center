@@ -39,6 +39,7 @@ type layoutDocument struct {
 		PointerBaseAOB    layoutAOBDocument `json:"pointer_base_aob"`
 	} `json:"hovered_item"`
 	Tooltip struct {
+		RectTransformOffsets    []string          `json:"rect_transform_pointer_offsets"`
 		XPointerBaseOffset      string            `json:"x_pointer_base_offset"`
 		XPointerOffsets         []string          `json:"x_pointer_offsets"`
 		XPointerBaseAOB         layoutAOBDocument `json:"x_pointer_base_aob"`
@@ -79,11 +80,13 @@ type ChestTiming struct {
 }
 
 type GameLayout struct {
-	HoveredItemPointerBaseOffset uintptr
-	HoveredItemPointerOffsets    []uintptr
-	HoveredItemItemPtrOffset     uintptr
-	HoveredItemKeyOffset         uintptr
-	HoveredItemPointerBaseAOB    AOBPattern
+	// Uses TooltipHeightPointerBaseAOB to resolve the native visible Window.
+	TooltipTransformPointerOffsets []uintptr
+	HoveredItemPointerBaseOffset   uintptr
+	HoveredItemPointerOffsets      []uintptr
+	HoveredItemItemPtrOffset       uintptr
+	HoveredItemKeyOffset           uintptr
+	HoveredItemPointerBaseAOB      AOBPattern
 
 	TooltipXPointerBaseOffset      uintptr
 	TooltipXPointerOffsets         []uintptr
@@ -113,6 +116,14 @@ func ParseGameLayout(raw []byte) (GameLayout, error) {
 	}
 	if document.SchemaVersion != layoutSchemaVersion {
 		return GameLayout{}, fmt.Errorf("unsupported schema_version %d", document.SchemaVersion)
+	}
+	var rectTransformOffsets []uintptr
+	if document.Tooltip.RectTransformOffsets != nil {
+		var err error
+		rectTransformOffsets, err = parseLayoutOffsets("tooltip.rect_transform_pointer_offsets", document.Tooltip.RectTransformOffsets)
+		if err != nil {
+			return GameLayout{}, err
+		}
 	}
 	if document.PlacementCalibrations == nil {
 		return GameLayout{}, fmt.Errorf("placement_calibrations is required")
@@ -216,6 +227,7 @@ func ParseGameLayout(raw []byte) (GameLayout, error) {
 	}
 
 	return GameLayout{
+		TooltipTransformPointerOffsets: rectTransformOffsets,
 		HoveredItemPointerBaseOffset:   hoveredBase,
 		HoveredItemPointerOffsets:      hoveredOffsets,
 		HoveredItemItemPtrOffset:       hoveredItemPtrOffset,

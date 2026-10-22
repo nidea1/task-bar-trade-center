@@ -39,6 +39,8 @@ type InventorySlotSummary struct {
 }
 
 type ChestAutomation struct {
+	CommonBaseAutoOpenSeconds  int      `json:"common_base_auto_open_seconds,omitempty"`
+	StageBaseAutoOpenSeconds   int      `json:"stage_base_auto_open_seconds,omitempty"`
 	CommonRuneReductionSeconds int      `json:"common_rune_reduction_seconds"`
 	StageRuneReductionSeconds  int      `json:"stage_rune_reduction_seconds"`
 	RuneResolved               bool     `json:"rune_resolved"`
@@ -57,6 +59,8 @@ type ChestCounts struct {
 }
 
 type InventorySnapshot struct {
+	Region          Region               `json:"region,omitempty"`
+	StageKey        int                  `json:"stage_key,omitempty"`
 	ReadAt          time.Time            `json:"read_at"`
 	Gold            uint64               `json:"gold"`
 	StashPageCount  int                  `json:"stash_page_count"`
@@ -66,3 +70,10 @@ type InventorySnapshot struct {
 	Items           []OwnedItem          `json:"items"`
 	TradeSlots      []TradeShipSlot      `json:"trade_slots"`
 }
+
+type Region string
+
+const (
+	RegionNormal      Region = "normal"
+	RegionPlaguelands Region = "plaguelands"
+)

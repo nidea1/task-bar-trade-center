@@ -1,17 +1,21 @@
 package market
 
 import (
+	"bytes"
 	"encoding/json"
 	"html"
 	"strconv"
 	"strings"
 	"time"
+
+	nethtml "golang.org/x/net/html"
 )
 
 func searchableListingText(body []byte) string {
 	raw := html.UnescapeString(string(body))
 	var builder strings.Builder
 	builder.WriteString(raw)
+	appendValveSSRData(&builder, body)
 	appendDecodedJSONParseStrings(&builder, raw, 0)
 	appendDecodedSSRLoaderData(&builder, raw)
 	return builder.String()
@@ -60,6 +64,47 @@ func appendDecodedListingValue(builder *strings.Builder, value any, depth int) {
 	case map[string]any:
 		for _, child := range typed {
 			appendDecodedListingValue(builder, child, depth+1)
+		}
+	}
+}
+
+// Steam now serializes the query cache inside an application/json script,
+// rather than passing string literals directly to JSON.parse.
+func appendValveSSRData(builder *strings.Builder, body []byte) {
+	tokens := nethtml.NewTokenizer(bytes.NewReader(body))
+	for {
+		switch tokens.Next() {
+		case nethtml.ErrorToken:
+			return
+		case nethtml.StartTagToken:
+			token := tokens.Token()
+			if token.Data != "script" {
+				continue
+			}
+			for _, attr := range token.Attr {
+				if attr.Key != "id" || attr.Val != "valve-ssr-data" {
+					continue
+				}
+				if tokens.Next() != nethtml.TextToken {
+					return
+				}
+				var payload struct {
+					LoaderData    []string `json:"loaderData"`
+					RenderContext struct {
+						QueryData string `json:"queryData"`
+					} `json:"renderContext"`
+				}
+				if json.Unmarshal(tokens.Text(), &payload) != nil {
+					return
+				}
+				builder.WriteByte('\n')
+				builder.WriteString(payload.RenderContext.QueryData)
+				for _, loader := range payload.LoaderData {
+					builder.WriteByte('\n')
+					builder.WriteString(loader)
+				}
+				return
+			}
 		}
 	}
 }

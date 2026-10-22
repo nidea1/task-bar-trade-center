@@ -194,6 +194,7 @@ func configureGameProcess(pid uint32, processHandle uintptr, gameAssemblyBase ui
 	activeApp.tooltipXAOBResolver.Reset()
 	activeApp.tooltipYAOBResolver.Reset()
 	activeApp.tooltipHeightAOBResolver.Reset()
+	activeApp.tooltipRectAOBResolver.Reset()
 	resetMarketableInventoryNotifications()
 	resetChestDropTracker()
 	resetInventoryFullNotification()
@@ -409,6 +410,7 @@ func resetGameProcess(setWaitingStatus bool) {
 	activeApp.tooltipXAOBResolver.Reset()
 	activeApp.tooltipYAOBResolver.Reset()
 	activeApp.tooltipHeightAOBResolver.Reset()
+	activeApp.tooltipRectAOBResolver.Reset()
 	resetChestDropTracker()
 	resetInventoryFullNotification()
 	activeApp.inventorySnapshotMu.Lock()
@@ -509,6 +511,16 @@ func preScanTooltipAOB() {
 
 	logPrintln("Pre-scanning tooltip AOB signatures in the background...")
 	setRuntimeStep("overlay", runtimeStepRunning, trFallback("preparing.overlay_message", "Prewarming tooltip pointers..."))
+	if len(layout.TooltipTransformPointerOffsets) > 0 {
+		_, ok, trace := activeApp.tooltipRectAOBResolver.ResolveRectTransform(pHandle, base, layout.TooltipHeightPointerBaseAOB, layout.TooltipTransformPointerOffsets)
+		if ok {
+			setRuntimeStep("overlay", runtimeStepOK, "")
+		} else {
+			setRuntimeStep("overlay", runtimeStepDegraded, trFallback("preparing.overlay_background", "Finalized in the background"))
+			logPrintf("[PREPARE] Tooltip transform pre-scan degraded: %s\n", trace)
+		}
+		return
+	}
 
 	// Pre-resolve X
 	_, xOK, xTrace := activeApp.tooltipXAOBResolver.Resolve("x", pHandle, base, layout.TooltipXPointerBaseAOB, layout.TooltipXPointerOffsets)

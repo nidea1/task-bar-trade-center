@@ -6,6 +6,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-22
+
+### Added
+- Added automatic region detection for chest forecasts, including PlagueLands Nightmare, Hell, and Torment stages.
+- Added separate PlagueLands chest auto-open times and reductions so normal chest runes are not applied to the new region's chests.
+
+### Changed
+- Chest forecasts now use 3/5 minute drops in normal regions and 4/6 minute drops in PlagueLands. Changing regions updates the chest labels and restarts the drop countdowns.
+- Tooltip placement now follows the game's actual tooltip bounds and scale automatically. Removed manual scale selectors while retaining existing settings compatibility.
+- Show chest drop intervals and countdowns even when auto-open runes are missing.
+
+### Fixed
+- Restored hovered-item detection and tooltip tracking after the TaskBarHero 1.3.0 update.
+- Fixed item-dependent overlay drift by reading the visible tooltip's native transform hierarchy. The overlay attaches directly below the tooltip, or above it when there is insufficient room on the current monitor.
+- Restored Steam price updates by removing request headers that caused valid listing requests to return HTTP 429, and by reading the current `valve-ssr-data` query cache.
+- Applied Steam rate-limit cooldowns to all price requests. Pending inventory updates resume automatically afterward, including items added while paused.
+
+### Tests
+- Added regression coverage for tooltip bounds and scaling, monitor edges, region changes across all 60 PlagueLands stages, separate chest automation, current Steam listing responses, and shared cooldown recovery.
+
 ## [0.12.8] - 2026-07-21
 
 ### Added

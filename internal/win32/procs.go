@@ -51,6 +51,8 @@ var (
 	ProcFillRect                   = User32.NewProc("FillRect")
 	ProcDrawTextW                  = User32.NewProc("DrawTextW")
 	ProcGetSystemMetrics           = User32.NewProc("GetSystemMetrics")
+	ProcMonitorFromRect            = User32.NewProc("MonitorFromRect")
+	ProcGetMonitorInfoW            = User32.NewProc("GetMonitorInfoW")
 	ProcLoadIconW                  = User32.NewProc("LoadIconW")
 	ProcLoadImageW                 = User32.NewProc("LoadImageW")
 	ProcCreatePopupMenu            = User32.NewProc("CreatePopupMenu")

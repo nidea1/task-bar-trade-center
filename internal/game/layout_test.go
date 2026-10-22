@@ -16,7 +16,7 @@ const testUserAgent = "TBTC-test"
 
 func TestResolveGameLayoutUsesRemoteAndCachesIt(t *testing.T) {
 	embedded := EmbeddedLayoutJSON()
-	remoteLayout := []byte(strings.Replace(string(embedded), "0x05DF8198", "0x00000020", 1))
+	remoteLayout := []byte(strings.Replace(string(embedded), "0x06182730", "0x00000020", 1))
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if got := request.Header.Get("User-Agent"); got != testUserAgent {
 			t.Errorf("User-Agent = %q, want %q", got, testUserAgent)
@@ -59,8 +59,8 @@ func TestLoadGameLayoutFromFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadGameLayoutFromFile returned error: %v", err)
 	}
-	if layout.HoveredItemPointerBaseOffset != 0x05DF8198 {
-		t.Fatalf("hovered pointer base = 0x%X, want 0x05DF8198", layout.HoveredItemPointerBaseOffset)
+	if layout.HoveredItemPointerBaseOffset != 0x06182730 {
+		t.Fatalf("hovered pointer base = 0x%X, want 0x06182730", layout.HoveredItemPointerBaseOffset)
 	}
 }
 
@@ -88,7 +88,7 @@ func TestLoadGameLayoutFromFileRejectsInvalidLayout(t *testing.T) {
 func TestResolveGameLayoutUsesCacheWhenRemoteIsUnavailable(t *testing.T) {
 	embedded := EmbeddedLayoutJSON()
 	cacheFilePath := filepath.Join(t.TempDir(), "game-layout-cache.json")
-	cachedLayout := []byte(strings.Replace(string(embedded), "0x05DF8198", "0x00000030", 1))
+	cachedLayout := []byte(strings.Replace(string(embedded), "0x06182730", "0x00000030", 1))
 	if err := os.WriteFile(cacheFilePath, cachedLayout, 0600); err != nil {
 		t.Fatalf("write cache: %v", err)
 	}
@@ -125,8 +125,8 @@ func TestResolveGameLayoutUsesEmbeddedDefaultWhenRemoteAndCacheAreInvalid(t *tes
 	if source != LayoutSourceEmbeddedDefault {
 		t.Fatalf("source = %q, want %q", source, LayoutSourceEmbeddedDefault)
 	}
-	if layout.HoveredItemPointerBaseOffset != 0x05DF8198 {
-		t.Fatalf("hovered pointer base = 0x%X, want 0x05DF8198", layout.HoveredItemPointerBaseOffset)
+	if layout.HoveredItemPointerBaseOffset != 0x06182730 {
+		t.Fatalf("hovered pointer base = 0x%X, want 0x06182730", layout.HoveredItemPointerBaseOffset)
 	}
 
 	cached, err := os.ReadFile(cacheFilePath)
@@ -149,8 +149,8 @@ func TestParseGameLayoutValidatesOffsetsAndPlacementCalibrations(t *testing.T) {
 	if layout.HoveredItemKeyOffset != 0x30 {
 		t.Fatalf("hovered item key offset = 0x%X, want 0x30", layout.HoveredItemKeyOffset)
 	}
-	if len(layout.TooltipXPointerOffsets) != 7 || len(layout.TooltipYPointerOffsets) != 7 {
-		t.Fatalf("tooltip pointer offset lengths = %d and %d, want 7", len(layout.TooltipXPointerOffsets), len(layout.TooltipYPointerOffsets))
+	if len(layout.TooltipXPointerOffsets) != 6 || len(layout.TooltipYPointerOffsets) != 8 {
+		t.Fatalf("tooltip pointer offset lengths = %d and %d, want 6 and 8", len(layout.TooltipXPointerOffsets), len(layout.TooltipYPointerOffsets))
 	}
 	if !layout.HoveredItemPointerBaseAOB.configured() {
 		t.Fatal("hovered item AOB pattern was not parsed")
@@ -163,6 +163,25 @@ func TestParseGameLayoutValidatesOffsetsAndPlacementCalibrations(t *testing.T) {
 	}
 	if layout.ChestTiming.CommonChestBaseAutoOpenSeconds != 300 || layout.ChestTiming.StageChestBaseAutoOpenSeconds != 600 {
 		t.Fatalf("chest auto-open timing = common %d stage %d, want 300/600", layout.ChestTiming.CommonChestBaseAutoOpenSeconds, layout.ChestTiming.StageChestBaseAutoOpenSeconds)
+	}
+}
+
+func TestParseGameLayoutAllowsLegacyTooltipWithoutTransform(t *testing.T) {
+	var document map[string]interface{}
+	if err := json.Unmarshal(EmbeddedLayoutJSON(), &document); err != nil {
+		t.Fatal(err)
+	}
+	tooltip := document["tooltip"].(map[string]interface{})
+	delete(tooltip, "rect_transform_pointer_offsets")
+	raw, _ := json.Marshal(document)
+	layout, err := ParseGameLayout(raw)
+	if err != nil || len(layout.TooltipTransformPointerOffsets) != 0 {
+		t.Fatalf("legacy layout: offsets=%v error=%v", layout.TooltipTransformPointerOffsets, err)
+	}
+	tooltip["rect_transform_pointer_offsets"] = []string{}
+	raw, _ = json.Marshal(document)
+	if _, err := ParseGameLayout(raw); err == nil {
+		t.Fatal("empty transform chain was accepted")
 	}
 }
 

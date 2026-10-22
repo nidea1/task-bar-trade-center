@@ -167,6 +167,7 @@ func applyReloadedLocalGameLayout(layout game.GameLayout, localLayoutPath string
 	activeApp.tooltipXAOBResolver.Reset()
 	activeApp.tooltipYAOBResolver.Reset()
 	activeApp.tooltipHeightAOBResolver.Reset()
+	activeApp.tooltipRectAOBResolver.Reset()
 
 	setConfigurationStatus(ConfigStatusDevelopment, "")
 	if activeApp.gameReady.Load() {

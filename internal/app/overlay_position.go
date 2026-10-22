@@ -174,7 +174,24 @@ func activeOverlayHeight() int32 {
 }
 
 func placeOverlayByTooltipSnapshot(snapshot tooltipMemorySnapshot) win32.RECT {
+	if snapshot.ScreenBounds {
+		return overlay.PlaceBelowTooltip(snapshot.Rect, tooltipMonitorWorkArea(snapshot.Rect), activeOverlayHeight(), overlayPlacementConfig())
+	}
 	return placeOverlayByTooltipRectAndMemoryPosition(snapshot.Rect, snapshot.MemoryX, snapshot.MemoryY, true)
+}
+
+func tooltipMonitorWorkArea(rect win32.RECT) win32.RECT {
+	const monitorDefaultToNearest = 2
+	monitor, _, _ := win32.ProcMonitorFromRect.Call(uintptr(unsafe.Pointer(&rect)), monitorDefaultToNearest)
+	if monitor != 0 {
+		info := win32.MONITORINFO{}
+		info.CbSize = uint32(unsafe.Sizeof(info))
+		ret, _, _ := win32.ProcGetMonitorInfoW.Call(monitor, uintptr(unsafe.Pointer(&info)))
+		if ret != 0 && info.Work.Right > info.Work.Left && info.Work.Bottom > info.Work.Top {
+			return info.Work
+		}
+	}
+	return virtualScreenRect()
 }
 
 // placeOverlayByTooltipRect preserves the previous internal entry point for
@@ -248,10 +265,6 @@ func findClosestXOffset(localX int32) int32 {
 
 func roundFloat32ToInt32(val float32) int32 {
 	return overlay.RoundFloat32ToInt32(val)
-}
-
-func absInt32(value int32) int32 {
-	return overlay.AbsInt32(value)
 }
 
 func fallbackOverlayRect(cursor win32.POINT) win32.RECT {

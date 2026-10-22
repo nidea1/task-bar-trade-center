@@ -44,6 +44,40 @@ func TestInventoryInteractionResultSource(t *testing.T) {
 	}
 }
 
+func TestChestDropTrackerResetsOnlyWhenRegionChanges(t *testing.T) {
+	previousApp := activeApp
+	activeApp = &App{}
+	resetChestDropTracker()
+	t.Cleanup(func() { activeApp = previousApp; resetChestDropTracker() })
+	now := time.Now()
+	normal := playerdata.InventorySnapshot{Region: playerdata.RegionNormal, ReadAt: now}
+	storeInventorySnapshot(normal)
+	recordChestDropLog(getBoxLogMonster, now)
+	if s := currentInventoryFillDropSchedule(now); s.NextCommonDropSeconds != 180 || s.NextStageDropSeconds != 300 || !s.CommonDropObserved {
+		t.Fatalf("normal schedule=%+v", s)
+	}
+	normal.ReadAt = now.Add(10 * time.Second)
+	normal.StageKey = 1202
+	storeInventorySnapshot(normal)
+	if s := currentInventoryFillDropSchedule(normal.ReadAt); s.NextCommonDropSeconds != 170 || !s.CommonDropObserved {
+		t.Fatalf("same-region stage advance reset countdown: %+v", s)
+	}
+	plague := normal
+	plague.Region = playerdata.RegionPlaguelands
+	storeInventorySnapshot(plague)
+	if !inventorySnapshotChanged(&normal, &plague) {
+		t.Fatal("region switch did not trigger dashboard update")
+	}
+	if s := currentInventoryFillDropSchedule(plague.ReadAt); s.NextCommonDropSeconds != 240 || s.NextStageDropSeconds != 360 || s.CommonDropObserved || s.StageDropObserved {
+		t.Fatalf("plague schedule inherited previous region: %+v", s)
+	}
+	normal.ReadAt = now.Add(20 * time.Second)
+	storeInventorySnapshot(normal)
+	if s := currentInventoryFillDropSchedule(normal.ReadAt); s.NextCommonDropSeconds != 180 || s.NextStageDropSeconds != 300 {
+		t.Fatalf("return schedule=%+v", s)
+	}
+}
+
 func TestRequestSavePollPreservesBoxOpenSource(t *testing.T) {
 	originalTriggered := triggerSavePollNow
 	originalSource := triggerSavePollSource

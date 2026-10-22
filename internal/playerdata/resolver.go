@@ -55,11 +55,16 @@ type byteMemory interface {
 }
 
 type Resolver struct {
-	metadata               map[int]ItemMetadata
-	cachedObject           uintptr
-	cachedObjectResolvedAt time.Time
-	classCache             map[string][]uintptr
-	layout                 saveDataLayout
+	metadata                 map[int]ItemMetadata
+	cachedObject             uintptr
+	cachedObjectResolvedAt   time.Time
+	classCache               map[string][]uintptr
+	layout                   saveDataLayout
+	fieldOffsets             map[uintptr]map[string]uintptr
+	stageInfoObjects         map[int]uintptr
+	stageResolveAttemptedAt  time.Time
+	accountStatusObject      uintptr
+	accountStatusAttemptedAt time.Time
 }
 
 type SaveDataLayout struct {
@@ -401,12 +406,19 @@ func (resolver *Resolver) readObjectWithLayout(memory Memory, object uintptr, no
 		}
 	}
 
+	region, stageKey := resolver.readRegion(memory, object, now)
+	automation := resolver.readChestAutomationWithLayout(memory, object, layout)
+	if region == RegionPlaguelands {
+		automation = resolver.readPlagueChestAutomation(memory, now)
+	}
 	return InventorySnapshot{
+		Region:          region,
+		StageKey:        stageKey,
 		ReadAt:          now,
 		Gold:            gold,
 		StashPageCount:  stashPageCount,
 		InventorySlots:  inventorySlots,
-		ChestAutomation: resolver.readChestAutomationWithLayout(memory, object, layout),
+		ChestAutomation: automation,
 		ChestCounts:     readChestCounts(memory, object),
 		Items:           owned,
 		TradeSlots:      tradeSlots,

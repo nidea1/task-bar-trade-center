@@ -102,6 +102,7 @@ export interface DashboardFooterInfo {
 }
 
 export interface InventoryFillEstimate {
+	region?: "normal" | "plaguelands";
     available: boolean;
     fills: boolean;
     fill_model: string;

@@ -25,13 +25,3 @@ func TestNormalizeGameScale(t *testing.T) {
 		}
 	}
 }
-
-func TestGameScaleForMenuCommand(t *testing.T) {
-	scale, ok := gameScaleForMenuCommand(MenuGameScaleBase + 1)
-	if !ok {
-		t.Fatal("gameScaleForMenuCommand returned no scale")
-	}
-	if scale != GameScale125 {
-		t.Fatalf("scale = %d, want %d", scale, GameScale125)
-	}
-}

@@ -116,7 +116,7 @@ func wndProc(hWnd uintptr, msg uint32, wParam uintptr, lParam uintptr) uintptr {
 		activeApp.overlayWidth.Store(width)
 		activeApp.overlayHeight.Store(height)
 		contentVersion := activeApp.overlayContentVersion.Load()
-		moved := !activeApp.hasOverlayWindowRect || !rectsClose(activeApp.overlayWindowRect, rect, 3)
+		moved := !activeApp.hasOverlayWindowRect || activeApp.overlayWindowRect != rect
 		contentChanged := activeApp.overlayPaintedContentVersion != contentVersion
 		if !moved && !contentChanged && activeApp.overlayWindowVisible {
 			return 0
@@ -195,13 +195,6 @@ func isWindow(hwnd uintptr) bool {
 	}
 	result, _, _ := win32.ProcIsWindow.Call(hwnd)
 	return result != 0
-}
-
-func rectsClose(a win32.RECT, b win32.RECT, tolerance int32) bool {
-	return absInt32(a.Left-b.Left) <= tolerance &&
-		absInt32(a.Top-b.Top) <= tolerance &&
-		absInt32(a.Right-b.Right) <= tolerance &&
-		absInt32(a.Bottom-b.Bottom) <= tolerance
 }
 
 func winDefWindowProc(hWnd uintptr, msg uint32, wParam uintptr, lParam uintptr) uintptr {

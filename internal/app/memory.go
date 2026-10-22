@@ -2,16 +2,19 @@ package app
 
 import (
 	"fmt"
+	"math"
 	"time"
+	"unsafe"
 
 	"github.com/nidea1/task-bar-trade-center/internal/game"
 	"github.com/nidea1/task-bar-trade-center/internal/win32"
 )
 
 type tooltipMemorySnapshot struct {
-	Rect    win32.RECT
-	MemoryX float32
-	MemoryY float32
+	Rect         win32.RECT
+	MemoryX      float32
+	MemoryY      float32
+	ScreenBounds bool
 }
 
 func readTooltipRectFromMemory() (win32.RECT, bool) {
@@ -31,6 +34,9 @@ func readTooltipSnapshotFromMemory() (tooltipMemorySnapshot, bool) {
 	activeApp.gameLayoutMu.RLock()
 	layout := activeApp.activeGameLayout
 	activeApp.gameLayoutMu.RUnlock()
+	if len(layout.TooltipTransformPointerOffsets) > 0 {
+		return readTooltipTransformSnapshot(layout)
+	}
 	xBase := activeApp.gameAssemblyBase + layout.TooltipXPointerBaseOffset
 	yBase := activeApp.gameAssemblyBase + layout.TooltipYPointerBaseOffset
 	heightBase := activeApp.gameAssemblyBase + layout.TooltipHeightPointerBaseOffset
@@ -117,6 +123,45 @@ func readTooltipSnapshotFromMemory() (tooltipMemorySnapshot, bool) {
 	}, true
 }
 
+func readTooltipTransformSnapshot(layout game.GameLayout) (tooltipMemorySnapshot, bool) {
+	address, ok, trace := activeApp.tooltipRectAOBResolver.ResolveRectTransform(
+		activeApp.gameProcessHandle, activeApp.gameAssemblyBase,
+		layout.TooltipHeightPointerBaseAOB, layout.TooltipTransformPointerOffsets,
+	)
+	if !ok {
+		logTooltipDebug("visible Window transform unavailable: %s", trace)
+		return tooltipMemorySnapshot{}, false
+	}
+	bounds, ok := game.ReadRectTransformBounds(activeApp.gameProcessHandle, address)
+	if !ok {
+		logTooltipDebug("visible Window transform could not be read: 0x%X", address)
+		return tooltipMemorySnapshot{}, false
+	}
+	origin, ok := gameClientScreenOrigin()
+	if !ok {
+		return tooltipMemorySnapshot{}, false
+	}
+	var client win32.RECT
+	ret, _, _ := win32.ProcGetClientRect.Call(activeApp.gameWindowHWND, uintptr(unsafe.Pointer(&client)))
+	if ret == 0 || client.Bottom <= client.Top {
+		return tooltipMemorySnapshot{}, false
+	}
+	// Screen-space overlay canvases use client pixels, with Y pointing up.
+	rect := win32.RECT{
+		Left:   origin.X + int32(math.Floor(bounds.MinX)),
+		Top:    origin.Y + client.Bottom - int32(math.Ceil(bounds.MaxY)),
+		Right:  origin.X + int32(math.Ceil(bounds.MaxX)),
+		Bottom: origin.Y + client.Bottom - int32(math.Floor(bounds.MinY)),
+	}
+	if rect.Right <= rect.Left || rect.Bottom <= rect.Top ||
+		bounds.MaxX < 0 || bounds.MinX > float64(client.Right) ||
+		bounds.MaxY < 0 || bounds.MinY > float64(client.Bottom) {
+		return tooltipMemorySnapshot{}, false
+	}
+	logTooltipDebug("visible Window=0x%X screenRect=(%d,%d,%d,%d)", address, rect.Left, rect.Top, rect.Right, rect.Bottom)
+	return tooltipMemorySnapshot{Rect: rect, ScreenBounds: true}, true
+}
+
 func logCurrentTooltipCalibration() {
 	snapshot, ok := readTooltipSnapshotFromMemory()
 	if !ok {
@@ -126,6 +171,10 @@ func logCurrentTooltipCalibration() {
 
 	width := snapshot.Rect.Right - snapshot.Rect.Left
 	height := snapshot.Rect.Bottom - snapshot.Rect.Top
+	if snapshot.ScreenBounds {
+		logPrintf("[TOOLTIP_BOUNDS] rect=(%d,%d,%d,%d) size=(%d,%d)\n", snapshot.Rect.Left, snapshot.Rect.Top, snapshot.Rect.Right, snapshot.Rect.Bottom, width, height)
+		return
+	}
 	scale := currentGameScaleFactor()
 
 	logPrintf(

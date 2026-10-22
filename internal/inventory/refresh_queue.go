@@ -2,6 +2,7 @@ package inventory
 
 import (
 	"context"
+	"errors"
 	"math/rand"
 	"sync"
 	"time"
@@ -60,9 +61,6 @@ func (queue *RefreshQueue) EnqueuePriority(ids []int) int {
 }
 
 func (queue *RefreshQueue) enqueueLocked(ids []int, priority bool, now time.Time) int {
-	if !queue.backoffUntil.IsZero() && now.Before(queue.backoffUntil) {
-		return 0
-	}
 	added := 0
 	if priority {
 		added = queue.enqueuePriorityLocked(ids)
@@ -82,7 +80,7 @@ func (queue *RefreshQueue) enqueueLocked(ids []int, priority bool, now time.Time
 	queue.status.Queued = len(queue.pending)
 	if !queue.running && len(queue.pending) > 0 {
 		queue.running = true
-		queue.status.Refreshing = true
+		queue.status.Refreshing = !now.Before(queue.backoffUntil)
 		queue.status.Completed = 0
 		queue.status.LastError = ""
 		queue.lastStartedAt = now
@@ -164,6 +162,7 @@ func (queue *RefreshQueue) Status() RefreshStatus {
 
 func (queue *RefreshQueue) run() {
 	for {
+		queue.waitForBackoff()
 		id, ok := queue.next()
 		if !ok {
 			queue.finish("")
@@ -172,13 +171,28 @@ func (queue *RefreshQueue) run() {
 		if err := queue.fetch(context.Background(), id); err != nil {
 			if queue.rateLimited != nil && queue.rateLimited(err) {
 				queue.enterBackoff(id, err)
-				return
+				continue
 			}
 			queue.finish(err.Error())
 			return
 		}
 		queue.markCompleted(id)
 		time.Sleep(queue.delay())
+	}
+}
+
+func (queue *RefreshQueue) waitForBackoff() {
+	for {
+		queue.mu.Lock()
+		wait := time.Until(queue.backoffUntil)
+		if wait <= 0 {
+			queue.backoffUntil = time.Time{}
+			queue.status.Refreshing = true
+			queue.mu.Unlock()
+			return
+		}
+		queue.mu.Unlock()
+		time.Sleep(wait)
 	}
 }
 
@@ -220,17 +234,28 @@ func (queue *RefreshQueue) finish(lastError string) {
 func (queue *RefreshQueue) enterBackoff(id int, err error) {
 	queue.mu.Lock()
 	defer queue.mu.Unlock()
+	// Repeated callers observing the same cooldown must not extend it.
+	if time.Now().Before(queue.backoffUntil) {
+		return
+	}
 	delay := queue.backoffs[len(queue.backoffs)-1]
 	if queue.backoffStep < len(queue.backoffs) {
 		delay = queue.backoffs[queue.backoffStep]
 		queue.backoffStep++
 	}
-	queue.running = false
 	queue.status.Refreshing = false
 	queue.backoffUntil = time.Now().Add(delay)
+	var retry interface{ RetryAt() time.Time }
+	if errors.As(err, &retry) && retry.RetryAt().After(time.Now()) {
+		queue.backoffUntil = retry.RetryAt()
+	}
 	queue.status.Queued = len(queue.pending)
 	queue.status.LastError = err.Error()
 	queue.lastFinishedAt = time.Now()
+	if !queue.running && len(queue.pending) > 0 {
+		queue.running = true
+		go queue.run()
+	}
 
 	if queue.OnBackoff != nil {
 		backoffUntil := queue.backoffUntil
@@ -242,6 +267,8 @@ func (queue *RefreshQueue) enterBackoff(id int, err error) {
 }
 
 func (queue *RefreshQueue) delay() time.Duration {
+	queue.mu.Lock()
+	defer queue.mu.Unlock()
 	if queue.jitter <= 0 {
 		return queue.baseDelay
 	}

@@ -56,7 +56,7 @@ func TestLoadLocalGameLayoutUsesCacheWithoutRemoteRequest(t *testing.T) {
 
 func TestLoadGameLayoutPrefersLocalDevelopmentFile(t *testing.T) {
 	layoutPath := filepath.Join(t.TempDir(), "game-layout.json")
-	localLayout := []byte(strings.Replace(string(embeddedGameLayoutJSON), "0x05DF8198", "0x00000020", 1))
+	localLayout := []byte(strings.Replace(string(embeddedGameLayoutJSON), "0x06182730", "0x00000020", 1))
 	if err := os.WriteFile(layoutPath, localLayout, 0600); err != nil {
 		t.Fatalf("write layout: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestPointerReadWarningIsShownOnlyOncePerSession(t *testing.T) {
 }
 
 func TestUpdateGameLayoutConfigs(t *testing.T) {
-	remoteLayout := []byte(strings.Replace(string(embeddedGameLayoutJSON), "0x05DF8198", "0x00000030", 1))
+	remoteLayout := []byte(strings.Replace(string(embeddedGameLayoutJSON), "0x06182730", "0x00000030", 1))
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if !strings.Contains(request.URL.RawQuery, "nocache=") {
 			t.Errorf("expected query parameter 'nocache', got query %q", request.URL.RawQuery)

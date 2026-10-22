@@ -49,7 +49,6 @@ import {
     HandHeart,
     Keyboard,
     Settings,
-    Maximize,
     AlertTriangle,
     Clock,
     Download
@@ -191,7 +190,7 @@ function normalizeDashboardSettings(settings?: DashboardSettingsInput | null): D
     const sortMode = settings?.sort_mode;
     const bestOwnershipFilter = settings?.best_ownership_filter;
     const bestSortMode = settings?.best_sort_mode;
-    const gameScale = settings?.game_scale;
+    const legacyGameScale = settings?.game_scale;
     return {
         theme_mode: settings?.theme_mode === "light" ? "light" : defaultDashboardSettings.theme_mode,
         price_mode: settings?.price_mode === "instant" ? "instant" : defaultDashboardSettings.price_mode,
@@ -220,7 +219,7 @@ function normalizeDashboardSettings(settings?: DashboardSettingsInput | null): D
         notify_sources: normalizeNotifySources(settings?.notify_sources),
         hotkey_modifiers: settings?.hotkey_modifiers ?? 0,
         hotkey_vk: settings?.hotkey_vk ?? 0x71,
-        game_scale: (gameScale === 100 || gameScale === 125 || gameScale === 150) ? gameScale : defaultDashboardSettings.game_scale,
+        game_scale: (legacyGameScale === 100 || legacyGameScale === 125 || legacyGameScale === 150) ? legacyGameScale : defaultDashboardSettings.game_scale,
     };
 }
 
@@ -263,7 +262,8 @@ function App() {
     const [hotkeyVK, setHotkeyVK] = useState<number>(0x71); // default F2
     const [isListeningHotkey, setIsListeningHotkey] = useState<boolean>(false);
     const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
-    const [gameScale, setGameScale] = useState<number>(100);
+    // Round-trip old settings; native tooltip placement reads the game scale automatically.
+    const [legacyGameScale, setLegacyGameScale] = useState<number>(100);
     const settingsMenuRef = useRef<HTMLDivElement>(null);
     const mountedRef = useRef(false);
     const loadInFlightRef = useRef(false);
@@ -273,12 +273,15 @@ function App() {
 
     const [localNextCommonDrop, setLocalNextCommonDrop] = useState<number | null>(null);
     const [localNextStageDrop, setLocalNextStageDrop] = useState<number | null>(null);
+	const dropCountdownRegion = useRef<string | undefined>(undefined);
 
     useEffect(() => {
+		const regionChanged = dropCountdownRegion.current !== state?.inventory_fill?.region;
+		dropCountdownRegion.current = state?.inventory_fill?.region;
         if (state?.inventory_fill?.available) {
             const commonBackendVal = state.inventory_fill.next_common_drop_seconds;
             setLocalNextCommonDrop((prev) => {
-                if (prev === null || commonBackendVal === 0 || commonBackendVal > prev + 10) {
+                if (regionChanged || prev === null || commonBackendVal === 0 || commonBackendVal > prev + 10) {
                     return commonBackendVal;
                 }
                 return prev;
@@ -286,7 +289,7 @@ function App() {
 
             const stageBackendVal = state.inventory_fill.next_stage_drop_seconds;
             setLocalNextStageDrop((prev) => {
-                if (prev === null || stageBackendVal === 0 || stageBackendVal > prev + 10) {
+                if (regionChanged || prev === null || stageBackendVal === 0 || stageBackendVal > prev + 10) {
                     return stageBackendVal;
                 }
                 return prev;
@@ -296,6 +299,7 @@ function App() {
             setLocalNextStageDrop(null);
         }
     }, [
+		state?.inventory_fill?.region,
         state?.inventory_fill?.next_common_drop_seconds,
         state?.inventory_fill?.next_stage_drop_seconds,
         state?.inventory_fill?.common_drop_ready,
@@ -424,7 +428,7 @@ function App() {
                 setNotifySources(normalized.notify_sources);
                 setHotkeyModifiers(normalized.hotkey_modifiers);
                 setHotkeyVK(normalized.hotkey_vk);
-                setGameScale(normalized.game_scale);
+                setLegacyGameScale(normalized.game_scale);
                 dashboardSettingsLoadedRef.current = true;
             })
             .catch(() => {
@@ -536,7 +540,7 @@ function App() {
             notify_sources: notifySources,
             hotkey_modifiers: hotkeyModifiers,
             hotkey_vk: hotkeyVK,
-            game_scale: gameScale,
+            game_scale: legacyGameScale,
         };
         const nextKey = dashboardSettingsKey(nextSettings);
         if (nextKey === dashboardSettingsSnapshotRef.current) return;
@@ -545,7 +549,7 @@ function App() {
         }).catch(() => {
             // Local UI state can continue even if settings persistence fails.
         });
-    }, [themeMode, priceMode, rarityFilter, equipmentFilter, sortMode, bestRarityFilter, bestEquipmentFilter, bestOwnershipFilter, bestSortMode, marketableItemsTab, notifySources, hotkeyModifiers, hotkeyVK, gameScale]);
+    }, [themeMode, priceMode, rarityFilter, equipmentFilter, sortMode, bestRarityFilter, bestEquipmentFilter, bestOwnershipFilter, bestSortMode, marketableItemsTab, notifySources, hotkeyModifiers, hotkeyVK, legacyGameScale]);
 
     useEffect(() => {
         if (!isListeningHotkey) return;
@@ -725,6 +729,13 @@ function App() {
         : 0;
     const inventoryFillTooltip = inventoryFill?.available ? (
         <div className="inventory-fill-tooltip text-left text-xs text-[#e1d5bf] select-none p-0.5">
+            <div className="tooltip-section pb-1 text-[10px] font-bold text-[#70d6ff]">
+                {inventoryFill.region === "plaguelands"
+                    ? "PlagueLands"
+                    : inventoryFill.region === "normal"
+                        ? t("value.normal", "Normal")
+                        : localizedFallback(currentLanguage, "Bölge algılanamadı", "Region unavailable")}
+            </div>
             {!inventoryFill.has_common_auto_open_rune && !inventoryFill.has_stage_auto_open_rune ? (
                 <div className="tooltip-section pb-1 text-center py-2">
                     <AlertTriangle className="w-8 h-8 text-[#ffbe2d] mx-auto mb-2 animate-pulse" />
@@ -802,6 +813,8 @@ function App() {
                         </div>
                     </div>
 
+                </>
+            )}
                     {/* --- CONFIGURATION CARDS --- */}
                     <div className="tooltip-section py-2 border-b border-[#2d261f] space-y-2">
                         <div className="text-[9px] font-bold text-[#9a896f] uppercase tracking-wider">
@@ -811,7 +824,7 @@ function App() {
                         {/* Common configuration */}
                         <div className="tooltip-config-card space-y-1">
                             <div className="flex justify-between items-center text-[9px] border-b border-[#2d261f]/40 pb-0.5 mb-1">
-                                <span className="font-bold text-[#b5a38b]">{t("dashboard.inventory_fill_common", localizedFallback(currentLanguage, "Normal Sandık", "Normal Chest"))}</span>
+                                <span className="font-bold text-[#b5a38b]">{inventoryFill.region === "plaguelands" ? "PlagueLands · " : ""}{t("dashboard.inventory_fill_common", localizedFallback(currentLanguage, "Normal Sandık", "Normal Chest"))}</span>
                                 <span className="text-[8px] px-1 tooltip-badge-rune rounded-sm scale-95 origin-right">
                                     -{formatInventoryFillSeconds(inventoryFill.common_rune_reduction_seconds)}
                                 </span>
@@ -829,7 +842,7 @@ function App() {
                         {/* Stage configuration */}
                         <div className="tooltip-config-card space-y-1">
                             <div className="flex justify-between items-center text-[9px] border-b border-[#2d261f]/40 pb-0.5 mb-1">
-                                <span className="font-bold text-[#b5a38b]">{t("dashboard.inventory_fill_stage", localizedFallback(currentLanguage, "Aşama Sandığı", "Stage Chest"))}</span>
+                                <span className="font-bold text-[#b5a38b]">{inventoryFill.region === "plaguelands" ? "PlagueLands · " : ""}{t("dashboard.inventory_fill_stage", localizedFallback(currentLanguage, "Aşama Sandığı", "Stage Chest"))}</span>
                                 <span className="text-[8px] px-1 tooltip-badge-rune rounded-sm scale-95 origin-right">
                                     -{formatInventoryFillSeconds(inventoryFill.stage_rune_reduction_seconds)}
                                 </span>
@@ -851,7 +864,7 @@ function App() {
                             {t("dashboard.inventory_fill_next_drops", localizedFallback(currentLanguage, "Sonraki Düşümler", "Next Drops"))}
                         </div>
                         <div className="flex justify-between items-center text-[10px]">
-                            <span className="text-[#9a896f]">{t("dashboard.inventory_fill_next_common_short", localizedFallback(currentLanguage, "Normal Sandık", "Normal Chest"))}:</span>
+                            <span className="text-[#9a896f]">{inventoryFill.region === "plaguelands" ? "PlagueLands · " : ""}{t("dashboard.inventory_fill_next_common_short", localizedFallback(currentLanguage, "Normal Sandık", "Normal Chest"))}:</span>
                             <div className="flex items-center gap-1.5">
                                 <strong className="text-[#e1d5bf] font-bold">
                                     {formatInventoryDropCountdown(localNextCommonDrop, inventoryFill.common_drop_ready)}
@@ -864,7 +877,7 @@ function App() {
                             </div>
                         </div>
                         <div className="flex justify-between items-center text-[10px]">
-                            <span className="text-[#9a896f]">{t("dashboard.inventory_fill_next_stage_short", localizedFallback(currentLanguage, "Aşama Sandığı", "Stage Chest"))}:</span>
+                            <span className="text-[#9a896f]">{inventoryFill.region === "plaguelands" ? "PlagueLands · " : ""}{t("dashboard.inventory_fill_next_stage_short", localizedFallback(currentLanguage, "Aşama Sandığı", "Stage Chest"))}:</span>
                             <div className="flex items-center gap-1.5">
                                 <strong className="text-[#e1d5bf] font-bold">
                                     {formatInventoryDropCountdown(localNextStageDrop, inventoryFill.stage_drop_ready)}
@@ -877,8 +890,6 @@ function App() {
                             </div>
                         </div>
                     </div>
-                </>
-            )}
         </div>
     ) : undefined;
     const themeLabel = themeMode === "dark"
@@ -888,8 +899,6 @@ function App() {
     const controlCurrencyLabel = t("dashboard.control_currency", localizedFallback(currentLanguage, "Para", "Currency"));
     const controlPriceLabel = t("dashboard.control_price", localizedFallback(currentLanguage, "Fiyat", "Price"));
     const controlThemeLabel = t("dashboard.control_theme", localizedFallback(currentLanguage, "Tema", "Theme"));
-    const controlGameScaleLabel = t("dashboard.control_game_scale", localizedFallback(currentLanguage, "Oyun Pencere Ölçeği", "Game Window Scale"));
-    const gameScaleLabel = `${gameScale / 100}x`;
     const selectedLanguageName = languages.find((lang) => lang.code === currentLanguage)?.name || currentLanguage;
     const selectedLanguageCode = languageDisplayCode(currentLanguage);
     const fullPriceLabel = priceMode === "instant"
@@ -1213,24 +1222,6 @@ function App() {
                                                         selectedLabel={themeLabel}
                                                         icon={themeMode === "dark" ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5 text-[#ffbe2d]" />}
                                                         title={`${controlThemeLabel}: ${themeLabel}`}
-                                                    />
-                                                </div>
-
-                                                {/* Game Scale */}
-                                                <div className="dashboard-settings-row flex items-center justify-between gap-4">
-                                                    <span className="text-[11px] font-bold text-[#e1d5bf]">{controlGameScaleLabel}:</span>
-                                                    <GameDropdown
-                                                        value={String(gameScale)}
-                                                        options={[
-                                                            { value: "100", label: "1x" },
-                                                            { value: "125", label: "1.25x" },
-                                                            { value: "150", label: "1.5x" },
-                                                        ]}
-                                                        onChange={(val) => setGameScale(Number(val))}
-                                                        className="dashboard-control dashboard-scale-toggle"
-                                                        selectedLabel={gameScaleLabel}
-                                                        icon={<Maximize className="w-3.5 h-3.5" />}
-                                                        title={`${controlGameScaleLabel}: ${gameScaleLabel}`}
                                                     />
                                                 </div>
 

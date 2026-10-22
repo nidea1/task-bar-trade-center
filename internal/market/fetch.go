@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -54,6 +55,8 @@ type steamRateLimiter struct {
 	cond          *sync.Cond
 	lastStartedAt time.Time
 	waitingHigh   int
+	backoffUntil  time.Time
+	backoffStep   int
 }
 
 func newSteamRateLimiter() *steamRateLimiter {
@@ -264,7 +267,10 @@ type SteamError struct {
 	Status     string
 	Endpoint   string
 	RetryAfter string
+	RetryUntil time.Time
 }
+
+func (e *SteamError) RetryAt() time.Time { return e.RetryUntil }
 
 func (e *SteamError) Error() string {
 	return fmt.Sprintf("status %s", e.Status)
@@ -297,14 +303,15 @@ func steamGetWithPriority(client *http.Client, targetURL string, referer string,
 		return nil, 0, err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) TaskBarTradeCenter/0.1")
-	req.Header.Set("Accept", "application/json,text/html;q=0.9,*/*;q=0.8")
-	req.Header.Set("Origin", "https://steamcommunity.com")
 	if referer != "" {
 		req.Header.Set("Referer", referer)
 	}
 
 	waitStartedAt := time.Now()
-	waitForSteamRequestTurn(priority)
+	if err := waitForSteamRequestTurn(priority); err != nil {
+		err.Endpoint = endpoint
+		return nil, err.StatusCode, err
+	}
 	waitDuration := time.Since(waitStartedAt)
 
 	requestStartedAt := time.Now()
@@ -320,9 +327,17 @@ func steamGetWithPriority(client *http.Client, targetURL string, referer string,
 		return nil, 0, err
 	}
 	defer resp.Body.Close()
+	var retryUntil time.Time
+	if resp.StatusCode == http.StatusTooManyRequests {
+		retryUntil = steamRequestLimiter.enterBackoff(resp.Header.Get("Retry-After"), time.Now())
+	} else if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		steamRequestLimiter.mu.Lock()
+		steamRequestLimiter.backoffStep = 0
+		steamRequestLimiter.mu.Unlock()
+	}
 
 	body, readErr := io.ReadAll(resp.Body)
-	if readErr != nil {
+	if readErr != nil && resp.StatusCode != http.StatusTooManyRequests {
 		emitSteamRequestMetric(SteamRequestMetric{
 			Endpoint:        endpoint,
 			Priority:        priority,
@@ -341,6 +356,7 @@ func steamGetWithPriority(client *http.Client, targetURL string, referer string,
 			Status:     resp.Status,
 			Endpoint:   endpoint,
 			RetryAfter: resp.Header.Get("Retry-After"),
+			RetryUntil: retryUntil,
 		}
 		emitSteamRequestMetric(SteamRequestMetric{
 			Endpoint:        steamErr.Endpoint,
@@ -399,7 +415,27 @@ func emitSteamRequestMetric(metric SteamRequestMetric) {
 	}
 }
 
-func waitForSteamRequestTurn(priority RequestPriority) {
+func (limiter *steamRateLimiter) enterBackoff(retryAfter string, now time.Time) time.Time {
+	limiter.mu.Lock()
+	defer limiter.mu.Unlock()
+	backoffs := [...]time.Duration{15 * time.Minute, 30 * time.Minute, time.Hour}
+	delay := backoffs[limiter.backoffStep]
+	if limiter.backoffStep < len(backoffs)-1 {
+		limiter.backoffStep++
+	}
+	if seconds, err := strconv.ParseInt(retryAfter, 10, 64); err == nil && seconds > 0 && seconds <= int64((1<<63-1)/time.Second) {
+		delay = time.Duration(seconds) * time.Second
+	} else if deadline, err := http.ParseTime(retryAfter); err == nil && deadline.After(now) {
+		delay = deadline.Sub(now)
+	}
+	if deadline := now.Add(delay); deadline.After(limiter.backoffUntil) {
+		limiter.backoffUntil = deadline
+	}
+	limiter.cond.Broadcast()
+	return limiter.backoffUntil
+}
+
+func waitForSteamRequestTurn(priority RequestPriority) *SteamError {
 	highPriority := priority == RequestPriorityHigh
 	steamRequestLimiter.mu.Lock()
 	if highPriority {
@@ -407,6 +443,19 @@ func waitForSteamRequestTurn(priority RequestPriority) {
 	}
 
 	for {
+		if now := time.Now(); now.Before(steamRequestLimiter.backoffUntil) {
+			if highPriority {
+				steamRequestLimiter.waitingHigh--
+			}
+			deadline := steamRequestLimiter.backoffUntil
+			steamRequestLimiter.cond.Broadcast()
+			steamRequestLimiter.mu.Unlock()
+			return &SteamError{
+				StatusCode: http.StatusTooManyRequests,
+				Status:     "429 Too Many Requests (Steam cooldown until " + deadline.Format(time.RFC3339) + ")",
+				RetryUntil: deadline,
+			}
+		}
 		if !highPriority && steamRequestLimiter.waitingHigh > 0 {
 			steamRequestLimiter.cond.Wait()
 			continue
@@ -424,7 +473,7 @@ func waitForSteamRequestTurn(priority RequestPriority) {
 			}
 			steamRequestLimiter.cond.Broadcast()
 			steamRequestLimiter.mu.Unlock()
-			return
+			return nil
 		}
 
 		timer := time.NewTimer(wait)

@@ -21,7 +21,6 @@ func showTrayMenu() {
 	appendTrayMenuItem(menu, MF_STRING|MF_GRAYED, 0, tr("menu.currency_region", market.FormatScope(scope)))
 	appendMarketScopeMenus(menu, scope)
 	appendLanguageMenu(menu)
-	appendGameScaleMenu(menu)
 	appendTraySeparator(menu)
 
 	refreshFlags := uint32(MF_STRING)
@@ -134,29 +133,6 @@ func appendLanguageMenu(menu uintptr) {
 		appendTrayMenuItem(languageMenu, flags, MenuLanguageBase+uint32(index), locale.Name)
 	}
 	appendTrayPopupMenu(menu, languageMenu, tr("menu.language"))
-}
-
-func appendGameScaleMenu(menu uintptr) {
-	scaleMenu := winapp.NewPopupMenu()
-	if scaleMenu == 0 {
-		return
-	}
-
-	current := currentGameScale()
-	for index, option := range supportedGameScales {
-		flags := uint32(MF_STRING)
-		if option.Percent == current {
-			flags |= MF_CHECKED
-		}
-		appendTrayMenuItem(
-			scaleMenu,
-			flags,
-			MenuGameScaleBase+uint32(index),
-			option.Label,
-		)
-	}
-
-	appendTrayPopupMenu(menu, scaleMenu, tr("menu.game_scale"))
 }
 
 func appendTrayPopupMenu(menu uintptr, popupMenu uintptr, text string) {

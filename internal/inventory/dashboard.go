@@ -211,12 +211,29 @@ func NormalizeChestTimingConfig(config ChestTimingConfig) ChestTimingConfig {
 	return config
 }
 
+func ChestTimingForRegion(timing ChestTimingConfig, region playerdata.Region) ChestTimingConfig {
+	timing = NormalizeChestTimingConfig(timing)
+	switch region {
+	case playerdata.RegionNormal:
+		timing.CommonDropSeconds, timing.StageDropSeconds = 180, 300
+	case playerdata.RegionPlaguelands:
+		timing.CommonDropSeconds, timing.StageDropSeconds = 240, 360
+	}
+	return timing
+}
+
 func BuildInventoryFillEstimate(snapshot playerdata.InventorySnapshot, schedules ...ChestDropSchedule) InventoryFillEstimate {
 	return BuildInventoryFillEstimateWithTiming(snapshot, ChestTimingConfig{}, schedules...)
 }
 
 func BuildInventoryFillEstimateWithTiming(snapshot playerdata.InventorySnapshot, timing ChestTimingConfig, schedules ...ChestDropSchedule) InventoryFillEstimate {
-	timing = NormalizeChestTimingConfig(timing)
+	timing = ChestTimingForRegion(timing, snapshot.Region)
+	if snapshot.ChestAutomation.CommonBaseAutoOpenSeconds > 0 {
+		timing.CommonBaseAutoOpenSeconds = snapshot.ChestAutomation.CommonBaseAutoOpenSeconds
+	}
+	if snapshot.ChestAutomation.StageBaseAutoOpenSeconds > 0 {
+		timing.StageBaseAutoOpenSeconds = snapshot.ChestAutomation.StageBaseAutoOpenSeconds
+	}
 	slotCount := snapshot.InventorySlots.Total
 	usedSlots := snapshot.InventorySlots.Used
 	if usedSlots == 0 {
@@ -256,6 +273,7 @@ func BuildInventoryFillEstimateWithTiming(snapshot playerdata.InventorySnapshot,
 	schedule := normalizedChestDropSchedule(firstChestDropSchedule(schedules), timing)
 
 	estimate := InventoryFillEstimate{
+		Region:                     snapshot.Region,
 		Available:                  slotCount > 0,
 		FillModel:                  inventoryFillEventQueueModel,
 		SlotCount:                  slotCount,

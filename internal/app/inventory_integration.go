@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -46,6 +47,7 @@ type chestDropTrackerState struct {
 	commonObserved   bool
 	stageObserved    bool
 	lastCounts       inventoryChestCounts
+	region           playerdata.Region
 }
 
 var chestDropTracker chestDropTrackerState
@@ -305,6 +307,7 @@ func storeInventorySnapshot(snapshot playerdata.InventorySnapshot) {
 	activeApp.inventoryMu.Lock()
 	activeApp.lastSnapshot = &snapshot
 	activeApp.inventoryMu.Unlock()
+	updateChestDropTracker(nil, &snapshot, "", snapshot.ReadAt)
 }
 
 func currentInventoryResolver() *playerdata.Resolver {
@@ -576,7 +579,8 @@ func resetInventoryFullNotification() {
 }
 
 func logInventorySnapshotDiagnostics(snapshot playerdata.InventorySnapshot) {
-	timing := currentChestTimingConfig()
+	timing := chestTimingConfigForRegion(snapshot.Region)
+	logPrintf("[INVENTORY:region] region=%s stage_key=%d\n", snapshot.Region, snapshot.StageKey)
 	estimate := inventory.BuildInventoryFillEstimateWithTiming(snapshot, timing)
 	emptySlots := snapshot.InventorySlots.EmptySlotRanges
 	if emptySlots == "" {
@@ -717,6 +721,7 @@ func resetChestDropTracker() {
 	chestDropTracker.commonObserved = false
 	chestDropTracker.stageObserved = false
 	chestDropTracker.lastCounts = inventoryChestCounts{}
+	chestDropTracker.region = ""
 	chestDropTracker.mu.Unlock()
 }
 
@@ -727,7 +732,7 @@ func updateChestDropTracker(previous *playerdata.InventorySnapshot, current *pla
 	if now.IsZero() {
 		now = time.Now()
 	}
-	timing := currentChestTimingConfig()
+	timing := chestTimingConfigForRegion(current.Region)
 	commonDropInterval := time.Duration(timing.CommonDropSeconds) * time.Second
 	stageDropInterval := time.Duration(timing.StageDropSeconds) * time.Second
 	counts := countInventoryChestItems(current)
@@ -735,8 +740,10 @@ func updateChestDropTracker(previous *playerdata.InventorySnapshot, current *pla
 	chestDropTracker.mu.Lock()
 	defer chestDropTracker.mu.Unlock()
 
-	if !chestDropTracker.initialized {
+	if !chestDropTracker.initialized || chestDropTracker.region != current.Region {
 		chestDropTracker.initialized = true
+		chestDropTracker.region = current.Region
+		chestDropTracker.commonObserved, chestDropTracker.stageObserved = false, false
 		chestDropTracker.commonNextDropAt = now.Add(commonDropInterval)
 		chestDropTracker.stageNextDropAt = now.Add(stageDropInterval)
 		chestDropTracker.lastCounts = counts
@@ -820,16 +827,26 @@ func chestDropInterval(kind string, timing inventory.ChestTimingConfig) time.Dur
 }
 
 func currentChestTimingConfig() inventory.ChestTimingConfig {
+	activeApp.inventoryMu.Lock()
+	var region playerdata.Region
+	if activeApp.lastSnapshot != nil {
+		region = activeApp.lastSnapshot.Region
+	}
+	activeApp.inventoryMu.Unlock()
+	return chestTimingConfigForRegion(region)
+}
+
+func chestTimingConfigForRegion(region playerdata.Region) inventory.ChestTimingConfig {
 	activeApp.gameLayoutMu.RLock()
 	timing := activeApp.activeGameLayout.ChestTiming
 	activeApp.gameLayoutMu.RUnlock()
 
-	return inventory.NormalizeChestTimingConfig(inventory.ChestTimingConfig{
+	return inventory.ChestTimingForRegion(inventory.ChestTimingConfig{
 		CommonDropSeconds:         timing.CommonChestDropSeconds,
 		StageDropSeconds:          timing.StageChestDropSeconds,
 		CommonBaseAutoOpenSeconds: timing.CommonChestBaseAutoOpenSeconds,
 		StageBaseAutoOpenSeconds:  timing.StageChestBaseAutoOpenSeconds,
-	})
+	}, region)
 }
 
 func currentInventoryFillDropSchedule(now time.Time) inventory.ChestDropSchedule {
@@ -966,12 +983,19 @@ func inventorySnapshotChanged(a, b *playerdata.InventorySnapshot) bool {
 	if a.Gold != b.Gold || a.StashPageCount != b.StashPageCount {
 		return true
 	}
+	if a.Region != b.Region {
+		return true
+	}
 	if a.InventorySlots != b.InventorySlots {
 		return true
 	}
 	if a.ChestAutomation.CommonRuneReductionSeconds != b.ChestAutomation.CommonRuneReductionSeconds ||
 		a.ChestAutomation.StageRuneReductionSeconds != b.ChestAutomation.StageRuneReductionSeconds ||
-		a.ChestAutomation.RuneResolved != b.ChestAutomation.RuneResolved {
+		a.ChestAutomation.RuneResolved != b.ChestAutomation.RuneResolved ||
+		a.ChestAutomation.HasCommonAutoOpenRune != b.ChestAutomation.HasCommonAutoOpenRune ||
+		a.ChestAutomation.HasStageAutoOpenRune != b.ChestAutomation.HasStageAutoOpenRune ||
+		a.ChestAutomation.CommonBaseAutoOpenSeconds != b.ChestAutomation.CommonBaseAutoOpenSeconds ||
+		a.ChestAutomation.StageBaseAutoOpenSeconds != b.ChestAutomation.StageBaseAutoOpenSeconds {
 		return true
 	}
 	if len(a.Items) != len(b.Items) {
@@ -1109,7 +1133,8 @@ func currentInventoryPriceQueue() *inventory.RefreshQueue {
 			endpoint := "unknown"
 			retryAfter := ""
 			status := 429
-			if se, ok := err.(*market.SteamError); ok {
+			var se *market.SteamError
+			if errors.As(err, &se) {
 				endpoint = se.Endpoint
 				retryAfter = se.RetryAfter
 				status = se.StatusCode
@@ -1170,7 +1195,8 @@ func isSteamRateLimitError(err error) bool {
 	if err == nil {
 		return false
 	}
-	if se, ok := err.(*market.SteamError); ok {
+	var se *market.SteamError
+	if errors.As(err, &se) {
 		return se.StatusCode == 429
 	}
 	message := strings.ToLower(err.Error())

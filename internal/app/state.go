@@ -102,6 +102,7 @@ type App struct {
 	tooltipXAOBResolver      game.TooltipAOBResolver
 	tooltipYAOBResolver      game.TooltipAOBResolver
 	tooltipHeightAOBResolver game.TooltipAOBResolver
+	tooltipRectAOBResolver   game.TooltipAOBResolver
 
 	// Overlay window and draw state
 	overlayUpdatePending         atomic.Bool

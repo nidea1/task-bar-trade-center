@@ -4,6 +4,13 @@ type RECT struct {
 	Left, Top, Right, Bottom int32
 }
 
+type MONITORINFO struct {
+	CbSize  uint32
+	Monitor RECT
+	Work    RECT
+	Flags   uint32
+}
+
 type POINT struct {
 	X, Y int32
 }

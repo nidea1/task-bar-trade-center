@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +17,49 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
 	return fn(request)
+}
+
+func TestFetchValveSSRListingWithoutFallbackRequests(t *testing.T) {
+	body, err := os.ReadFile("testdata/valve-ssr-listing.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalTransport, originalLimiter := steamHTTPTransport, steamRequestLimiter
+	t.Cleanup(func() {
+		steamHTTPTransport, steamRequestLimiter = originalTransport, originalLimiter
+	})
+	steamRequestLimiter = newSteamRateLimiter()
+	requests := 0
+	steamHTTPTransport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		requests++
+		resetSteamRequestLimiterForTest()
+		// The current Steam document route returns 429 for the old shared
+		// Origin/Accept headers, while a plain GET returns the listing.
+		if request.Header.Get("Origin") != "" || request.Header.Get("Accept") != "" {
+			return testHTTPResponse(http.StatusTooManyRequests, "listing request headers rejected"), nil
+		}
+		if !strings.Contains(request.URL.Path, "/market/listings/") {
+			t.Errorf("unnecessary fallback request: %s", request.URL)
+			return testHTTPResponse(http.StatusTooManyRequests, ""), nil
+		}
+		return testHTTPResponse(http.StatusOK, string(body)), nil
+	})
+	scope, _ := marketScopeFor("USD", "TR")
+	config := catalog.ItemConfig{Grade: "LEGENDARY", Type: "GEAR", Name: map[string]string{"en-US": "War Boots"}}
+	data, err := FetchDataWithPriority(config, BuildHashName(config), time.Unix(1792691084, 0), scope, RequestPriorityHigh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if requests != 1 || !hasCompleteMarketAnalysis(data.Analysis) {
+		t.Fatalf("requests=%d analysis=%+v; want complete data from one listing", requests, data.Analysis)
+	}
+	assertFloatEqual(t, data.OrderBook.LowestSellPrice, 0.03)
+	if data.OrderBook.LowestSellQuantity != 3669 || data.OrderBook.SellOrderCount != 10721 {
+		t.Fatalf("order book = %+v", data.OrderBook)
+	}
+	if len(data.History) != 2 || data.History[1].Time != 1792425600 || data.History[1].Volume != 20 {
+		t.Fatalf("history = %+v", data.History)
+	}
 }
 
 func TestPriceHistoryURLOmitsCountryAndCurrency(t *testing.T) {

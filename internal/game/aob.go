@@ -339,6 +339,20 @@ func (resolver *TooltipAOBResolver) Reset() {
 }
 
 func (resolver *TooltipAOBResolver) Resolve(label string, processHandle uintptr, moduleBase uintptr, pattern AOBPattern, offsets []uintptr) (uintptr, bool, string) {
+	return resolver.resolve(label, processHandle, moduleBase, pattern, offsets, func(address uintptr) bool {
+		value, ok := ReadFloat32(processHandle, address)
+		return ok && validTooltipAOBValue(label, value)
+	})
+}
+
+func (resolver *TooltipAOBResolver) ResolveRectTransform(processHandle, moduleBase uintptr, pattern AOBPattern, offsets []uintptr) (uintptr, bool, string) {
+	return resolver.resolve("rect-transform", processHandle, moduleBase, pattern, offsets, func(address uintptr) bool {
+		_, ok := ReadRectTransformBounds(processHandle, address)
+		return ok
+	})
+}
+
+func (resolver *TooltipAOBResolver) resolve(label string, processHandle uintptr, moduleBase uintptr, pattern AOBPattern, offsets []uintptr, validAddress func(uintptr) bool) (uintptr, bool, string) {
 	if !pattern.configured() {
 		return 0, false, ""
 	}
@@ -346,7 +360,7 @@ func (resolver *TooltipAOBResolver) Resolve(label string, processHandle uintptr,
 	resolver.mu.Lock()
 	defer resolver.mu.Unlock()
 
-	configurationKey := fmt.Sprintf("%X:%s:%d:%d:%s", moduleBase, pattern.Source, pattern.DisplacementOffset, pattern.InstructionEndOffset, formatPointerOffsets(offsets))
+	configurationKey := fmt.Sprintf("%s:%X:%s:%d:%d:%s", label, moduleBase, pattern.Source, pattern.DisplacementOffset, pattern.InstructionEndOffset, formatPointerOffsets(offsets))
 	if resolver.configurationKey != configurationKey {
 		resolver.configurationKey = configurationKey
 		resolver.scanned = false
@@ -375,8 +389,7 @@ func (resolver *TooltipAOBResolver) Resolve(label string, processHandle uintptr,
 		if !ok {
 			continue
 		}
-		value, ok := ReadFloat32(processHandle, address)
-		if !ok || !validTooltipAOBValue(label, value) {
+		if !validAddress(address) {
 			continue
 		}
 		resolver.resolvedBase = candidate
