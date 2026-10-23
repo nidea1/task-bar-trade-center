@@ -176,4 +176,3 @@ If you find this tool helpful, feel free to support its development on Patreon!
 ## 🤝 Acknowledgements & Credits
 
 - Special thanks to the creators of [Allyans3/steam-market-api-v2](https://github.com/Allyans3/steam-market-api-v2) for API reference models.
-- Thanks to the contributors of the [TaskBarHero Wiki](https://taskbarhero.wiki/) for providing the database structure for `items.json`.
