@@ -21,9 +21,9 @@ func TestMaterialStackQuantityChangesValueButNotOccupiedSlots(t *testing.T) {
 
 func TestStashPageBreakdownAndMaterialStashMatchTotal(t *testing.T) {
 	snapshot := playerdata.InventorySnapshot{StashPageCount: 4, Items: []playerdata.OwnedItem{
-		{ItemID: 100, UniqueID: 1, Quantity: 4, Location: playerdata.LocationStash, SlotIndex: 99, Marketable: true},
-		{ItemID: 200, UniqueID: 2, Location: playerdata.LocationStash, SlotIndex: 100, Marketable: true},
-		{ItemID: 300, UniqueID: 3, Location: playerdata.LocationStash, SlotIndex: 200, Marketable: true},
+		{ItemID: 100, UniqueID: 1, Quantity: 4, Location: playerdata.LocationStash, SlotIndex: 10, Marketable: true},
+		{ItemID: 200, UniqueID: 2, Location: playerdata.LocationStash, SlotIndex: 50, Marketable: true},
+		{ItemID: 300, UniqueID: 3, Location: playerdata.LocationStash, SlotIndex: 100, Marketable: true},
 		{ItemID: 100, UniqueID: 4, Quantity: 25, Location: playerdata.LocationMaterialStash, Marketable: true},
 		{ItemID: 100, UniqueID: 5, Location: playerdata.LocationInventory, Marketable: true},
 	}}

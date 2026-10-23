@@ -20,7 +20,7 @@ type DashboardOptions struct {
 }
 
 const (
-	stashSlotsPerPage = 100
+	stashSlotsPerPage = 49
 
 	commonChestDropSeconds         = 240
 	stageChestDropSeconds          = 360
@@ -45,7 +45,8 @@ func BuildDashboard(snapshot playerdata.InventorySnapshot, catalog map[int]ItemD
 	groups := make(map[int]*groupAccumulator)
 	stashPageCount := dashboardStashPageCount(snapshot)
 	totals := DashboardTotals{
-		StashPageCount: stashPageCount,
+		StashPageCount:   stashPageCount,
+		HasMaterialStash: snapshot.HasMaterialStash,
 		HeroEquippedValues: map[int]float64{
 			1: 0.0,
 			2: 0.0,
@@ -71,6 +72,10 @@ func BuildDashboard(snapshot playerdata.InventorySnapshot, catalog map[int]ItemD
 			if _, exists := totals.StashPageValues[page]; !exists {
 				totals.StashPageValues[page] = 0
 			}
+		}
+		if owned.Location == playerdata.LocationMaterialStash {
+			totals.HasMaterialStash = true
+			totals.MaterialStashCount += units
 		}
 		desc := catalog[owned.ItemID]
 		if !owned.Marketable || !desc.Marketable {
@@ -150,6 +155,7 @@ func BuildDashboard(snapshot playerdata.InventorySnapshot, catalog map[int]ItemD
 			totals.UnknownItemCount += units
 		}
 	}
+	totals.HasMaterialStash = totals.HasMaterialStash || totals.MaterialStashCount > 0 || totals.MaterialStashValue > 0 || snapshot.HasMaterialStash
 	items := make([]DashboardItem, 0, len(groups))
 	for _, acc := range groups {
 		acc.item.Location = joinLocations(acc.seen)

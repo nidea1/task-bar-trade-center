@@ -58,6 +58,8 @@ type DashboardTotals struct {
 	StashPageValues       map[int]float64 `json:"stash_page_values"`
 	StashPageCounts       map[int]int     `json:"stash_page_counts"`
 	StashPageCount        int             `json:"stash_page_count"`
+	HasMaterialStash      bool            `json:"has_material_stash"`
+	MaterialStashCount    int             `json:"material_stash_count"`
 	PricedItemCount       int             `json:"priced_item_count"`
 	UnknownItemCount      int             `json:"unknown_item_count"`
 	MarketableItemCount   int             `json:"marketable_item_count"`

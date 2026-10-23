@@ -159,6 +159,8 @@ export interface DashboardState {
         stash_page_values: Record<number, number>;
         stash_page_counts?: Record<number, number>;
         stash_page_count?: number;
+        has_material_stash?: boolean;
+        material_stash_count?: number;
         priced_item_count: number;
         unknown_item_count: number;
         marketable_item_count: number;

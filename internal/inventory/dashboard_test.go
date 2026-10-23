@@ -326,9 +326,9 @@ func TestBuildDashboardIncludesEmptyStashPages(t *testing.T) {
 		StashPageCount: 7,
 		Items: []playerdata.OwnedItem{
 			{ItemID: 100, UniqueID: 1, Location: playerdata.LocationStash, SlotIndex: 0, Marketable: true},
-			{ItemID: 200, UniqueID: 2, Location: playerdata.LocationStash, SlotIndex: 401, Marketable: true},
-			{ItemID: 300, UniqueID: 3, Location: playerdata.LocationStash, SlotIndex: 520, Marketable: true},
-			{ItemID: 400, UniqueID: 4, Location: playerdata.LocationStash, SlotIndex: 650, Marketable: true},
+			{ItemID: 200, UniqueID: 2, Location: playerdata.LocationStash, SlotIndex: 196, Marketable: true},
+			{ItemID: 300, UniqueID: 3, Location: playerdata.LocationStash, SlotIndex: 245, Marketable: true},
+			{ItemID: 400, UniqueID: 4, Location: playerdata.LocationStash, SlotIndex: 294, Marketable: true},
 		},
 	}
 	catalog := map[int]ItemDescriptor{
@@ -615,5 +615,62 @@ func TestBuildInventoryFillEstimateRequiresRunes(t *testing.T) {
 	if estimate.CommonAutoOpenSeconds != 0 || estimate.StageAutoOpenSeconds != 0 {
 		t.Fatalf("expected auto-open seconds to be 0 when runes are missing, got common=%d stage=%d",
 			estimate.CommonAutoOpenSeconds, estimate.StageAutoOpenSeconds)
+	}
+}
+
+func TestStashPage49SlotsAndMaterialStashVisibility(t *testing.T) {
+	now := time.Unix(1700000000, 0)
+	snapshot := playerdata.InventorySnapshot{
+		ReadAt:           now,
+		StashPageCount:   3,
+		HasMaterialStash: false,
+		Items: []playerdata.OwnedItem{
+			{ItemID: 100, UniqueID: 1, Location: playerdata.LocationStash, SlotIndex: 0, Marketable: true},
+			{ItemID: 200, UniqueID: 2, Location: playerdata.LocationStash, SlotIndex: 49, Marketable: true},
+			{ItemID: 300, UniqueID: 3, Location: playerdata.LocationStash, SlotIndex: 98, Marketable: true},
+			{ItemID: 400, UniqueID: 4, Location: playerdata.LocationStash, SlotIndex: 99, Marketable: true},
+		},
+	}
+	catalog := map[int]ItemDescriptor{
+		100: {Name: "Item1", Marketable: true},
+		200: {Name: "Item2", Marketable: true},
+		300: {Name: "Item3", Marketable: true},
+		400: {Name: "Item4", Marketable: true},
+	}
+	quotes := quoteMap{
+		100: {Suggested: 10, HasSuggested: true},
+		200: {Suggested: 20, HasSuggested: true},
+		300: {Suggested: 30, HasSuggested: true},
+		400: {Suggested: 40, HasSuggested: true},
+	}
+
+	state := BuildDashboard(snapshot, catalog, quotes, DashboardOptions{Now: now})
+
+	if state.Totals.StashPageCount != 3 {
+		t.Fatalf("stash page count = %d, want 3", state.Totals.StashPageCount)
+	}
+	if len(state.Totals.StashPageValues) != 3 {
+		t.Fatalf("stash page values len = %d, want 3", len(state.Totals.StashPageValues))
+	}
+	if state.Totals.StashPageCounts[1] != 1 {
+		t.Errorf("page 1 count = %d, want 1", state.Totals.StashPageCounts[1])
+	}
+	if state.Totals.StashPageCounts[2] != 1 {
+		t.Errorf("page 2 count = %d, want 1", state.Totals.StashPageCounts[2])
+	}
+	if state.Totals.StashPageCounts[3] != 2 {
+		t.Errorf("page 3 count = %d, want 2", state.Totals.StashPageCounts[3])
+	}
+	if state.Totals.StashPageValues[1] != 10 {
+		t.Errorf("page 1 value = %f, want 10", state.Totals.StashPageValues[1])
+	}
+	if state.Totals.StashPageValues[2] != 20 {
+		t.Errorf("page 2 value = %f, want 20", state.Totals.StashPageValues[2])
+	}
+	if state.Totals.StashPageValues[3] != 70 {
+		t.Errorf("page 3 value = %f, want 70", state.Totals.StashPageValues[3])
+	}
+	if state.Totals.HasMaterialStash {
+		t.Errorf("has material stash = true, want false when inactive and 0 items")
 	}
 }

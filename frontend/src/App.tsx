@@ -952,10 +952,16 @@ function App() {
                 ))}
                 {stashPages.length === 0 && <p className="py-2 text-[#9a896f]">{t("dashboard.stash_no_pages", "No stash pages detected.")}</p>}
             </div>
-            <div className="stash-page-row border-t border-[#2d261f]">
-                <span className="text-[#b5a38b]">{t("dashboard.material_stash", "Material stash")}</span>
-                <strong className="text-[#e1d5bf] tabular-nums">{formatPrice(totals.material_stash_value ?? 0, state)}</strong>
-            </div>
+            {totals.has_material_stash && (
+                <div className="stash-page-row border-t border-[#2d261f]">
+                    <span className="text-[#b5a38b]">{t("dashboard.material_stash", "Material stash")}
+                        {totals.material_stash_count !== undefined && totals.material_stash_count > 0 && (
+                            <small className="text-[#9a896f]"> {totals.material_stash_count} {t("dashboard.stash_items", "items")}</small>
+                        )}
+                    </span>
+                    <strong className="text-[#e1d5bf] tabular-nums">{formatPrice(totals.material_stash_value ?? 0, state)}</strong>
+                </div>
+            )}
             <div className="stash-page-row border-t border-[#2d261f] font-bold gold-text">
                 <span>{t("dashboard.stash_value", "Stash Value")}</span>
                 <strong className="tabular-nums">{formatPrice(totals.stash_value, state)}</strong>

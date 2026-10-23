@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	stashSlotsPerPage = 100
+	stashSlotsPerPage = 49
 
 	playerCurrencies = 0x58
 	playerHeroes     = 0x60
@@ -248,18 +248,19 @@ func (resolver *Resolver) resolveClassByName(memory Memory, name string) ([]uint
 	if !resolver.classBatchInitialized {
 		resolver.classBatchInitialized = true
 		var missing []string
-		for _, known := range []string{"PlayerSaveData", "InventorySaveData", "RuneSaveData", "StageInfoData", "StageBox", "TradingStashSlot", "TradingStashCache"} {
+		for _, known := range []string{"PlayerSaveData", "InventorySaveData", "RuneSaveData", "StageInfoData", "StageBox", "TradingStashSlot", "TradingStashCache", "Stash"} {
 			if len(resolver.classCache[known]) == 0 {
 				missing = append(missing, known)
 			}
 		}
 		for known, classes := range il2cpp.ResolveClassesByName(memory, missing) {
-			if len(classes) > 0 {
-				resolver.classCache[known] = classes
-			}
+			resolver.classCache[known] = classes
 		}
 	}
 	if cached, exists := resolver.classCache[name]; exists {
+		if len(cached) == 0 {
+			return nil, false
+		}
 		valid := cached[:0]
 		for _, class := range cached {
 			if il2cpp.ClassHasName(memory, class, name) {
@@ -274,6 +275,7 @@ func (resolver *Resolver) resolveClassByName(memory Memory, name string) ([]uint
 	}
 	classes, ok := il2cpp.ResolveClassByName(memory, name)
 	if !ok || len(classes) == 0 {
+		resolver.classCache[name] = nil
 		return nil, false
 	}
 	resolver.classCache[name] = append([]uintptr(nil), classes...)
@@ -449,10 +451,28 @@ func (resolver *Resolver) readObjectWithLayout(memory Memory, object uintptr, no
 	if !materialOK {
 		return InventorySnapshot{}, false
 	}
+	hasMaterialStash := len(materials) > 0
 	owned = append(owned, materials...)
 	if stash := readObjectListInfo(memory, object, layout.stashOffset, 200000); stash.ok {
-		stashPageCount = pageCountForSlotCount(stash.size)
-		owned = append(owned, resolver.readSlotItemsWithLayout(memory, stash, uniqueToItem, seen, LocationStash, layout)...)
+		stashItems := resolver.readSlotItemsWithLayout(memory, stash, uniqueToItem, seen, LocationStash, layout)
+		maxItemPage := 0
+		for _, item := range stashItems {
+			page := (item.SlotIndex / stashSlotsPerPage) + 1
+			if page > maxItemPage {
+				maxItemPage = page
+			}
+		}
+		if unlockedPages, ok := resolver.readUnlockedStashPageCount(memory); ok && unlockedPages > 0 {
+			stashPageCount = unlockedPages
+			if maxItemPage > stashPageCount {
+				stashPageCount = maxItemPage
+			}
+		} else if maxItemPage > 0 {
+			stashPageCount = maxItemPage
+		} else if stash.size > 0 {
+			stashPageCount = pageCountForSlotCount(stash.size)
+		}
+		owned = append(owned, stashItems...)
 	}
 	if inventory, inventoryLayout, inventorySource, ok := resolver.readInventorySaveDataList(memory, object, layout); ok {
 		inventoryItems := resolver.readSlotItemsWithLayout(memory, inventory.info, uniqueToItem, seen, LocationInventory, inventoryLayout)
@@ -505,12 +525,13 @@ func (resolver *Resolver) readObjectWithLayout(memory Memory, object uintptr, no
 	}
 	counts.TotalChests = counts.NormalChests + counts.StageChests
 	return InventorySnapshot{
-		Region:          region,
-		StageKey:        stageKey,
-		ReadAt:          now,
-		Gold:            gold,
-		StashPageCount:  stashPageCount,
-		InventorySlots:  inventorySlots,
+		Region:           region,
+		StageKey:         stageKey,
+		ReadAt:           now,
+		Gold:             gold,
+		StashPageCount:   stashPageCount,
+		HasMaterialStash: hasMaterialStash,
+		InventorySlots:   inventorySlots,
 		ChestAutomation: automation,
 		ChestTimers:     timers,
 		ChestCounts:     counts,
@@ -596,6 +617,30 @@ func pageCountForSlotCount(slotCount int) int {
 		return 0
 	}
 	return (slotCount + stashSlotsPerPage - 1) / stashSlotsPerPage
+}
+
+func (resolver *Resolver) readUnlockedStashPageCount(memory Memory) (int, bool) {
+	classes, ok := resolver.resolveClassByName(memory, "Stash")
+	if !ok || len(classes) == 0 {
+		return 0, false
+	}
+	for _, classPtr := range classes {
+		staticFields, ok := memory.ReadUintptr(classPtr + 0xB8)
+		if !ok || staticFields == 0 || !tbhmem.PlausibleAddress(staticFields) {
+			continue
+		}
+		// In Stash static fields, bjas (unlocked pages Dictionary<int, ...>) is at +0x28
+		bjas, ok := memory.ReadUintptr(staticFields + 0x28)
+		if !ok || bjas == 0 || !tbhmem.PlausibleAddress(bjas) {
+			continue
+		}
+		// In System.Collections.Generic.Dictionary<TKey, TValue>, _count is at +0x20
+		count, ok := memory.ReadInt32(bjas + 0x20)
+		if ok && count > 0 && count <= 20 {
+			return int(count), true
+		}
+	}
+	return 0, false
 }
 
 func readPtr(memory Memory, address uintptr) uintptr {

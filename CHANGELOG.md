@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-10-23
+
+### Fixed
+- Corrected stash page calculation to 49 slots per page (7x7 grid) instead of 100, ensuring items on stash pages 2 and 3 are mapped to their correct pages.
+- Resolved active unlocked stash page count directly from `TaskbarHero.System.Stash` static fields (`bjas`), displaying only unlocked stash pages (e.g. 3 pages) instead of pre-allocated list capacity.
+- Only display the Material Stash row in the Stash Value tooltip when material stash is unlocked and contains items.
+- Prevented redundant IL2CPP class discovery memory scans on warm snapshots when optional classes are absent.
+
+### Tests
+- Added test coverage for 49-slot stash page breakdowns and material stash visibility.
+
 ## [0.14.0] - 2026-10-23
 
 ### Added

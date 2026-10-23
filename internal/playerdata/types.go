@@ -87,6 +87,7 @@ type InventorySnapshot struct {
 	ReadAt          time.Time            `json:"read_at"`
 	Gold            uint64               `json:"gold"`
 	StashPageCount  int                  `json:"stash_page_count"`
+	HasMaterialStash bool                `json:"has_material_stash"`
 	InventorySlots  InventorySlotSummary `json:"inventory_slots"`
 	ChestAutomation ChestAutomation      `json:"chest_automation"`
 	ChestCounts     ChestCounts          `json:"chest_counts"`
