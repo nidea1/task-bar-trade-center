@@ -1,6 +1,9 @@
 package inventory
 
-import "github.com/nidea1/task-bar-trade-center/internal/playerdata"
+import (
+	"github.com/nidea1/task-bar-trade-center/internal/catalog"
+	"github.com/nidea1/task-bar-trade-center/internal/playerdata"
+)
 
 type ItemDescriptor struct {
 	Name           string `json:"name"`
@@ -49,6 +52,7 @@ type DashboardTotals struct {
 	InstantSellValue      float64         `json:"instant_sell_value"`
 	InventoryValue        float64         `json:"inventory_value"`
 	StashValue            float64         `json:"stash_value"`
+	MaterialStashValue    float64         `json:"material_stash_value"`
 	EquippedValue         float64         `json:"equipped_value"`
 	HeroEquippedValues    map[int]float64 `json:"hero_equipped_values"`
 	StashPageValues       map[int]float64 `json:"stash_page_values"`
@@ -115,6 +119,10 @@ type RefreshStatus struct {
 }
 
 type ChestDropSchedule struct {
+	NextCommonOpenSeconds int  `json:"next_common_open_seconds"`
+	NextStageOpenSeconds  int  `json:"next_stage_open_seconds"`
+	CommonOpenObserved    bool `json:"common_open_observed"`
+	StageOpenObserved     bool `json:"stage_open_observed"`
 	NextCommonDropSeconds int  `json:"next_common_drop_seconds"`
 	NextStageDropSeconds  int  `json:"next_stage_drop_seconds"`
 	CommonDropObserved    bool `json:"common_drop_observed"`
@@ -131,6 +139,10 @@ type ChestTimingConfig struct {
 }
 
 type InventoryFillEstimate struct {
+	NextCommonOpenSeconds      int               `json:"next_common_open_seconds"`
+	NextStageOpenSeconds       int               `json:"next_stage_open_seconds"`
+	CommonOpenObserved         bool              `json:"common_open_observed"`
+	StageOpenObserved          bool              `json:"stage_open_observed"`
 	Region                     playerdata.Region `json:"region,omitempty"`
 	Available                  bool              `json:"available"`
 	Fills                      bool              `json:"fills"`
@@ -160,23 +172,32 @@ type InventoryFillEstimate struct {
 }
 
 type DashboardState struct {
-	UpdatedAt      string                     `json:"updated_at"`
-	SnapshotReadAt string                     `json:"snapshot_read_at"`
-	MarketScope    string                     `json:"market_scope"`
-	CurrencyCode   string                     `json:"currency_code"`
-	PricePrefix    string                     `json:"price_prefix"`
-	PriceSuffix    string                     `json:"price_suffix"`
-	Gold           uint64                     `json:"gold"`
-	Totals         DashboardTotals            `json:"totals"`
-	Items          []DashboardItem            `json:"items"`
-	MostValuable   []DashboardItem            `json:"most_valuable"`
-	BestToSellNow  []DashboardItem            `json:"best_to_sell_now"`
-	Duplicates     []DashboardItem            `json:"duplicates"`
-	Equipped       []DashboardItem            `json:"equipped"`
-	MissingPrices  []DashboardItem            `json:"missing_prices"`
-	Refresh        RefreshStatus              `json:"refresh"`
-	Translations   map[string]string          `json:"translations"`
-	TradeSlots     []playerdata.TradeShipSlot `json:"trade_slots"`
-	InventoryFill  InventoryFillEstimate      `json:"inventory_fill"`
-	ChestCounts    playerdata.ChestCounts     `json:"chest_counts"`
+	NotificationTargets []NotificationTargetProgress `json:"notification_targets"`
+	Catalog             catalog.Status               `json:"catalog"`
+	UpdatedAt           string                       `json:"updated_at"`
+	SnapshotReadAt      string                       `json:"snapshot_read_at"`
+	MarketScope         string                       `json:"market_scope"`
+	CurrencyCode        string                       `json:"currency_code"`
+	PricePrefix         string                       `json:"price_prefix"`
+	PriceSuffix         string                       `json:"price_suffix"`
+	Gold                uint64                       `json:"gold"`
+	Totals              DashboardTotals              `json:"totals"`
+	Items               []DashboardItem              `json:"items"`
+	MostValuable        []DashboardItem              `json:"most_valuable"`
+	BestToSellNow       []DashboardItem              `json:"best_to_sell_now"`
+	Duplicates          []DashboardItem              `json:"duplicates"`
+	Equipped            []DashboardItem              `json:"equipped"`
+	MissingPrices       []DashboardItem              `json:"missing_prices"`
+	Refresh             RefreshStatus                `json:"refresh"`
+	Translations        map[string]string            `json:"translations"`
+	TradeSlots          []playerdata.TradeShipSlot   `json:"trade_slots"`
+	InventoryFill       InventoryFillEstimate        `json:"inventory_fill"`
+	ChestCounts         playerdata.ChestCounts       `json:"chest_counts"`
+}
+
+type NotificationTargetProgress struct {
+	ItemID int    `json:"item_id"`
+	Name   string `json:"name"`
+	Count  int    `json:"count"`
+	Goal   int    `json:"goal"`
 }

@@ -15,7 +15,7 @@ The application operates on a hybrid architecture designed for minimal system im
 
 - **Frontend (Wails + React + TypeScript + Vite):** A modern, high-performance desktop UI that displays your real-time portfolio value, active item details, pricing sync status, and automated item sale recommendations.
 - **Backend (Go):** 
-  - **Memory Hook & Scanner:** Attaches to `TaskBarHero.exe` to read player inventory state and active item coordinates.
+  - **Memory Hook & Scanner:** Attaches to `TaskBarHero.exe` to read player inventory state and active item coordinates. Startup class/object discovery is batched, scan buffers are reused, and valid live objects are read directly between discoveries. See [memory scanning](docs/memory-scanning.md).
   - **Steam SCM API Scheduler:** Safely queues price requests with adaptive rate-limiting, queuing, and backoffs to prevent Steam's HTTP 429 rate limit.
   - **Windows Shell Integration:** Manages system tray icons, handles background log rotation (capped at 5MB), and registers low-level Win32 notifications.
 
@@ -26,12 +26,15 @@ The application operates on a hybrid architecture designed for minimal system im
 - **📊 Real-Time Inventory Dashboard:**
   - **Customizable Hotkey Toggle:** Reassign the system-wide shortcut key for toggling the dashboard (e.g. `Ctrl + F2`, `Alt + Shift + K`) using the pulsing keyboard capturer UI (previously fixed to `F2`).
   - **Automatic Game Scale:** The overlay follows the game tooltip’s actual position and scale automatically; no manual scale setting is required.
-  - **Portfolio Valuation:** Tracks total value (Suggested Listing vs. Instant Sell) of your inventory, stash pages, equipped gear, and gold.
+  - **Portfolio Valuation:** Tracks total value (Suggested Listing vs. Instant Sell) of your inventory, stash pages, equipped gear, and gold. Hover over Stash Value for each page's suggested listing value, occupied slots, material-stash subtotal, and combined total.
   - **All Marketable Items:** A searchable list of all marketable items with locations, count, item grade/type, confidence metrics, and pricing.
   - **Best to Sell Now:** Uses an algorithm to score and suggest which items are best to sell based on sales volume, spread, and market demand, with advanced dashboard filters for class, type, search query, and equipped state.
   - **Sync & Queue Status:** Visually shows background API sync progress with ETA, backoff countdowns, and queue tracking.
   - **Missing Prices Tracker:** Flags items that haven't been priced yet.
   - **Region-Aware Chest Forecast:** Detects the current region automatically and uses 3/5 minute normal/blue chest drops in normal regions or 4/6 minutes in PlagueLands (Nightmare, Hell, and Torment), including separate auto-open stats.
+  - **Live Chest Progress:** The Inventory Fill tooltip shows validated opening-bar countdowns and queued chest counts when available, including the player's automatic-opening on/off setting. Unknown or stale timers retain an estimated opening interval.
+  - **Automatic Item Catalog:** Checks the installed game's item and language assets whenever the game connects. Validated updates are cached locally; failed updates retain the last good catalog.
+  - **Item Quantities:** Tracks stack quantities and material-stash items for inventory values and notification targets.
 - **👁️ Cursor-Attached Price Overlay HUD:**
   - Automatically draws a compact pricing HUD near the game tooltip as you hover over items in-game.
   - **Detail Mode:** Shows comprehensive statistics including suggested pricing, weekly averages, daily volume, trend percentages, spreads, buy/sell orders, and a deal assessment tag (e.g. "Undervalued", "Overvalued").
@@ -40,6 +43,8 @@ The application operates on a hybrid architecture designed for minimal system im
 - **🔔 Windows Notifications:**
   - **Obtained Items:** Immediately alerts you when a marketable item is obtained or dropped (with custom high-quality item icons cached directly from Steam), even when the dashboard window is closed.
   - **🚢 Steam Trade Ship Cooldowns:** Monitors voyage status inside active ports and triggers system tray notifications when a Trade Ship returns, freeing up trade slots.
+  - **Inventory Warning:** Select a warning threshold or turn it off in Dashboard Settings. Repeated warnings are suppressed.
+  - **Existing Item Targets:** Stored quantity targets remain supported across inventory, material stash, stash, and equipped items. Moving an item between locations does not count as acquiring another item; the dashboard no longer includes a target editor.
 - **🌐 Localization:**
   - Supports 17+ languages (English, German, French, Italian, Spanish, Dutch, Portuguese, Finnish, Japanese, Korean, Simplified Chinese, Hindi, Indonesian, Thai, Vietnamese, Polish, and Turkish).
 - **⚙️ Tray Shell Companion:**
@@ -134,6 +139,7 @@ Config files, logs, and pricing cache are stored under your local AppData folder
 %LOCALAPPDATA%\Task Bar Trade Center\config\game-layout-cache.json - Cached game memory layout downloaded from GitHub
 %LOCALAPPDATA%\Task Bar Trade Center\logs\tbtc.log                 - Debug logs (automatically rotated, capped at 5MB)
 %LOCALAPPDATA%\Task Bar Trade Center\cache\price-cache.json        - Persisted Steam SCM price cache
+%LOCALAPPDATA%\Task Bar Trade Center\cache\item-catalog.json       - Validated installed-game item catalog
 ```
 
 ---

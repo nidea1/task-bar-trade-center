@@ -25,12 +25,15 @@ const (
 type chestRuneDefinition struct {
 	IDs             []int32
 	SecondsPerStage int
+	UnlockSeconds   int
 	MaxStage        int
 	Kind            chestRuneKind
 	Name            string
 }
 
 var chestRuneDefinitions = []chestRuneDefinition{
+	{IDs: []int32{13002}, MaxStage: 1, Kind: chestRuneKindCommon, UnlockSeconds: 300},
+	{IDs: []int32{15001}, MaxStage: 1, Kind: chestRuneKindStage, UnlockSeconds: 600},
 	{
 		IDs:             []int32{130021},
 		SecondsPerStage: 3,
@@ -61,6 +64,15 @@ var chestRuneDefinitions = []chestRuneDefinition{
 	},
 }
 
+// RuneInfoData + RuneLevelInfoData, verified against TaskBarHero 1.3.0.
+// Plague unlocks and reductions are independent of normal-region runes.
+var plagueChestRuneDefinitions = []chestRuneDefinition{
+	{IDs: []int32{1163}, MaxStage: 1, Kind: chestRuneKindCommon, UnlockSeconds: 600},
+	{IDs: []int32{11631, 11632, 11633}, SecondsPerStage: 4, MaxStage: 5, Kind: chestRuneKindCommon},
+	{IDs: []int32{1165}, MaxStage: 1, Kind: chestRuneKindStage, UnlockSeconds: 1200},
+	{IDs: []int32{11651, 11652, 11653}, SecondsPerStage: 8, MaxStage: 5, Kind: chestRuneKindStage},
+}
+
 type chestRuneEntry struct {
 	index  int
 	object uintptr
@@ -83,37 +95,45 @@ type chestRuneScanResult struct {
 }
 
 func (resolver *Resolver) readChestAutomationWithLayout(memory Memory, object uintptr, layout saveDataLayout) ChestAutomation {
-	definitionsByID := chestRuneDefinitionsByID()
+	return resolver.readChestRuneAutomation(memory, object, chestRuneDefinitions)
+}
+
+func (resolver *Resolver) readChestRuneAutomation(memory Memory, object uintptr, definitions []chestRuneDefinition) ChestAutomation {
+	definitionsByID := chestRuneDefinitionsByID(definitions)
 	result := resolver.scanChestRuneLists(memory, object, definitionsByID)
 	automation := ChestAutomation{
 		Diagnostics: result.diagnostics,
 	}
 
 	for _, entry := range result.entries {
+		if entry.def.UnlockSeconds > 0 {
+			if entry.def.Kind == chestRuneKindCommon {
+				automation.CommonBaseAutoOpenSeconds = entry.def.UnlockSeconds
+				automation.HasCommonAutoOpenRune = entry.level > 0
+			} else {
+				automation.StageBaseAutoOpenSeconds = entry.def.UnlockSeconds
+				automation.HasStageAutoOpenRune = entry.level > 0
+			}
+			continue
+		}
 		reduction := entry.level * entry.def.SecondsPerStage
 		switch entry.def.Kind {
 		case chestRuneKindCommon:
 			automation.CommonRuneReductionSeconds += reduction
-			if entry.runeID == 130021 && entry.level > 0 {
-				automation.HasCommonAutoOpenRune = true
-			}
 		case chestRuneKindStage:
 			automation.StageRuneReductionSeconds += reduction
-			if entry.runeID == 150011 && entry.level > 0 {
-				automation.HasStageAutoOpenRune = true
-			}
 		}
 	}
 	automation.CommonReductionBuffSummary = formatChestRuneBuffSummaryForKind(result.entries, chestRuneKindCommon)
 	automation.StageReductionBuffSummary = formatChestRuneBuffSummaryForKind(result.entries, chestRuneKindStage)
 	automation.ReductionBuffSummary = formatChestRuneBuffSummary(automation.CommonReductionBuffSummary, automation.StageReductionBuffSummary)
 
-	maxReductions := maxChestRuneReductionsByKind()
+	maxReductions := maxChestRuneReductionsByKind(definitions)
 	automation.CommonRuneReductionSeconds = clampChestRuneReduction(automation.CommonRuneReductionSeconds, maxReductions[chestRuneKindCommon])
 	automation.StageRuneReductionSeconds = clampChestRuneReduction(automation.StageRuneReductionSeconds, maxReductions[chestRuneKindStage])
 
-	commonConfigured := chestRuneKindConfigured(chestRuneKindCommon)
-	stageConfigured := chestRuneKindConfigured(chestRuneKindStage)
+	commonConfigured := chestRuneKindConfigured(definitions, chestRuneKindCommon)
+	stageConfigured := chestRuneKindConfigured(definitions, chestRuneKindStage)
 	commonResolved := commonConfigured && result.resolved[chestRuneKindCommon]
 	stageResolved := stageConfigured && result.resolved[chestRuneKindStage]
 	automation.RuneResolved = commonResolved && stageResolved
@@ -320,9 +340,9 @@ func (scan chestRuneListScan) onlyKind(kind chestRuneKind) chestRuneListScan {
 	return filtered
 }
 
-func chestRuneDefinitionsByID() map[int32]chestRuneDefinition {
+func chestRuneDefinitionsByID(definitions []chestRuneDefinition) map[int32]chestRuneDefinition {
 	definitionsByID := make(map[int32]chestRuneDefinition)
-	for _, definition := range chestRuneDefinitions {
+	for _, definition := range definitions {
 		for _, id := range definition.IDs {
 			definitionsByID[id] = definition
 		}
@@ -330,16 +350,16 @@ func chestRuneDefinitionsByID() map[int32]chestRuneDefinition {
 	return definitionsByID
 }
 
-func maxChestRuneReductionsByKind() map[chestRuneKind]int {
+func maxChestRuneReductionsByKind(definitions []chestRuneDefinition) map[chestRuneKind]int {
 	maxReductions := make(map[chestRuneKind]int)
-	for _, definition := range chestRuneDefinitions {
+	for _, definition := range definitions {
 		maxReductions[definition.Kind] += len(definition.IDs) * definition.MaxStage * definition.SecondsPerStage
 	}
 	return maxReductions
 }
 
-func chestRuneKindConfigured(kind chestRuneKind) bool {
-	for _, definition := range chestRuneDefinitions {
+func chestRuneKindConfigured(definitions []chestRuneDefinition, kind chestRuneKind) bool {
+	for _, definition := range definitions {
 		if definition.Kind == kind {
 			return true
 		}
@@ -357,7 +377,7 @@ func clampChestRuneReduction(value int, maxValue int) int {
 func formatChestRuneBuffSummaryForKind(entries []chestRuneEntry, kind chestRuneKind) string {
 	parts := make([]string, 0)
 	for _, entry := range entries {
-		if entry.def.Kind != kind {
+		if entry.def.Kind != kind || entry.def.UnlockSeconds > 0 {
 			continue
 		}
 		reduction := entry.level * entry.def.SecondsPerStage

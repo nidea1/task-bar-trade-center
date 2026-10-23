@@ -79,10 +79,12 @@ type App struct {
 	gameReady               atomic.Bool
 
 	// Caches and databases
-	allItemMap   map[int]catalog.ItemConfig
-	itemMap      map[int]catalog.ItemConfig
-	priceCache   map[string]market.MarketData
-	priceCacheMu sync.RWMutex
+	catalogMu     sync.RWMutex
+	catalogStatus catalog.Status
+	allItemMap    map[int]catalog.ItemConfig
+	itemMap       map[int]catalog.ItemConfig
+	priceCache    map[string]market.MarketData
+	priceCacheMu  sync.RWMutex
 
 	iconMetadata   map[string]iconMetadataEntry
 	iconMetadataMu sync.RWMutex
@@ -186,7 +188,7 @@ func getCurrentMarketAnalysis() (market.MarketAnalysis, bool) {
 func getCurrentItemName() string {
 	itemID := activeApp.activeItemID.Load()
 	if itemID > 0 {
-		if config, exists := activeApp.allItemMap[int(itemID)]; exists {
+		if config, exists := allCatalogItems()[int(itemID)]; exists {
 			lang := currentDisplayLanguage()
 			if name, ok := config.Name[lang]; ok && name != "" {
 				return name

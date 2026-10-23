@@ -186,6 +186,7 @@
   "hud.weekly_average": "Weekly Avg",
   "location.equipped": "Equipped",
   "location.inventory": "Inventory",
+  "location.material_stash": "Material Stash",
   "location.stash": "Stash",
   "menu.check_updates": "Check for updates…",
   "menu.clear_cache": "Clear cache",
@@ -284,5 +285,16 @@
   "value.undervalued": "Undervalued",
   "value.units": "units",
   "value.verified": "Verified",
-  "value.wide": "Wide"
+  "value.wide": "Wide",
+  "dashboard.chest_queue": "Waiting chests",
+  "dashboard.inventory_warning": "Warn before full",
+  "dashboard.inventory_warning_hint": "Alerts once when the estimated fill time crosses the selected threshold.",
+  "dashboard.stash_pages": "Stash pages",
+  "dashboard.stash_items": "items",
+  "dashboard.stash_no_pages": "No stash pages detected.",
+  "dashboard.material_stash": "Material stash",
+  "dashboard.stash_value_note": "Suggested listing prices. Items without a price are excluded.",
+  "value.inactive": "Inactive",
+  "value.off": "Off",
+  "value.minutes": "minutes"
 }

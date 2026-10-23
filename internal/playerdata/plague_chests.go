@@ -8,8 +8,9 @@ import (
 
 // Verified against the game's EAccountStatus and OpenBoxStats getter. Plague
 // chests have their own unlock times and reductions, separate from normal runes.
-func (resolver *Resolver) readPlagueChestAutomation(memory Memory, now time.Time) ChestAutomation {
-	if automation, ok := readPlagueAccountStatus(memory, resolver.accountStatusObject); ok {
+func (resolver *Resolver) readPlagueChestAutomation(memory Memory, player uintptr, now time.Time) ChestAutomation {
+	runes := resolver.readChestRuneAutomation(memory, player, plagueChestRuneDefinitions)
+	if automation, ok := readPlagueAccountStatus(memory, resolver.accountStatusObject); ok && plagueAccountMatchesRunes(automation, runes) {
 		return automation
 	}
 	if resolver.accountStatusAttemptedAt.IsZero() || now.Sub(resolver.accountStatusAttemptedAt) >= 5*time.Second {
@@ -18,7 +19,7 @@ func (resolver *Resolver) readPlagueChestAutomation(memory Memory, now time.Time
 		if ok {
 			for _, refs := range resolver.scanClassReferences(memory, classes) {
 				for _, object := range refs {
-					if automation, ok := readPlagueAccountStatus(memory, object); ok {
+					if automation, ok := readPlagueAccountStatus(memory, object); ok && plagueAccountMatchesRunes(automation, runes) {
 						resolver.accountStatusObject = object
 						return automation
 					}
@@ -26,7 +27,22 @@ func (resolver *Resolver) readPlagueChestAutomation(memory Memory, now time.Time
 			}
 		}
 	}
-	return ChestAutomation{Diagnostics: []string{"PlagueLands chest automation could not be resolved"}}
+	runes.Diagnostics = append(runes.Diagnostics, "matching PlagueLands AccountStatus unavailable; reading PlagueLands RuneSaveData unlocks and reductions")
+	return runes
+}
+
+// Validate aggregate account data against the player's current rune state.
+// An unrelated object's dictionary can contain otherwise valid values.
+func plagueAccountMatchesRunes(account, runes ChestAutomation) bool {
+	if !runes.RuneResolved {
+		return true
+	}
+	return account.HasCommonAutoOpenRune == runes.HasCommonAutoOpenRune &&
+		account.HasStageAutoOpenRune == runes.HasStageAutoOpenRune &&
+		account.CommonRuneReductionSeconds == runes.CommonRuneReductionSeconds &&
+		account.StageRuneReductionSeconds == runes.StageRuneReductionSeconds &&
+		(!runes.HasCommonAutoOpenRune || account.CommonBaseAutoOpenSeconds == runes.CommonBaseAutoOpenSeconds) &&
+		(!runes.HasStageAutoOpenRune || account.StageBaseAutoOpenSeconds == runes.StageBaseAutoOpenSeconds)
 }
 
 func readPlagueAccountStatus(memory Memory, object uintptr) (ChestAutomation, bool) {

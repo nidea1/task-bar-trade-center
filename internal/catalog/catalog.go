@@ -11,12 +11,13 @@ import (
 var embeddedItemsJSON []byte
 
 type ItemConfig struct {
-	ID         int               `json:"id"`
-	Name       map[string]string `json:"name"`
-	Grade      string            `json:"grade"`
-	Type       string            `json:"type"`
-	Gear       *string           `json:"gear"`
-	Marketable bool              `json:"marketable"`
+	ID             int               `json:"id"`
+	Name           map[string]string `json:"name"`
+	Grade          string            `json:"grade"`
+	Type           string            `json:"type"`
+	Gear           *string           `json:"gear"`
+	Marketable     bool              `json:"marketable"`
+	MarketHashName string            `json:"market_hash_name,omitempty"`
 }
 
 func LoadItems() ([]ItemConfig, error) {

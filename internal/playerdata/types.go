@@ -5,9 +5,10 @@ import "time"
 type Location string
 
 const (
-	LocationInventory Location = "inventory"
-	LocationStash     Location = "stash"
-	LocationEquipped  Location = "equipped"
+	LocationInventory     Location = "inventory"
+	LocationStash         Location = "stash"
+	LocationMaterialStash Location = "material_stash"
+	LocationEquipped      Location = "equipped"
 )
 
 type ItemMetadata struct {
@@ -15,12 +16,20 @@ type ItemMetadata struct {
 }
 
 type OwnedItem struct {
+	Quantity        int      `json:"quantity,omitempty"`
 	ItemID          int      `json:"item_id"`
 	UniqueID        uint64   `json:"unique_id"`
 	Location        Location `json:"location"`
 	EquippedHeroKey int      `json:"equipped_hero_key,omitempty"`
 	Marketable      bool     `json:"marketable"`
 	SlotIndex       int      `json:"slot_index"`
+}
+
+func (item OwnedItem) Units() int {
+	if item.Quantity > 0 {
+		return item.Quantity
+	}
+	return 1
 }
 
 type TradeShipSlot struct {
@@ -58,6 +67,20 @@ type ChestCounts struct {
 	TotalChests  int `json:"total_chests"`
 }
 
+type ChestTimer struct {
+	QueueCount       int     `json:"queue_count"`
+	QueueResolved    bool    `json:"queue_resolved"`
+	Available        bool    `json:"available"`
+	Enabled          bool    `json:"enabled"`
+	DurationSeconds  int     `json:"duration_seconds"`
+	RemainingSeconds float64 `json:"remaining_seconds"`
+}
+
+type ChestTimers struct {
+	Common ChestTimer `json:"common"`
+	Stage  ChestTimer `json:"stage"`
+}
+
 type InventorySnapshot struct {
 	Region          Region               `json:"region,omitempty"`
 	StageKey        int                  `json:"stage_key,omitempty"`
@@ -67,6 +90,7 @@ type InventorySnapshot struct {
 	InventorySlots  InventorySlotSummary `json:"inventory_slots"`
 	ChestAutomation ChestAutomation      `json:"chest_automation"`
 	ChestCounts     ChestCounts          `json:"chest_counts"`
+	ChestTimers     ChestTimers          `json:"chest_timers"`
 	Items           []OwnedItem          `json:"items"`
 	TradeSlots      []TradeShipSlot      `json:"trade_slots"`
 }

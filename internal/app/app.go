@@ -198,6 +198,7 @@ func configureGameProcess(pid uint32, processHandle uintptr, gameAssemblyBase ui
 	resetMarketableInventoryNotifications()
 	resetChestDropTracker()
 	resetInventoryFullNotification()
+	resetAdvancedNotifications()
 	triggerSavePollNow = false
 	triggerSavePollSource = ""
 	triggerSavePollHasBoxDrop = false
@@ -207,6 +208,7 @@ func prepareGameSession(processHandle uintptr, gameAssemblyBase uintptr) bool {
 	setAppStatus(AppStatusPreparing)
 	resetRuntimeForGamePreparation()
 	logPrintln("[PREPARE] Resolving game memory and inventory state...")
+	refreshInstalledCatalog(processHandle)
 
 	resultCh := resolveInventoryDashboardUntilReady(processHandle, gameAssemblyBase)
 	timeout := time.NewTimer(initialInventoryPrepareTimeout)
@@ -329,7 +331,7 @@ func watchHoveredItems(pHandle uintptr, gameAssemblyBase uintptr) {
 			lastID = currentItemID
 			activeApp.activeItemID.Store(currentItemID)
 			if currentItemID > 0 {
-				if config, exists := activeApp.itemMap[int(currentItemID)]; exists {
+				if config, exists := marketCatalogItems()[int(currentItemID)]; exists {
 					scope := market.CurrentScope()
 					lang := currentDisplayLanguage()
 					name := config.Name[lang]
@@ -413,6 +415,7 @@ func resetGameProcess(setWaitingStatus bool) {
 	activeApp.tooltipRectAOBResolver.Reset()
 	resetChestDropTracker()
 	resetInventoryFullNotification()
+	resetAdvancedNotifications()
 	activeApp.inventorySnapshotMu.Lock()
 	activeApp.inventorySnapshotInFlight = nil
 	activeApp.inventorySnapshotBackoffUntil = time.Time{}
@@ -429,7 +432,7 @@ func resetGameProcess(setWaitingStatus bool) {
 }
 
 func marketableItemExists(itemID int32) bool {
-	item, exists := activeApp.allItemMap[int(itemID)]
+	item, exists := allCatalogItems()[int(itemID)]
 	return exists && item.Marketable
 }
 

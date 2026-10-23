@@ -73,7 +73,7 @@ func refreshInventoryDashboardState(reason string) {
 }
 
 func publishInventoryDashboardState(state inventory.DashboardState, reason string) {
-	state.Refresh = currentInventoryRefreshStatus()
+	state = withCurrentDashboardRuntimeFields(state)
 	activeApp.inventoryMu.Lock()
 	activeApp.inventoryDashboardState = state
 	activeApp.inventoryMu.Unlock()
@@ -102,6 +102,7 @@ func currentInventoryDashboardShellState() inventory.DashboardState {
 }
 
 func withCurrentDashboardRuntimeFields(state inventory.DashboardState) inventory.DashboardState {
+	state.Catalog = currentCatalogStatus()
 	scope := market.CurrentScope()
 	state.MarketScope = market.FormatScope(scope)
 	state.CurrencyCode = scope.Currency.Code
@@ -113,10 +114,11 @@ func withCurrentDashboardRuntimeFields(state inventory.DashboardState) inventory
 	snapshot := activeApp.lastSnapshot
 	activeApp.inventoryMu.Unlock()
 	if snapshot != nil {
+		state.NotificationTargets = notificationProgress(*snapshot)
 		now := time.Now()
 		timing := currentChestTimingConfig()
 		state.UpdatedAt = now.Format(time.RFC3339)
-		state.InventoryFill = inventory.BuildInventoryFillEstimateWithTiming(*snapshot, timing, currentInventoryFillDropScheduleWithTiming(now, timing))
+		state.InventoryFill = inventory.BuildInventoryFillEstimateWithTiming(forecastSnapshot(*snapshot, now), timing, currentInventoryFillDropScheduleWithTiming(now, timing))
 	}
 	return state
 }
@@ -165,6 +167,8 @@ func buildInventoryDashboardState(snapshot playerdata.InventorySnapshot) invento
 		InventoryFillTiming:   timing,
 	})
 	state.Translations = currentTranslations()
+	state.Catalog = currentCatalogStatus()
+	state.NotificationTargets = notificationProgress(snapshot)
 	return state
 }
 
@@ -308,6 +312,7 @@ func storeInventorySnapshot(snapshot playerdata.InventorySnapshot) {
 	activeApp.lastSnapshot = &snapshot
 	activeApp.inventoryMu.Unlock()
 	updateChestDropTracker(nil, &snapshot, "", snapshot.ReadAt)
+	updateAdvancedNotifications(snapshot)
 }
 
 func currentInventoryResolver() *playerdata.Resolver {
@@ -320,17 +325,17 @@ func currentInventoryResolver() *playerdata.Resolver {
 }
 
 func playerItemMetadata() map[int]playerdata.ItemMetadata {
-	metadata := make(map[int]playerdata.ItemMetadata, len(activeApp.allItemMap))
-	for id := range activeApp.allItemMap {
-		_, marketable := activeApp.itemMap[id]
+	metadata := make(map[int]playerdata.ItemMetadata, len(allCatalogItems()))
+	for id := range allCatalogItems() {
+		_, marketable := marketCatalogItems()[id]
 		metadata[id] = playerdata.ItemMetadata{Marketable: marketable}
 	}
 	return metadata
 }
 
 func inventoryItemCatalog(scope market.MarketScope) map[int]inventory.ItemDescriptor {
-	catalog := make(map[int]inventory.ItemDescriptor, len(activeApp.allItemMap))
-	for id, config := range activeApp.allItemMap {
+	catalog := make(map[int]inventory.ItemDescriptor, len(allCatalogItems()))
+	for id, config := range allCatalogItems() {
 		name := config.Name[currentDisplayLanguage()]
 		if name == "" {
 			name = config.Name["en-US"]
@@ -339,7 +344,7 @@ func inventoryItemCatalog(scope market.MarketScope) map[int]inventory.ItemDescri
 		if config.Gear != nil {
 			gear = *config.Gear
 		}
-		marketableConfig, marketable := activeApp.itemMap[id]
+		marketableConfig, marketable := marketCatalogItems()[id]
 		descriptor := inventory.ItemDescriptor{
 			Name:       name,
 			Grade:      config.Grade,
@@ -363,7 +368,7 @@ func inventoryItemCatalog(scope market.MarketScope) map[int]inventory.ItemDescri
 }
 
 func (provider cacheQuoteProvider) Quote(itemID int) (inventory.PriceQuote, bool) {
-	config, exists := activeApp.itemMap[itemID]
+	config, exists := marketCatalogItems()[itemID]
 	if !exists {
 		return inventory.PriceQuote{}, false
 	}
@@ -426,6 +431,7 @@ func monitorInventoryNotifications(processHandle uintptr) {
 
 	// Run first save poll immediately to seed the initial dashboard state on attach
 	pollInventoryNotifications("")
+	lastPeriodicPoll := time.Now()
 
 	for {
 		time.Sleep(logPollInterval)
@@ -437,10 +443,11 @@ func monitorInventoryNotifications(processHandle uintptr) {
 		pollLogManagerNotifications()
 
 		// 2. Event-driven Save snapshot poll (only when stage ends)
-		if triggerSavePollNow {
+		if triggerSavePollNow || time.Since(lastPeriodicPoll) >= 5*time.Second {
 			source := triggerSavePollSource
 			hasBoxDrop := triggerSavePollHasBoxDrop
 			pollInventoryNotifications(source)
+			lastPeriodicPoll = time.Now()
 			if hasBoxDrop && lastPollErr == nil {
 				logInventoryFillEstimate()
 			}
@@ -918,7 +925,7 @@ func countInventoryChestItems(snapshot *playerdata.InventorySnapshot) inventoryC
 }
 
 func inventoryChestKind(itemID int) string {
-	config, exists := activeApp.allItemMap[itemID]
+	config, exists := allCatalogItems()[itemID]
 	if !exists || config.Type != "STAGEBOX" {
 		return ""
 	}
@@ -1011,6 +1018,7 @@ func inventorySnapshotChanged(a, b *playerdata.InventorySnapshot) bool {
 			return true
 		}
 		if match.ItemID != item.ItemID ||
+			match.Quantity != item.Quantity ||
 			match.Location != item.Location ||
 			match.EquippedHeroKey != item.EquippedHeroKey ||
 			match.SlotIndex != item.SlotIndex ||
@@ -1125,7 +1133,7 @@ func currentInventoryPriceQueue() *inventory.RefreshQueue {
 		activeApp.inventoryPriceQueue = inventory.NewRefreshQueue(fetchInventoryMarketPrice, isSteamRateLimitError)
 		activeApp.inventoryPriceQueue.OnBackoff = func(itemID int, err error, queueRemaining int, backoffUntil time.Time) {
 			var marketHashName string
-			config, exists := activeApp.itemMap[itemID]
+			config, exists := marketCatalogItems()[itemID]
 			if exists {
 				marketHashName = buildMarketHashName(config)
 			}
@@ -1163,7 +1171,7 @@ func currentInventoryRefreshStatus() inventory.RefreshStatus {
 }
 
 func fetchInventoryMarketPrice(_ context.Context, itemID int) error {
-	config, exists := activeApp.itemMap[itemID]
+	config, exists := marketCatalogItems()[itemID]
 	if !exists {
 		return nil
 	}
@@ -1223,9 +1231,10 @@ func rebuildDashboardState(reason string) (inventory.DashboardState, bool) {
 		state.PricePrefix = scope.Currency.PricePrefix
 		state.PriceSuffix = scope.Currency.PriceSuffix
 		state.Translations = currentTranslations()
-		activeApp.inventoryDashboardState = state
 		activeApp.inventoryMu.Unlock()
 
+		state = withCurrentDashboardRuntimeFields(state)
+		storeInventoryDashboardState(state)
 		writeInventoryDashboardState(state)
 		callDashboardUpdated(state)
 		return state, state.UpdatedAt != ""
@@ -1245,6 +1254,7 @@ func rebuildDashboardState(reason string) (inventory.DashboardState, bool) {
 		InventoryFillTiming:   timing,
 	})
 	state.Translations = currentTranslations()
+	state = withCurrentDashboardRuntimeFields(state)
 
 	activeApp.inventoryMu.Lock()
 	activeApp.inventoryDashboardState = state
@@ -1492,7 +1502,7 @@ func knownMarketableItemID(p *tbhmem.Process, address uintptr) (int, bool) {
 	}
 	itemID := int(value)
 	activeApp.inventoryMu.Lock()
-	_, exists := activeApp.itemMap[itemID]
+	_, exists := marketCatalogItems()[itemID]
 	activeApp.inventoryMu.Unlock()
 	return itemID, exists
 }
@@ -1534,8 +1544,8 @@ func logInventoryInteractionPayloadMiss(p *tbhmem.Process, logDataPtr uintptr, c
 				val, ok := p.ReadInt32(addr + offset)
 				if ok && val >= 100000 && val <= 999999 {
 					activeApp.inventoryMu.Lock()
-					_, exists := activeApp.itemMap[int(val)]
-					_, existsAll := activeApp.allItemMap[int(val)]
+					_, exists := marketCatalogItems()[int(val)]
+					_, existsAll := allCatalogItems()[int(val)]
 					activeApp.inventoryMu.Unlock()
 					if exists {
 						logPrintf("[NOTIFY:DEEP] FOUND marketable item ID %d (*) at %s.offset@0x%X\n", val, path, offset)
@@ -1611,7 +1621,7 @@ func nestedLogPayloadCandidates(p *tbhmem.Process, objectPtr uintptr, basePath s
 		}
 		marker := ""
 		activeApp.inventoryMu.Lock()
-		if _, exists := activeApp.itemMap[int(value)]; exists {
+		if _, exists := marketCatalogItems()[int(value)]; exists {
 			marker = "*"
 		}
 		activeApp.inventoryMu.Unlock()
@@ -1622,7 +1632,7 @@ func nestedLogPayloadCandidates(p *tbhmem.Process, objectPtr uintptr, basePath s
 
 func recordDirectMarketableItemNotification(itemID int, source string) (marketableInventoryItem, bool) {
 	activeApp.inventoryMu.Lock()
-	config, exists := activeApp.itemMap[itemID]
+	config, exists := marketCatalogItems()[itemID]
 	activeApp.inventoryMu.Unlock()
 	if !exists {
 		logPrintf("[NOTIFY] Ignored %s item ID %d because it is not marketable\n", source, itemID)
@@ -1812,7 +1822,7 @@ func pollLogManagerNotifications() {
 
 					if isReady {
 						activeApp.inventoryMu.Lock()
-						_, isValidMarketable := activeApp.itemMap[int(val)]
+						_, isValidMarketable := marketCatalogItems()[int(val)]
 						activeApp.inventoryMu.Unlock()
 
 						if isValidMarketable {

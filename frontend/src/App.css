@@ -2968,4 +2968,7 @@
   border-bottom-color: #ffffff;
 }
 
-
+.stash-value-tooltip { min-width: 250px; max-width: 300px; }
+.stash-page-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 6px 0; font-size: 10px; }
+.stash-page-row small { display: block; font-size: 9px; margin-top: 2px; }
+.stash-page-row strong { white-space: nowrap; }

@@ -25,6 +25,8 @@ export interface RuntimeStateInfo {
 }
 
 export interface DashboardSettings {
+	inventory_warning_minutes: number;
+	notification_targets: NotificationTarget[];
     theme_mode: ThemeMode;
     price_mode: PriceMode;
     rarity_filter: string;
@@ -40,6 +42,8 @@ export interface DashboardSettings {
     hotkey_vk: number;
     game_scale: number;
 }
+
+export interface NotificationTarget { item_id: number; count: number; }
 
 export interface RarityMeta {
     rank: number;
@@ -102,6 +106,10 @@ export interface DashboardFooterInfo {
 }
 
 export interface InventoryFillEstimate {
+	next_common_open_seconds: number;
+	next_stage_open_seconds: number;
+	common_open_observed: boolean;
+	stage_open_observed: boolean;
 	region?: "normal" | "plaguelands";
     available: boolean;
     fills: boolean;
@@ -131,6 +139,8 @@ export interface InventoryFillEstimate {
 }
 
 export interface DashboardState {
+	catalog?: { state: string; message?: string; item_count: number; added: number; updated_at?: string };
+	notification_targets?: Array<{ item_id: number; name: string; count: number; goal: number }>;
     updated_at: string;
     snapshot_read_at: string;
     market_scope: string;
@@ -143,6 +153,7 @@ export interface DashboardState {
         instant_sell_value: number;
         inventory_value: number;
         stash_value: number;
+        material_stash_value?: number;
         equipped_value: number;
         hero_equipped_values: Record<number, number>;
         stash_page_values: Record<number, number>;

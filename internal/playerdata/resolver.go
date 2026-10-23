@@ -65,6 +65,13 @@ type Resolver struct {
 	stageResolveAttemptedAt  time.Time
 	accountStatusObject      uintptr
 	accountStatusAttemptedAt time.Time
+	chestTimerObjects        []uintptr
+	chestTimerAttemptedAt    time.Time
+	classBatchInitialized    bool
+	pendingClassReferences   map[uintptr][]uintptr
+	classReferencesPrimed    bool
+	runtimeTradeObjects      []uintptr
+	runtimeTradeAttemptedAt  time.Time
 }
 
 type SaveDataLayout struct {
@@ -133,7 +140,10 @@ func (resolver *Resolver) readSnapshot(memory Memory, now time.Time, includeRunt
 			return snapshot, true
 		}
 		resolver.cachedObject = 0
-		resolver.classCache = nil // Clear class cache so we perform a full scan
+		// An object can be replaced without changing its IL2CPP class. Keep
+		// validated classes; discard the one-shot discovery references.
+		resolver.pendingClassReferences = nil
+		resolver.classReferencesPrimed = false
 	}
 
 	if snapshot, ok := resolver.resolveAndReadObject(memory, now, includeRuntimeTradeSlots); ok {
@@ -178,6 +188,42 @@ func (resolver *Resolver) resolveAndReadObject(memory Memory, now time.Time, inc
 }
 
 func (resolver *Resolver) scanClassReferences(memory Memory, classes []uintptr) [][]uintptr {
+	if !resolver.classReferencesPrimed {
+		resolver.classReferencesPrimed = true
+		// These objects are needed together during initial preparation. Discover
+		// them in one memory pass, then consume each class's references once.
+		var batch []uintptr
+		for _, name := range []string{"PlayerSaveData", "StageInfoData", "StageBox", "TradingStashSlot", "AccountStatus"} {
+			batch = append(batch, resolver.classCache[name]...)
+		}
+		if len(batch) > 0 {
+			resolver.pendingClassReferences = make(map[uintptr][]uintptr, len(batch))
+			for i, refs := range scanClassReferences(memory, batch) {
+				resolver.pendingClassReferences[batch[i]] = refs
+			}
+		}
+	}
+	refs := make([][]uintptr, len(classes))
+	var missing []uintptr
+	var indices []int
+	for i, class := range classes {
+		if cached, exists := resolver.pendingClassReferences[class]; exists {
+			refs[i] = cached
+			delete(resolver.pendingClassReferences, class)
+		} else {
+			missing = append(missing, class)
+			indices = append(indices, i)
+		}
+	}
+	if len(missing) > 0 {
+		for i, found := range scanClassReferences(memory, missing) {
+			refs[indices[i]] = found
+		}
+	}
+	return refs
+}
+
+func scanClassReferences(memory Memory, classes []uintptr) [][]uintptr {
 	patterns := make([][]byte, 0, len(classes))
 	for _, classPtr := range classes {
 		ptrBytes := make([]byte, 8)
@@ -199,8 +245,32 @@ func (resolver *Resolver) resolveClassByName(memory Memory, name string) ([]uint
 	if resolver.classCache == nil {
 		resolver.classCache = make(map[string][]uintptr)
 	}
+	if !resolver.classBatchInitialized {
+		resolver.classBatchInitialized = true
+		var missing []string
+		for _, known := range []string{"PlayerSaveData", "InventorySaveData", "RuneSaveData", "StageInfoData", "StageBox", "TradingStashSlot", "TradingStashCache"} {
+			if len(resolver.classCache[known]) == 0 {
+				missing = append(missing, known)
+			}
+		}
+		for known, classes := range il2cpp.ResolveClassesByName(memory, missing) {
+			if len(classes) > 0 {
+				resolver.classCache[known] = classes
+			}
+		}
+	}
 	if cached, exists := resolver.classCache[name]; exists {
-		return append([]uintptr(nil), cached...), len(cached) > 0
+		valid := cached[:0]
+		for _, class := range cached {
+			if il2cpp.ClassHasName(memory, class, name) {
+				valid = append(valid, class)
+			}
+		}
+		if len(valid) > 0 {
+			resolver.classCache[name] = valid
+			return append([]uintptr(nil), valid...), true
+		}
+		delete(resolver.classCache, name)
 	}
 	classes, ok := il2cpp.ResolveClassByName(memory, name)
 	if !ok || len(classes) == 0 {
@@ -375,6 +445,11 @@ func (resolver *Resolver) readObjectWithLayout(memory Memory, object uintptr, no
 	var inventorySlots InventorySlotSummary
 	stashPageCount := 0
 	seen := make(map[uint64]struct{})
+	materials, materialOK := resolver.readMaterialStash(memory, object, seen)
+	if !materialOK {
+		return InventorySnapshot{}, false
+	}
+	owned = append(owned, materials...)
 	if stash := readObjectListInfo(memory, object, layout.stashOffset, 200000); stash.ok {
 		stashPageCount = pageCountForSlotCount(stash.size)
 		owned = append(owned, resolver.readSlotItemsWithLayout(memory, stash, uniqueToItem, seen, LocationStash, layout)...)
@@ -401,16 +476,34 @@ func (resolver *Resolver) readObjectWithLayout(memory Memory, object uintptr, no
 		tradeSlots = resolver.readTradeSlotsWithLayout(memory, trade, layout)
 	}
 	if includeRuntimeTradeSlots {
-		if runtimeTradeSlots := resolver.readRuntimeTradeSlots(memory, now); len(runtimeTradeSlots) > 0 {
+		expectedRuntimeSlots := 0
+		for _, slot := range tradeSlots {
+			// Locked/backing save slots do not have instantiated UI objects.
+			if slot.State == 1 {
+				expectedRuntimeSlots++
+			}
+		}
+		if runtimeTradeSlots := resolver.readRuntimeTradeSlots(memory, now, expectedRuntimeSlots); len(runtimeTradeSlots) > 0 {
 			tradeSlots = runtimeTradeSlots
 		}
 	}
 
 	region, stageKey := resolver.readRegion(memory, object, now)
-	automation := resolver.readChestAutomationWithLayout(memory, object, layout)
+	var automation ChestAutomation
 	if region == RegionPlaguelands {
-		automation = resolver.readPlagueChestAutomation(memory, now)
+		automation = resolver.readPlagueChestAutomation(memory, object, now)
+	} else {
+		automation = resolver.readChestAutomationWithLayout(memory, object, layout)
 	}
+	timers := resolver.readChestTimers(memory, region, now)
+	counts := readChestCounts(memory, object)
+	if timers.Common.QueueResolved {
+		counts.NormalChests = timers.Common.QueueCount
+	}
+	if timers.Stage.QueueResolved {
+		counts.StageChests = timers.Stage.QueueCount
+	}
+	counts.TotalChests = counts.NormalChests + counts.StageChests
 	return InventorySnapshot{
 		Region:          region,
 		StageKey:        stageKey,
@@ -419,7 +512,8 @@ func (resolver *Resolver) readObjectWithLayout(memory Memory, object uintptr, no
 		StashPageCount:  stashPageCount,
 		InventorySlots:  inventorySlots,
 		ChestAutomation: automation,
-		ChestCounts:     readChestCounts(memory, object),
+		ChestTimers:     timers,
+		ChestCounts:     counts,
 		Items:           owned,
 		TradeSlots:      tradeSlots,
 	}, true

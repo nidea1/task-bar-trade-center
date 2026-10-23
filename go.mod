@@ -3,6 +3,7 @@ module github.com/nidea1/task-bar-trade-center
 go 1.26.3
 
 require (
+	github.com/pierrec/lz4/v4 v4.1.33
 	github.com/wailsapp/wails/v2 v2.12.0
 	golang.org/x/net v0.35.0
 	golang.org/x/sys v0.30.0

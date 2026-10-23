@@ -186,6 +186,7 @@
   "hud.weekly_average": "Haftalık Ort.",
   "location.equipped": "Kuşanılmış",
   "location.inventory": "Envanter",
+  "location.material_stash": "Malzeme Deposu",
   "location.stash": "Zula",
   "menu.check_updates": "Güncellemeleri denetle…",
   "menu.clear_cache": "Önbelleği temizle",
@@ -284,5 +285,16 @@
   "value.undervalued": "Düşük Değerli",
   "value.units": "adet",
   "value.verified": "Doğrulanmış",
-  "value.wide": "Geniş"
+  "value.wide": "Geniş",
+  "dashboard.chest_queue": "Bekleyen sandık",
+  "dashboard.inventory_warning": "Dolmadan önce uyar",
+  "dashboard.inventory_warning_hint": "Tahmini dolum süresi seçilen eşiğe indiğinde bir kez uyarır.",
+  "dashboard.stash_pages": "Zula sayfaları",
+  "dashboard.stash_items": "eşya",
+  "dashboard.stash_no_pages": "Zula sayfası algılanamadı.",
+  "dashboard.material_stash": "Malzeme deposu",
+  "dashboard.stash_value_note": "Önerilen satış fiyatları kullanılır. Fiyatı bulunmayan eşyalar dahil edilmez.",
+  "value.inactive": "Etkin değil",
+  "value.off": "Kapalı",
+  "value.minutes": "dakika"
 }

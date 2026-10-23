@@ -93,6 +93,8 @@ func (app *App) GetDashboardSettings() DashboardSettings {
 	return GetDashboardSettings()
 }
 
+func (app *App) SearchCatalog(query string) []CatalogItemOption { return SearchCatalog(query) }
+
 func (app *App) GetMinRarityNotify() string {
 	return GetMinRarityNotify()
 }

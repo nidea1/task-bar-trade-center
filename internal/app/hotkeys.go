@@ -72,7 +72,7 @@ func openActiveItemMarketLink() {
 		return
 	}
 
-	config, exists := activeApp.itemMap[itemID]
+	config, exists := marketCatalogItems()[itemID]
 	if !exists {
 		return
 	}

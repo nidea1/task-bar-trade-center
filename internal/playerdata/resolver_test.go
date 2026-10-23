@@ -441,7 +441,7 @@ func TestResolverReadsChestAutomationRuneReductions(t *testing.T) {
 	mem.ptrs[object+0xB8] = runeList
 	writeList(mem, itemsList, itemsArray, 3)
 	writeList(mem, inventoryList, inventoryArray, 1)
-	writeList(mem, runeList, runeArray, 8)
+	writeList(mem, runeList, runeArray, 10)
 
 	writeItem(mem, itemsArray, 0, 100, 1000)
 	writeItem(mem, itemsArray, 1, 200, 2000)
@@ -455,6 +455,8 @@ func TestResolverReadsChestAutomationRuneReductions(t *testing.T) {
 	writeRuneSave(mem, runeArray, 5, 0x60F000, runeClassPtr, 1905021, 5)
 	writeRuneSave(mem, runeArray, 6, 0x610000, runeClassPtr, 190502, 5)
 	writeRuneSave(mem, runeArray, 7, 0x611000, runeClassPtr, 190302, 5)
+	writeRuneSave(mem, runeArray, 8, 0x612000, runeClassPtr, 13002, 1)
+	writeRuneSave(mem, runeArray, 9, 0x613000, runeClassPtr, 15001, 1)
 
 	resolver := NewResolver(map[int]ItemMetadata{
 		100: {Marketable: true},
@@ -1174,7 +1176,9 @@ func TestResolverPrefersRuntimeTradeSlotCooldowns(t *testing.T) {
 	cache1 := uintptr(0x681000)
 	mem.patterns[pointerPattern(slotClassPtr)] = []uintptr{runtimeSlot0, runtimeSlot1}
 	mem.ptrs[runtimeSlot0] = slotClassPtr
+	mem.ptrs[runtimeSlot0+0x10] = 0x700000
 	mem.ptrs[runtimeSlot1] = slotClassPtr
+	mem.ptrs[runtimeSlot1+0x10] = 0x701000
 	mem.ptrs[cache0] = cacheClassPtr
 	mem.ptrs[cache1] = cacheClassPtr
 
@@ -1300,7 +1304,7 @@ func TestResolverCacheImportExport(t *testing.T) {
 
 	// Try reading snapshot. It should:
 	// 1. Try reading from cachedObject (0x400000) -> fails because itemsList is missing/corrupted.
-	// 2. Clear cachedObject and classCache.
+	// 2. Clear cachedObject and rediscover instances using validated classes.
 	// 3. Perform a full scan and resolve newObject (0x900000) -> succeeds!
 	snapshot3, ok := resolver2.ReadSnapshot(memCorrupted, time.Unix(1700000000, 0))
 	if !ok {

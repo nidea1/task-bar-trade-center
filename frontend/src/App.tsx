@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
 import './App.css';
+import { app as appModels } from '../wailsjs/go/models';
 import {
     GetInventoryDashboard,
     RefreshInventoryPrices,
@@ -113,6 +114,8 @@ const defaultDashboardSettings: DashboardSettings = {
     best_sort_mode: "score_desc",
     marketable_items_tab: "all",
     notify_sources: allNotificationSources,
+    inventory_warning_minutes: 5,
+    notification_targets: [],
     hotkey_modifiers: 0,
     hotkey_vk: 0x71,
     game_scale: 100,
@@ -130,6 +133,8 @@ type DashboardSettingsInput = {
     best_sort_mode?: string;
     marketable_items_tab?: string;
     notify_sources?: string;
+    inventory_warning_minutes?: number;
+    notification_targets?: DashboardSettings["notification_targets"];
     hotkey_modifiers?: number;
     hotkey_vk?: number;
     game_scale?: number;
@@ -217,6 +222,8 @@ function normalizeDashboardSettings(settings?: DashboardSettingsInput | null): D
         ) ? bestSortMode : defaultDashboardSettings.best_sort_mode,
         marketable_items_tab: settings?.marketable_items_tab === "best" ? "best" : defaultDashboardSettings.marketable_items_tab,
         notify_sources: normalizeNotifySources(settings?.notify_sources),
+        inventory_warning_minutes: settings?.inventory_warning_minutes ?? 5,
+        notification_targets: settings?.notification_targets ?? [],
         hotkey_modifiers: settings?.hotkey_modifiers ?? 0,
         hotkey_vk: settings?.hotkey_vk ?? 0x71,
         game_scale: (legacyGameScale === 100 || legacyGameScale === 125 || legacyGameScale === 150) ? legacyGameScale : defaultDashboardSettings.game_scale,
@@ -255,6 +262,8 @@ function App() {
     const [bestSortMode, setBestSortMode] = useState<BestSortMode>("score_desc");
     const [marketableItemsTab, setMarketableItemsTab] = useState<MarketableItemsTab>("all");
     const [notifySources, setNotifySources] = useState<string>(allNotificationSources);
+    const [inventoryWarningMinutes, setInventoryWarningMinutes] = useState(5);
+    const [notificationTargets, setNotificationTargets] = useState<DashboardSettings["notification_targets"]>([]);
     const [notifySourceMenuOpen, setNotifySourceMenuOpen] = useState(false);
     const [itemSearch, setItemSearch] = useState("");
     const [bestItemSearch, setBestItemSearch] = useState("");
@@ -273,6 +282,7 @@ function App() {
 
     const [localNextCommonDrop, setLocalNextCommonDrop] = useState<number | null>(null);
     const [localNextStageDrop, setLocalNextStageDrop] = useState<number | null>(null);
+    const [countdownNow, setCountdownNow] = useState(Date.now);
 	const dropCountdownRegion = useRef<string | undefined>(undefined);
 
     useEffect(() => {
@@ -311,6 +321,7 @@ function App() {
 
     useEffect(() => {
         const interval = window.setInterval(() => {
+            setCountdownNow(Date.now());
             setLocalNextCommonDrop((prev) => (prev !== null && prev > 0 ? prev - 1 : prev));
             setLocalNextStageDrop((prev) => (prev !== null && prev > 0 ? prev - 1 : prev));
         }, 1000);
@@ -426,6 +437,8 @@ function App() {
                 setBestSortMode(normalized.best_sort_mode);
                 setMarketableItemsTab(normalized.marketable_items_tab);
                 setNotifySources(normalized.notify_sources);
+                setInventoryWarningMinutes(normalized.inventory_warning_minutes);
+                setNotificationTargets(normalized.notification_targets);
                 setHotkeyModifiers(normalized.hotkey_modifiers);
                 setHotkeyVK(normalized.hotkey_vk);
                 setLegacyGameScale(normalized.game_scale);
@@ -538,18 +551,20 @@ function App() {
             best_sort_mode: bestSortMode,
             marketable_items_tab: marketableItemsTab,
             notify_sources: notifySources,
+            inventory_warning_minutes: inventoryWarningMinutes,
+            notification_targets: notificationTargets,
             hotkey_modifiers: hotkeyModifiers,
             hotkey_vk: hotkeyVK,
             game_scale: legacyGameScale,
         };
         const nextKey = dashboardSettingsKey(nextSettings);
         if (nextKey === dashboardSettingsSnapshotRef.current) return;
-        SetDashboardSettings(nextSettings).then((saved) => {
+        SetDashboardSettings(appModels.DashboardSettings.createFrom(nextSettings)).then((saved) => {
             dashboardSettingsSnapshotRef.current = dashboardSettingsKey(normalizeDashboardSettings(saved as DashboardSettingsInput));
         }).catch(() => {
             // Local UI state can continue even if settings persistence fails.
         });
-    }, [themeMode, priceMode, rarityFilter, equipmentFilter, sortMode, bestRarityFilter, bestEquipmentFilter, bestOwnershipFilter, bestSortMode, marketableItemsTab, notifySources, hotkeyModifiers, hotkeyVK, legacyGameScale]);
+    }, [themeMode, priceMode, rarityFilter, equipmentFilter, sortMode, bestRarityFilter, bestEquipmentFilter, bestOwnershipFilter, bestSortMode, marketableItemsTab, notifySources, hotkeyModifiers, hotkeyVK, legacyGameScale, inventoryWarningMinutes, notificationTargets]);
 
     useEffect(() => {
         if (!isListeningHotkey) return;
@@ -679,6 +694,25 @@ function App() {
         return formatInventoryFillSeconds(seconds);
     };
     const inventoryFillBaseTimeMs = state?.updated_at ? Date.parse(state.updated_at) : Number.NaN;
+    const inventoryFillAge = Number.isFinite(inventoryFillBaseTimeMs)
+        ? Math.max(0, (countdownNow - inventoryFillBaseTimeMs) / 1000)
+        : Number.POSITIVE_INFINITY;
+    const chestOpeningStatus = (common: boolean) => {
+        const interval = common ? inventoryFill?.common_auto_open_seconds : inventoryFill?.stage_auto_open_seconds;
+        const observed = common ? inventoryFill?.common_open_observed : inventoryFill?.stage_open_observed;
+        const remaining = common ? inventoryFill?.next_common_open_seconds : inventoryFill?.next_stage_open_seconds;
+        const live = !!observed && inventoryFillAge <= 15;
+        const seconds = Math.max(0, Math.ceil((remaining ?? 0) - inventoryFillAge));
+        return {
+            live,
+            label: t("dashboard.inventory_fill_auto_open", "Auto Open"),
+            value: live
+                ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+                : interval ? formatInventoryFillSeconds(interval) : t("value.inactive", "Inactive"),
+        };
+    };
+    const commonOpening = chestOpeningStatus(true);
+    const stageOpening = chestOpeningStatus(false);
     const formatTargetFillTime = (seconds?: number) => {
         if (!seconds || seconds <= 0) return "--:--";
         const baseTimeMs = Number.isFinite(inventoryFillBaseTimeMs) ? inventoryFillBaseTimeMs : Date.now();
@@ -721,7 +755,7 @@ function App() {
     const inventoryFillCommonDropState = inventoryFill?.common_drop_observed
         ? t("value.observed", localizedFallback(currentLanguage, "gözlendi", "observed"))
         : t("value.default", localizedFallback(currentLanguage, "varsayılan", "default"));
-        const inventoryFillStageDropState = inventoryFill?.stage_drop_observed
+    const inventoryFillStageDropState = inventoryFill?.stage_drop_observed
         ? t("value.observed", localizedFallback(currentLanguage, "gözlendi", "observed"))
         : t("value.default", localizedFallback(currentLanguage, "varsayılan", "default"));
     const inventoryFillPercentage = inventoryFill
@@ -834,8 +868,12 @@ function App() {
                                 <strong className="text-[#e1d5bf]">{formatInventoryFillSeconds(inventoryFill.common_drop_seconds)}</strong>
                             </div>
                             <div className="flex justify-between text-[9px]">
-                                <span className="text-[#9a896f]">{t("dashboard.inventory_fill_auto_open", localizedFallback(currentLanguage, "Oto-Açılış", "Auto Open"))}:</span>
-                                <strong className="text-[#e1d5bf]">{formatInventoryFillSeconds(inventoryFill.common_auto_open_seconds)}</strong>
+                                <span className="text-[#9a896f]">{commonOpening.label}:</span>
+                                <strong className={commonOpening.live ? "text-[#54dc5e] tabular-nums" : "text-[#e1d5bf]"}>{commonOpening.value}</strong>
+                            </div>
+                            <div className="flex justify-between text-[9px]">
+                                <span className="text-[#9a896f]">{t("dashboard.chest_queue", "Waiting chests")}:</span>
+                                <strong className="text-[#e1d5bf]">{inventoryFill.common_chest_count}</strong>
                             </div>
                         </div>
 
@@ -852,8 +890,12 @@ function App() {
                                 <strong className="text-[#e1d5bf]">{formatInventoryFillSeconds(inventoryFill.stage_drop_seconds)}</strong>
                             </div>
                             <div className="flex justify-between text-[9px]">
-                                <span className="text-[#9a896f]">{t("dashboard.inventory_fill_auto_open", localizedFallback(currentLanguage, "Oto-Açılış", "Auto Open"))}:</span>
-                                <strong className="text-[#e1d5bf]">{formatInventoryFillSeconds(inventoryFill.stage_auto_open_seconds)}</strong>
+                                <span className="text-[#9a896f]">{stageOpening.label}:</span>
+                                <strong className={stageOpening.live ? "text-[#54dc5e] tabular-nums" : "text-[#e1d5bf]"}>{stageOpening.value}</strong>
+                            </div>
+                            <div className="flex justify-between text-[9px]">
+                                <span className="text-[#9a896f]">{t("dashboard.chest_queue", "Waiting chests")}:</span>
+                                <strong className="text-[#e1d5bf]">{inventoryFill.stage_chest_count}</strong>
                             </div>
                         </div>
                     </div>
@@ -890,6 +932,35 @@ function App() {
                             </div>
                         </div>
                     </div>
+        </div>
+    ) : undefined;
+    const stashPages = Object.keys(totals?.stash_page_values ?? {}).map(Number).sort((a, b) => a - b);
+    const stashValueTooltip = totals ? (
+        <div className="stash-value-tooltip text-left text-xs text-[#e1d5bf]">
+            <div className="flex items-center gap-1.5 pb-2 border-b border-[#2d261f] text-[10px] font-bold uppercase tracking-wider gold-text">
+                <Archive className="w-3.5 h-3.5" />
+                {t("dashboard.stash_pages", "Stash pages")}
+            </div>
+            <div className="stash-page-list py-1">
+                {stashPages.map((page) => (
+                    <div key={page} className="stash-page-row">
+                        <span className="text-[#b5a38b]">{t("dashboard.stash_page", "Page")} {page}
+                            <small className="text-[#9a896f]">{totals.stash_page_counts?.[page] ?? 0} {t("dashboard.stash_items", "items")}</small>
+                        </span>
+                        <strong className="text-[#e1d5bf] tabular-nums">{formatPrice(totals.stash_page_values[page], state)}</strong>
+                    </div>
+                ))}
+                {stashPages.length === 0 && <p className="py-2 text-[#9a896f]">{t("dashboard.stash_no_pages", "No stash pages detected.")}</p>}
+            </div>
+            <div className="stash-page-row border-t border-[#2d261f]">
+                <span className="text-[#b5a38b]">{t("dashboard.material_stash", "Material stash")}</span>
+                <strong className="text-[#e1d5bf] tabular-nums">{formatPrice(totals.material_stash_value ?? 0, state)}</strong>
+            </div>
+            <div className="stash-page-row border-t border-[#2d261f] font-bold gold-text">
+                <span>{t("dashboard.stash_value", "Stash Value")}</span>
+                <strong className="tabular-nums">{formatPrice(totals.stash_value, state)}</strong>
+            </div>
+            <p className="pt-1 text-[9px] leading-relaxed text-[#9a896f]">{t("dashboard.stash_value_note", "Suggested listing prices. Items without a price are excluded.")}</p>
         </div>
     ) : undefined;
     const themeLabel = themeMode === "dark"
@@ -1295,6 +1366,22 @@ function App() {
                                                     />
                                                 </div>
 
+                                                <div className="dashboard-settings-row flex items-center justify-between gap-4">
+                                                    <span className="text-[11px] font-bold text-[#e1d5bf]">{t("dashboard.inventory_warning", "Warn before full")}:</span>
+                                                    <GameDropdown
+                                                        value={String(inventoryWarningMinutes)}
+                                                        options={[-1, ...Array.from(new Set([1, 5, 10, 15, 30, 60, inventoryWarningMinutes].filter((value) => value > 0))).sort((a, b) => a - b)].map((minutes) => ({
+                                                            value: String(minutes),
+                                                            label: minutes === -1 ? t("value.off", "Off") : `${minutes} ${t("value.minutes", "minutes")}`,
+                                                        }))}
+                                                        onChange={(value) => setInventoryWarningMinutes(Number(value))}
+                                                        className="dashboard-control dashboard-inventory-warning"
+                                                        icon={<Clock className="w-3.5 h-3.5" />}
+                                                        title={t("dashboard.inventory_warning_hint", "Alerts once when the estimated fill time crosses the selected threshold.")}
+                                                        ariaLabel={t("dashboard.inventory_warning", "Warn before full")}
+                                                    />
+                                                </div>
+
                                                 {/* Notify Sources */}
                                                 <div className="flex flex-col gap-1.5 pt-2 border-t border-[#463d30]/40">
                                                     <span className="text-[11px] font-bold text-[#caa66a] uppercase tracking-wider">{t("dashboard.notify_sources_label", "Sources")}:</span>
@@ -1424,6 +1511,8 @@ function App() {
                                 value={formatPrice(totals?.stash_value, state)}
                                 icon={<Archive className="w-4 h-4" />}
                                 iconColor="text-[#ffbe2d]"
+                                tooltip={stashValueTooltip}
+                                tooltipDirection="down"
                             />
                             <MetricCard
                                 label={t("dashboard.equipped_gear", "Equipped Gear")}

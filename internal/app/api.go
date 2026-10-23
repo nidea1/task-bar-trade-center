@@ -87,7 +87,7 @@ func freshInventoryDashboardCache(maxAge time.Duration) (inventory.DashboardStat
 }
 
 func OpenMarketListing(itemID int) error {
-	config, exists := activeApp.itemMap[itemID]
+	config, exists := marketCatalogItems()[itemID]
 	if !exists {
 		return fmt.Errorf("market listing is not available")
 	}
@@ -128,20 +128,27 @@ type DashboardFooterInfo struct {
 }
 
 type DashboardSettings struct {
-	ThemeMode           string `json:"theme_mode"`
-	PriceMode           string `json:"price_mode"`
-	RarityFilter        string `json:"rarity_filter"`
-	EquipmentFilter     string `json:"equipment_filter"`
-	SortMode            string `json:"sort_mode"`
-	BestRarityFilter    string `json:"best_rarity_filter"`
-	BestEquipmentFilter string `json:"best_equipment_filter"`
-	BestOwnershipFilter string `json:"best_ownership_filter"`
-	BestSortMode        string `json:"best_sort_mode"`
-	MarketableItemsTab  string `json:"marketable_items_tab"`
-	NotifySources       string `json:"notify_sources"`
-	HotkeyModifiers     int    `json:"hotkey_modifiers"`
-	HotkeyVK            int    `json:"hotkey_vk"`
-	GameScale           int32  `json:"game_scale"`
+	InventoryWarningMinutes int                  `json:"inventory_warning_minutes"`
+	NotificationTargets     []NotificationTarget `json:"notification_targets"`
+	ThemeMode               string               `json:"theme_mode"`
+	PriceMode               string               `json:"price_mode"`
+	RarityFilter            string               `json:"rarity_filter"`
+	EquipmentFilter         string               `json:"equipment_filter"`
+	SortMode                string               `json:"sort_mode"`
+	BestRarityFilter        string               `json:"best_rarity_filter"`
+	BestEquipmentFilter     string               `json:"best_equipment_filter"`
+	BestOwnershipFilter     string               `json:"best_ownership_filter"`
+	BestSortMode            string               `json:"best_sort_mode"`
+	MarketableItemsTab      string               `json:"marketable_items_tab"`
+	NotifySources           string               `json:"notify_sources"`
+	HotkeyModifiers         int                  `json:"hotkey_modifiers"`
+	HotkeyVK                int                  `json:"hotkey_vk"`
+	GameScale               int32                `json:"game_scale"`
+}
+
+type NotificationTarget struct {
+	ItemID int `json:"item_id"`
+	Count  int `json:"count"`
 }
 
 const (
@@ -162,25 +169,38 @@ var notificationSourceOrder = []string{
 
 func defaultDashboardSettings() DashboardSettings {
 	return DashboardSettings{
-		ThemeMode:           "dark",
-		PriceMode:           "suggested",
-		RarityFilter:        "all",
-		EquipmentFilter:     "all",
-		SortMode:            "price_desc",
-		BestRarityFilter:    "all",
-		BestEquipmentFilter: "all",
-		BestOwnershipFilter: "all",
-		BestSortMode:        "score_desc",
-		MarketableItemsTab:  "all",
-		NotifySources:       notificationSourcesAll,
-		HotkeyModifiers:     0,
-		HotkeyVK:            VK_F2,
-		GameScale:           GameScale100,
+		InventoryWarningMinutes: 5,
+		NotificationTargets:     []NotificationTarget{},
+		ThemeMode:               "dark",
+		PriceMode:               "suggested",
+		RarityFilter:            "all",
+		EquipmentFilter:         "all",
+		SortMode:                "price_desc",
+		BestRarityFilter:        "all",
+		BestEquipmentFilter:     "all",
+		BestOwnershipFilter:     "all",
+		BestSortMode:            "score_desc",
+		MarketableItemsTab:      "all",
+		NotifySources:           notificationSourcesAll,
+		HotkeyModifiers:         0,
+		HotkeyVK:                VK_F2,
+		GameScale:               GameScale100,
 	}
 }
 
 func normalizeDashboardSettings(settings DashboardSettings) DashboardSettings {
 	normalized := defaultDashboardSettings()
+	if settings.InventoryWarningMinutes == -1 || (settings.InventoryWarningMinutes >= 1 && settings.InventoryWarningMinutes <= 60) {
+		normalized.InventoryWarningMinutes = settings.InventoryWarningMinutes
+	}
+	seenTargets := map[int]bool{}
+	for _, target := range settings.NotificationTargets {
+		if target.ItemID <= 0 || target.Count <= 0 || target.Count > 1000000 || seenTargets[target.ItemID] || len(normalized.NotificationTargets) >= 50 {
+			continue
+		}
+		seenTargets[target.ItemID] = true
+		normalized.NotificationTargets = append(normalized.NotificationTargets, target)
+	}
 	switch settings.ThemeMode {
 	case "dark", "light":
 		normalized.ThemeMode = settings.ThemeMode

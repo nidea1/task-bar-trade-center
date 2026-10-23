@@ -45,7 +45,6 @@ func BuildDashboard(snapshot playerdata.InventorySnapshot, catalog map[int]ItemD
 	groups := make(map[int]*groupAccumulator)
 	stashPageCount := dashboardStashPageCount(snapshot)
 	totals := DashboardTotals{
-		TotalItemCount: len(snapshot.Items),
 		StashPageCount: stashPageCount,
 		HeroEquippedValues: map[int]float64{
 			1: 0.0,
@@ -64,6 +63,8 @@ func BuildDashboard(snapshot playerdata.InventorySnapshot, catalog map[int]ItemD
 	}
 
 	for _, owned := range snapshot.Items {
+		units := owned.Units()
+		totals.TotalItemCount += units
 		if owned.Location == playerdata.LocationStash {
 			page := stashPageForSlot(owned.SlotIndex)
 			totals.StashPageCounts[page]++
@@ -75,7 +76,7 @@ func BuildDashboard(snapshot playerdata.InventorySnapshot, catalog map[int]ItemD
 		if !owned.Marketable || !desc.Marketable {
 			continue
 		}
-		totals.MarketableItemCount++
+		totals.MarketableItemCount += units
 		acc := groups[owned.ItemID]
 		if acc == nil {
 			acc = &groupAccumulator{
@@ -93,7 +94,7 @@ func BuildDashboard(snapshot playerdata.InventorySnapshot, catalog map[int]ItemD
 			}
 			groups[owned.ItemID] = acc
 		}
-		acc.item.Count++
+		acc.item.Count += units
 		if owned.Location == playerdata.LocationEquipped {
 			acc.equipped = true
 			acc.item.Equipped = true
@@ -125,27 +126,28 @@ func BuildDashboard(snapshot playerdata.InventorySnapshot, catalog map[int]ItemD
 			acc.item.PriceSuffix = quote.PriceSuffix
 			acc.item.UpdatedAt = quote.UpdatedAt
 			if quote.HasSuggested {
-				acc.item.TotalSuggested += quote.Suggested
-				totals.SuggestedListingValue += quote.Suggested
-				addLocationValue(&totals, owned.Location, quote.Suggested)
+				value := quote.Suggested * float64(units)
+				acc.item.TotalSuggested += value
+				totals.SuggestedListingValue += value
+				addLocationValue(&totals, owned.Location, value)
 				if owned.Location == playerdata.LocationStash {
 					page := stashPageForSlot(owned.SlotIndex)
-					totals.StashPageValues[page] += quote.Suggested
+					totals.StashPageValues[page] += value
 				}
 				if owned.Location == playerdata.LocationEquipped && owned.EquippedHeroKey > 0 {
 					classID := mapHeroKeyToClassID(owned.EquippedHeroKey)
 					if _, exists := totals.HeroEquippedValues[classID]; exists {
-						totals.HeroEquippedValues[classID] += quote.Suggested
+						totals.HeroEquippedValues[classID] += value
 					}
 				}
 			}
 			if quote.HasInstant {
-				acc.item.TotalInstant += quote.Instant
-				totals.InstantSellValue += quote.Instant
+				acc.item.TotalInstant += quote.Instant * float64(units)
+				totals.InstantSellValue += quote.Instant * float64(units)
 			}
-			totals.PricedItemCount++
+			totals.PricedItemCount += units
 		} else {
-			totals.UnknownItemCount++
+			totals.UnknownItemCount += units
 		}
 	}
 	items := make([]DashboardItem, 0, len(groups))
@@ -267,12 +269,34 @@ func BuildInventoryFillEstimateWithTiming(snapshot playerdata.InventorySnapshot,
 		stageAutoOpen = 0
 	}
 
+	if timer := snapshot.ChestTimers.Common; timer.Available {
+		commonAutoOpen = 0
+		if timer.Enabled {
+			commonAutoOpen = timer.DurationSeconds
+		}
+	}
+	if timer := snapshot.ChestTimers.Stage; timer.Available {
+		stageAutoOpen = 0
+		if timer.Enabled {
+			stageAutoOpen = timer.DurationSeconds
+		}
+	}
 	commonFillPerSecond := chestItemFillRate(timing.CommonDropSeconds, commonAutoOpen)
 	stageFillPerSecond := chestItemFillRate(timing.StageDropSeconds, stageAutoOpen)
 	netPerSecond := commonFillPerSecond + stageFillPerSecond
 	schedule := normalizedChestDropSchedule(firstChestDropSchedule(schedules), timing)
+	if timer := snapshot.ChestTimers.Common; timer.Available && timer.Enabled && snapshot.ChestCounts.NormalChests > 0 {
+		schedule.CommonOpenObserved = true
+		schedule.NextCommonOpenSeconds = maxInt(1, int(math.Ceil(timer.RemainingSeconds)))
+	}
+	if timer := snapshot.ChestTimers.Stage; timer.Available && timer.Enabled && snapshot.ChestCounts.StageChests > 0 {
+		schedule.StageOpenObserved = true
+		schedule.NextStageOpenSeconds = maxInt(1, int(math.Ceil(timer.RemainingSeconds)))
+	}
 
 	estimate := InventoryFillEstimate{
+		NextCommonOpenSeconds: schedule.NextCommonOpenSeconds, NextStageOpenSeconds: schedule.NextStageOpenSeconds,
+		CommonOpenObserved: schedule.CommonOpenObserved, StageOpenObserved: schedule.StageOpenObserved,
 		Region:                     snapshot.Region,
 		Available:                  slotCount > 0,
 		FillModel:                  inventoryFillEventQueueModel,
@@ -354,10 +378,16 @@ func simulateTimeToFillSlots(freeSlots int, schedule ChestDropSchedule, commonAu
 	commonNextOpen := inactiveRateStart()
 	if initialCommonQueued > 0 && commonAutoOpenSeconds > 0 {
 		commonNextOpen = commonAutoOpenSeconds
+		if schedule.CommonOpenObserved {
+			commonNextOpen = schedule.NextCommonOpenSeconds
+		}
 	}
 	stageNextOpen := inactiveRateStart()
 	if initialStageQueued > 0 && stageAutoOpenSeconds > 0 {
 		stageNextOpen = stageAutoOpenSeconds
+		if schedule.StageOpenObserved {
+			stageNextOpen = schedule.NextStageOpenSeconds
+		}
 	}
 
 	queues := []fillQueue{
@@ -510,13 +540,16 @@ func addLocationValue(totals *DashboardTotals, location playerdata.Location, val
 		totals.InventoryValue += value
 	case playerdata.LocationStash:
 		totals.StashValue += value
+	case playerdata.LocationMaterialStash:
+		totals.StashValue += value
+		totals.MaterialStashValue += value
 	case playerdata.LocationEquipped:
 		totals.EquippedValue += value
 	}
 }
 
 func joinLocations(locations map[string]struct{}) string {
-	order := []string{string(playerdata.LocationEquipped), string(playerdata.LocationStash), string(playerdata.LocationInventory)}
+	order := []string{string(playerdata.LocationEquipped), string(playerdata.LocationStash), string(playerdata.LocationMaterialStash), string(playerdata.LocationInventory)}
 	result := ""
 	for _, location := range order {
 		if _, exists := locations[location]; !exists {

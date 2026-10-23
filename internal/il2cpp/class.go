@@ -26,38 +26,87 @@ type multiPatternMemory interface {
 }
 
 func ResolveClassByName(memory Memory, name string) ([]uintptr, bool) {
-	stringAddresses, _ := memory.ScanPattern([]byte(name+"\x00"), 64)
-	if len(stringAddresses) == 0 {
-		stringAddresses, _ = memory.ScanPattern([]byte(name), 64)
-	}
-	if len(stringAddresses) == 0 {
-		return nil, false
-	}
+	classes := ResolveClassesByName(memory, []string{name})[name]
+	return classes, len(classes) > 0
+}
 
-	seen := make(map[uintptr]struct{})
-	classes := make([]uintptr, 0, 1)
-	stringRefPatterns := make([][]byte, 0, len(stringAddresses))
-	for _, stringAddress := range stringAddresses {
-		stringRefPatterns = append(stringRefPatterns, uintptrPattern(stringAddress))
+// ResolveClassesByName reads the process once for all names and once for all
+// name pointers, instead of making two full memory passes for every class.
+func ResolveClassesByName(memory Memory, names []string) map[string][]uintptr {
+	result := make(map[string][]uintptr, len(names))
+	unique := make([]string, 0, len(names))
+	patterns := make([][]byte, 0, len(names))
+	for _, name := range names {
+		if name == "" {
+			continue
+		}
+		if _, exists := result[name]; exists {
+			continue
+		}
+		result[name] = nil
+		unique = append(unique, name)
+		patterns = append(patterns, []byte(name+"\x00"))
 	}
-	stringRefs := scanPatternBatch(memory, stringRefPatterns, 5000)
-	for index, refs := range stringRefs {
-		stringAddress := stringAddresses[index]
-		for _, ref := range refs {
+	if len(unique) == 0 {
+		return result
+	}
+	strings := scanPatternBatch(memory, patterns, 64)
+	var fallbackNames []int
+	patterns = nil
+	for i, addresses := range strings {
+		if len(addresses) == 0 {
+			fallbackNames = append(fallbackNames, i)
+			patterns = append(patterns, []byte(unique[i]))
+		}
+	}
+	if len(patterns) > 0 {
+		fallback := scanPatternBatch(memory, patterns, 64)
+		for i, addresses := range fallback {
+			strings[fallbackNames[i]] = addresses
+		}
+	}
+	patterns = nil
+	var owners []string
+	var addresses []uintptr
+	for i, found := range strings {
+		for _, address := range found {
+			patterns = append(patterns, uintptrPattern(address))
+			owners = append(owners, unique[i])
+			addresses = append(addresses, address)
+		}
+	}
+	if len(patterns) == 0 {
+		return result
+	}
+	refs := scanPatternBatch(memory, patterns, 5000)
+	seen := make(map[uintptr]bool)
+	for i, matches := range refs {
+		for _, ref := range matches {
 			if ref < ClassNameOffset {
 				continue
 			}
-			classPtr := ref - ClassNameOffset
-			if _, exists := seen[classPtr]; exists {
-				continue
-			}
-			if validateClass(memory, classPtr, stringAddress) {
-				seen[classPtr] = struct{}{}
-				classes = append(classes, classPtr)
+			class := ref - ClassNameOffset
+			if !seen[class] && validateClass(memory, class, addresses[i]) {
+				seen[class] = true
+				result[owners[i]] = append(result[owners[i]], class)
 			}
 		}
 	}
-	return classes, len(classes) > 0
+	return result
+}
+
+// ClassHasName validates imported heap pointers before they can bypass scanning.
+func ClassHasName(memory Memory, class uintptr, name string) bool {
+	reader, ok := memory.(interface{ ReadBytes(uintptr, []byte) bool })
+	if !ok {
+		return false
+	}
+	address, ok := memory.ReadUintptr(class + ClassNameOffset)
+	if !ok || !validateClass(memory, class, address) {
+		return false
+	}
+	buffer := make([]byte, len(name)+1)
+	return reader.ReadBytes(address, buffer) && string(buffer) == name+"\x00"
 }
 
 func scanPatternBatch(memory Memory, patterns [][]byte, maxResults int) [][]uintptr {

@@ -234,7 +234,7 @@ func refreshActiveMarketPrice() {
 	}
 
 	itemID := int(activeApp.activeItemID.Load())
-	config, exists := activeApp.itemMap[itemID]
+	config, exists := marketCatalogItems()[itemID]
 	if !exists {
 		return
 	}
@@ -306,7 +306,7 @@ func cachedPriceConfigs(scope market.MarketScope) []catalog.ItemConfig {
 	activeApp.priceCacheMu.RUnlock()
 
 	configs := make([]catalog.ItemConfig, 0, len(cachedNames))
-	for _, config := range activeApp.itemMap {
+	for _, config := range marketCatalogItems() {
 		if _, exists := cachedNames[buildMarketHashName(config)]; exists {
 			configs = append(configs, config)
 		}

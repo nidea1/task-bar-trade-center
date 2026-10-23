@@ -164,7 +164,7 @@ func processNewMarketableInventoryItems(newItems []marketableInventoryItem) {
 				}
 
 				if !isIconAvailable(itemID) {
-					config, ok := activeApp.itemMap[itemID]
+					config, ok := marketCatalogItems()[itemID]
 					if ok {
 						marketHashName := buildMarketHashName(config)
 						var iconPath string
@@ -230,7 +230,7 @@ func fillMarketableInventoryItemDetails(item *marketableInventoryItem) {
 }
 
 func isPriceFresh(itemID int) bool {
-	config, ok := activeApp.itemMap[itemID]
+	config, ok := marketCatalogItems()[itemID]
 	if !ok {
 		return false
 	}
@@ -243,7 +243,7 @@ func isPriceFresh(itemID int) bool {
 }
 
 func isIconAvailable(itemID int) bool {
-	config, ok := activeApp.itemMap[itemID]
+	config, ok := marketCatalogItems()[itemID]
 	if !ok {
 		return true
 	}
@@ -279,7 +279,7 @@ func isIconAvailable(itemID int) bool {
 }
 
 func inventoryNotificationItemName(itemID int) string {
-	if config, ok := activeApp.allItemMap[itemID]; ok {
+	if config, ok := allCatalogItems()[itemID]; ok {
 		lang := currentDisplayLanguage()
 		if name := config.Name[lang]; name != "" {
 			return name
@@ -292,7 +292,7 @@ func inventoryNotificationItemName(itemID int) string {
 }
 
 func inventoryNotificationItemRarity(itemID int) string {
-	config, ok := activeApp.allItemMap[itemID]
+	config, ok := allCatalogItems()[itemID]
 	if !ok || config.Grade == "" {
 		return tr("value.na")
 	}
@@ -303,7 +303,7 @@ func inventoryNotificationItemRarity(itemID int) string {
 }
 
 func inventoryNotificationItemPrice(itemID int) (string, bool) {
-	config, ok := activeApp.itemMap[itemID]
+	config, ok := marketCatalogItems()[itemID]
 	if !ok {
 		return tr("notification.price_updating"), false
 	}
@@ -323,7 +323,7 @@ func inventoryNotificationItemPrice(itemID int) (string, bool) {
 }
 
 func inventoryNotificationItemIcon(itemID int) uintptr {
-	config, ok := activeApp.itemMap[itemID]
+	config, ok := marketCatalogItems()[itemID]
 	if !ok {
 		return 0
 	}
@@ -576,7 +576,7 @@ func queueMarketableInventoryPriceRefresh(items []marketableInventoryItem) {
 		if item.hasPrice {
 			continue
 		}
-		if _, marketable := activeApp.itemMap[item.itemID]; marketable {
+		if _, marketable := marketCatalogItems()[item.itemID]; marketable {
 			ids = append(ids, item.itemID)
 		}
 	}
@@ -602,7 +602,7 @@ func marketableInventoryItemSummary(items []marketableInventoryItem) string {
 }
 
 func shouldNotifyItem(itemID int) bool {
-	config, ok := activeApp.allItemMap[itemID]
+	config, ok := allCatalogItems()[itemID]
 	if !ok {
 		return true
 	}

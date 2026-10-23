@@ -6,6 +6,7 @@ import (
 	filestore "github.com/nidea1/task-bar-trade-center/internal/storage"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -117,20 +118,22 @@ func TestSettingsPersistDashboardSettings(t *testing.T) {
 
 	activeApp.settingsFilePath = filepath.Join(t.TempDir(), "settings.json")
 	want := DashboardSettings{
-		ThemeMode:           "light",
-		PriceMode:           "instant",
-		RarityFilter:        "RARE",
-		EquipmentFilter:     "weapon",
-		SortMode:            "rarity_desc",
-		BestRarityFilter:    "LEGENDARY",
-		BestEquipmentFilter: "SWORD",
-		BestOwnershipFilter: "unequipped",
-		BestSortMode:        "score_asc",
-		MarketableItemsTab:  "best",
-		NotifySources:       "box,offering",
-		HotkeyModifiers:     0,
-		HotkeyVK:            VK_F2,
-		GameScale:           GameScale100,
+		InventoryWarningMinutes: 10,
+		NotificationTargets:     []NotificationTarget{{ItemID: 110001, Count: 3}},
+		ThemeMode:               "light",
+		PriceMode:               "instant",
+		RarityFilter:            "RARE",
+		EquipmentFilter:         "weapon",
+		SortMode:                "rarity_desc",
+		BestRarityFilter:        "LEGENDARY",
+		BestEquipmentFilter:     "SWORD",
+		BestOwnershipFilter:     "unequipped",
+		BestSortMode:            "score_asc",
+		MarketableItemsTab:      "best",
+		NotifySources:           "box,offering",
+		HotkeyModifiers:         0,
+		HotkeyVK:                VK_F2,
+		GameScale:               GameScale100,
 	}
 	setDashboardSettings(want)
 
@@ -142,7 +145,7 @@ func TestSettingsPersistDashboardSettings(t *testing.T) {
 	if err := json.Unmarshal(raw, &disk); err != nil {
 		t.Fatalf("unmarshal settings: %v", err)
 	}
-	if disk.Dashboard != want {
+	if !reflect.DeepEqual(disk.Dashboard, want) {
 		t.Fatalf("saved dashboard settings = %+v, want %+v", disk.Dashboard, want)
 	}
 
@@ -151,7 +154,7 @@ func TestSettingsPersistDashboardSettings(t *testing.T) {
 	activeApp.dashboardSettingsMu.Unlock()
 
 	loadSettingsFromDisk()
-	if got := currentDashboardSettings(); got != want {
+	if got := currentDashboardSettings(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("loaded dashboard settings = %+v, want %+v", got, want)
 	}
 }
@@ -169,20 +172,22 @@ func TestGetDashboardSettingsWaitsForSettingsLoad(t *testing.T) {
 	app := New(Callbacks{})
 	app.settingsFilePath = filepath.Join(t.TempDir(), "settings.json")
 	want := DashboardSettings{
-		ThemeMode:           "light",
-		PriceMode:           "instant",
-		RarityFilter:        "RARE",
-		EquipmentFilter:     "weapon",
-		SortMode:            "rarity_desc",
-		BestRarityFilter:    "LEGENDARY",
-		BestEquipmentFilter: "SWORD",
-		BestOwnershipFilter: "unequipped",
-		BestSortMode:        "score_asc",
-		MarketableItemsTab:  "best",
-		NotifySources:       "box,offering",
-		HotkeyModifiers:     0,
-		HotkeyVK:            VK_F2,
-		GameScale:           GameScale125,
+		InventoryWarningMinutes: 10,
+		NotificationTargets:     []NotificationTarget{{ItemID: 110001, Count: 3}},
+		ThemeMode:               "light",
+		PriceMode:               "instant",
+		RarityFilter:            "RARE",
+		EquipmentFilter:         "weapon",
+		SortMode:                "rarity_desc",
+		BestRarityFilter:        "LEGENDARY",
+		BestEquipmentFilter:     "SWORD",
+		BestOwnershipFilter:     "unequipped",
+		BestSortMode:            "score_asc",
+		MarketableItemsTab:      "best",
+		NotifySources:           "box,offering",
+		HotkeyModifiers:         0,
+		HotkeyVK:                VK_F2,
+		GameScale:               GameScale125,
 	}
 	if err := filestore.WriteJSON(app.settingsFilePath, AppSettings{
 		GameScalePercent: GameScale125,
@@ -207,7 +212,7 @@ func TestGetDashboardSettingsWaitsForSettingsLoad(t *testing.T) {
 
 	select {
 	case got := <-gotCh:
-		if got != want {
+		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("dashboard settings = %+v, want %+v", got, want)
 		}
 	case <-time.After(time.Second):

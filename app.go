@@ -84,6 +84,13 @@ func (a *App) GetInventoryDashboard() (inventory.DashboardState, error) {
 	return inventory.DashboardState{}, nil
 }
 
+func (a *App) SearchCatalog(query string) []core.CatalogItemOption {
+	if appCore := a.coreApp(); appCore != nil {
+		return appCore.SearchCatalog(query)
+	}
+	return []core.CatalogItemOption{}
+}
+
 func (a *App) RefreshInventoryPrices() (inventory.RefreshStatus, error) {
 	if appCore := a.coreApp(); appCore != nil {
 		return appCore.RefreshInventoryPrices()

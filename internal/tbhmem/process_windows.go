@@ -187,38 +187,21 @@ func (process *Process) readValue(address uintptr, pointer unsafe.Pointer, size 
 	return ret != 0 && bytesRead == size
 }
 
+// ScanPattern and ScanPatterns require a positive per-pattern result limit.
 func (process *Process) ScanPattern(pattern []byte, maxResults int) ([]uintptr, uint64) {
-	minAddr, maxAddr := applicationAddressRange()
-	var results []uintptr
-	var scanned uint64
-	for address := minAddr; address < maxAddr; {
-		var mbi memoryBasicInformation
-		ret, _, _ := procVirtualQueryEx.Call(process.Handle, address, uintptr(unsafe.Pointer(&mbi)), unsafe.Sizeof(mbi))
-		if ret == 0 {
-			break
-		}
-		next := mbi.BaseAddress + mbi.RegionSize
-		if next <= address {
-			break
-		}
-		if isReadableCommitted(mbi) {
-			matches, bytesRead := process.scanRegion(mbi.BaseAddress, mbi.RegionSize, pattern, maxResults-len(results))
-			results = append(results, matches...)
-			scanned += bytesRead
-			if maxResults > 0 && len(results) >= maxResults {
-				return results, scanned
-			}
-		}
-		address = next
-	}
-	return results, scanned
+	results, scanned := process.ScanPatterns([][]byte{pattern}, maxResults)
+	return results[0], scanned
 }
 
 func (process *Process) ScanPatterns(patterns [][]byte, maxResults int) ([][]uintptr, uint64) {
 	results := make([][]uintptr, len(patterns))
-	if len(patterns) == 0 || maxResults == 0 {
+	longest := longestPattern(patterns)
+	if process == nil || process.Handle == 0 || longest == 0 || maxResults <= 0 {
 		return results, 0
 	}
+	// One allocation per scan, shared by every pattern and memory region. The
+	// prefix holds only the overlap needed to match across chunk boundaries.
+	buffer := make([]byte, maxScanChunkBytes+longest-1)
 	minAddr, maxAddr := applicationAddressRange()
 	var scanned uint64
 	for address := minAddr; address < maxAddr; {
@@ -232,11 +215,9 @@ func (process *Process) ScanPatterns(patterns [][]byte, maxResults int) ([][]uin
 			break
 		}
 		if isReadableCommitted(mbi) {
-			matches, bytesRead := process.scanRegionPatterns(mbi.BaseAddress, mbi.RegionSize, patterns, maxResults, results)
-			results = matches
-			scanned += bytesRead
-			if allPatternLimitsReached(results, maxResults) {
-				return results, scanned
+			scanned += scanMemoryRegion(process.ReadBytes, mbi.BaseAddress, mbi.RegionSize, patterns, maxResults, results, buffer, maxScanChunkBytes)
+			if allPatternLimitsReached(patterns, results, maxResults) {
+				break
 			}
 		}
 		address = next
@@ -244,115 +225,80 @@ func (process *Process) ScanPatterns(patterns [][]byte, maxResults int) ([][]uin
 	return results, scanned
 }
 
-func (process *Process) scanRegion(base uintptr, size uintptr, pattern []byte, remaining int) ([]uintptr, uint64) {
-	if len(pattern) == 0 || remaining == 0 {
-		return nil, 0
+func longestPattern(patterns [][]byte) int {
+	longest := 0
+	for _, pattern := range patterns {
+		if len(pattern) > longest {
+			longest = len(pattern)
+		}
 	}
-	var results []uintptr
-	var scanned uint64
-	tail := make([]byte, 0, len(pattern)-1)
-	for offset := uintptr(0); offset < size; {
-		chunkSize := uintptr(maxScanChunkBytes)
-		if size-offset < chunkSize {
-			chunkSize = size - offset
-		}
-		chunk := make([]byte, int(chunkSize))
-		if !process.ReadBytes(base+offset, chunk) {
-			offset += chunkSize
-			tail = tail[:0]
-			continue
-		}
-		scanned += uint64(len(chunk))
-		combined := make([]byte, len(tail)+len(chunk))
-		copy(combined, tail)
-		copy(combined[len(tail):], chunk)
-		combinedBase := base + offset - uintptr(len(tail))
-		searchFrom := 0
-		for {
-			index := bytes.Index(combined[searchFrom:], pattern)
-			if index < 0 {
-				break
-			}
-			matchOffset := searchFrom + index
-			if matchOffset+len(pattern) > len(tail) {
-				results = append(results, combinedBase+uintptr(matchOffset))
-				if len(results) >= remaining {
-					return results, scanned
-				}
-			}
-			searchFrom = matchOffset + 1
-		}
-		tailLen := len(pattern) - 1
-		if tailLen > len(combined) {
-			tailLen = len(combined)
-		}
-		tail = append(tail[:0], combined[len(combined)-tailLen:]...)
-		offset += chunkSize
-	}
-	return results, scanned
+	return longest
 }
 
-func (process *Process) scanRegionPatterns(base uintptr, size uintptr, patterns [][]byte, maxResults int, results [][]uintptr) ([][]uintptr, uint64) {
-	if len(patterns) == 0 || maxResults == 0 {
-		return results, 0
+// read must fill the requested buffer completely or return false. Failed chunks
+// break the overlap, so a match is never assembled across an unreadable gap.
+func scanMemoryRegion(read func(uintptr, []byte) bool, base, size uintptr, patterns [][]byte, limit int, results [][]uintptr, buffer []byte, chunkBytes int) uint64 {
+	overlap := longestPattern(patterns) - 1
+	if overlap < 0 || limit <= 0 || chunkBytes <= 0 || len(buffer) < chunkBytes+overlap {
+		return 0
 	}
+	tail := 0
 	var scanned uint64
-	tails := make([][]byte, len(patterns))
 	for offset := uintptr(0); offset < size; {
-		chunkSize := uintptr(maxScanChunkBytes)
-		if size-offset < chunkSize {
-			chunkSize = size - offset
+		count := chunkBytes
+		if size-offset < uintptr(count) {
+			count = int(size - offset)
 		}
-		chunk := make([]byte, int(chunkSize))
-		if !process.ReadBytes(base+offset, chunk) {
-			offset += chunkSize
-			for index := range tails {
-				tails[index] = tails[index][:0]
-			}
+		if !read(base+offset, buffer[tail:tail+count]) {
+			tail = 0
+			offset += uintptr(count)
 			continue
 		}
-		scanned += uint64(len(chunk))
-		for patternIndex, pattern := range patterns {
-			if len(pattern) == 0 || len(results[patternIndex]) >= maxResults {
+		scanned += uint64(count)
+		data := buffer[:tail+count]
+		start := base + offset - uintptr(tail)
+		for i, pattern := range patterns {
+			if len(pattern) == 0 || len(results[i]) >= limit {
 				continue
 			}
-			tail := tails[patternIndex]
-			combined := make([]byte, len(tail)+len(chunk))
-			copy(combined, tail)
-			copy(combined[len(tail):], chunk)
-			combinedBase := base + offset - uintptr(len(tail))
-			searchFrom := 0
-			for {
-				index := bytes.Index(combined[searchFrom:], pattern)
+			// A shorter pattern may already have matched wholly inside the
+			// shared overlap; start at the first newly readable match position.
+			from := tail - len(pattern) + 1
+			if from < 0 {
+				from = 0
+			}
+			for from+len(pattern) <= len(data) {
+				index := bytes.Index(data[from:], pattern)
 				if index < 0 {
 					break
 				}
-				matchOffset := searchFrom + index
-				if matchOffset+len(pattern) > len(tail) {
-					results[patternIndex] = append(results[patternIndex], combinedBase+uintptr(matchOffset))
-					if len(results[patternIndex]) >= maxResults {
-						break
-					}
+				match := from + index
+				results[i] = append(results[i], start+uintptr(match))
+				if len(results[i]) >= limit {
+					break
 				}
-				searchFrom = matchOffset + 1
+				from = match + 1
 			}
-			tailLen := len(pattern) - 1
-			if tailLen > len(combined) {
-				tailLen = len(combined)
-			}
-			tails[patternIndex] = append(tails[patternIndex][:0], combined[len(combined)-tailLen:]...)
 		}
-		offset += chunkSize
+		if allPatternLimitsReached(patterns, results, limit) {
+			break
+		}
+		tail = overlap
+		if len(data) < tail {
+			tail = len(data)
+		}
+		copy(buffer[:tail], data[len(data)-tail:])
+		offset += uintptr(count)
 	}
-	return results, scanned
+	return scanned
 }
 
-func allPatternLimitsReached(results [][]uintptr, maxResults int) bool {
-	if maxResults <= 0 {
+func allPatternLimitsReached(patterns [][]byte, results [][]uintptr, limit int) bool {
+	if limit <= 0 {
 		return false
 	}
-	for _, matches := range results {
-		if len(matches) < maxResults {
+	for i, pattern := range patterns {
+		if len(pattern) > 0 && len(results[i]) < limit {
 			return false
 		}
 	}

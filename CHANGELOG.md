@@ -6,6 +6,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-23
+
+### Added
+- Added automatic background catalog updates from the installed game's item and language assets. Validated updates are cached locally, with the last good catalog retained if a refresh fails; Python and REA are not required at runtime.
+- Updated the embedded catalog to 7,031 items, including 1,087 new records and 182 new marketable items.
+- Added live chest-opening countdowns and waiting chest counts to the Inventory Fill tooltip, while retaining the Auto Open label and estimated intervals when live observations are unavailable.
+- Added a configurable inventory-fill warning to Dashboard Settings, with a five-minute default, an off option, and repeated-alert suppression.
+- Added a Stash Value tooltip showing each page's value and occupied slots, empty pages, the material-stash subtotal, and the combined total.
+- Added stack quantity and material-stash support to portfolio values and owned-item quantity tracking.
+
+### Changed
+- Batched IL2CPP class and object discovery and reused scan buffers to reduce startup work and temporary memory allocation.
+- Reused validated live trade-slot objects between reads instead of scanning the whole process on every inventory poll. Destroyed or missing objects trigger bounded rediscovery; locked backing slots no longer cause unnecessary scans.
+- Local measurements reduced cold inventory resolution from 15.27 seconds to 4.17–4.48 seconds and subsequent reads from 685–696 milliseconds to approximately 17–27 milliseconds. These are inventory timings on one machine, not total application startup guarantees.
+
+### Fixed
+- Corrected exact Steam listing names for Plague Fruit, Contaminated Reliquary, and Contaminated Relic variants, while preserving verified listing names across catalog updates.
+- Recognized the current normal chest auto-open unlock runes separately from reduction runes and included the new PlagueLands reduction runes in region-specific forecasts.
+- Used the game's actual remaining opening time, automatic-opening toggle, and waiting chest count when calculating inventory fill time; stale timer observations fall back to estimates.
+- Updated trade-slot reads for the current named runtime fields and prevented current save-data item IDs from being interpreted as legacy cooldown timestamps.
+- Preserved catalog status and quantity-target progress when market price updates rebuild dashboard data.
+
+### Tests
+- Added coverage for installed-game catalog extraction, unchanged-source caching, corrupt-cache rejection, and retention of the last good catalog after refresh failures.
+- Added regression coverage for live chest timing, rune unlocks and reductions, quantity-aware valuation, stash-page totals, warning thresholds, and persisted notification settings.
+- Added memory-scanner coverage for chunk boundaries, overlapping matches, unreadable gaps, result limits, batched class discovery, stale class pointers, live cooldown updates, and destroyed-object recovery.
+
 ## [0.13.0] - 2026-10-22
 
 ### Added

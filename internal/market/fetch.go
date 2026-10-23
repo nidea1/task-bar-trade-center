@@ -119,6 +119,9 @@ func FetchDataWithPriority(config catalog.ItemConfig, marketHashName string, now
 }
 
 func BuildHashName(config catalog.ItemConfig) string {
+	if config.MarketHashName != "" {
+		return config.MarketHashName
+	}
 	gradeUpper := strings.ToUpper(config.Grade)
 	if strings.ToUpper(config.Type) == "MATERIAL" {
 		return config.Name["en-US"]
