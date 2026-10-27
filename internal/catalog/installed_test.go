@@ -20,6 +20,7 @@ func TestInstalledCatalogCacheRequiresEquipmentLevel(t *testing.T) {
 		valid   bool
 	}{
 		{"old-format", 1, 0, false},
+		{"guessed-variant-format", 2, 90, false},
 		{"missing-level", installedCacheVersion, 0, false},
 		{"current-format", installedCacheVersion, 90, true},
 	} {
@@ -45,14 +46,14 @@ func TestInstalledCatalogCacheRequiresEquipmentLevel(t *testing.T) {
 	}
 }
 
-func TestRenamedEquipmentPreservesMarketVariant(t *testing.T) {
+func TestRenamedEquipmentDoesNotGuessMarketName(t *testing.T) {
 	for _, tc := range []struct {
 		id    int
 		level int
 		want  string
 	}{
-		{516193, 80, "Eternal Armor (Beyond) A"},
-		{516191, 90, "Eternal Armor (Beyond) C"},
+		{516193, 80, ""},
+		{516191, 90, ""},
 	} {
 		base := []ItemConfig{{ID: tc.id, Name: map[string]string{"en-US": "Eternal Armor"}, Grade: "BEYOND", Type: "GEAR", Level: tc.level, Marketable: true}}
 		row := fmt.Sprintf("%d,Renamed Armor,GEAR,BEYOND,ARMOR,True,,%d\n", tc.id, tc.level)

@@ -172,7 +172,7 @@ func processNewMarketableInventoryItems(newItems []marketableInventoryItem) {
 							iconPath = path
 						} else {
 							scope := market.CurrentScope()
-							data, exists := marketCacheEntry(scope, marketHashName)
+							data, exists := marketCacheEntry(scope, config)
 							if exists && data.Analysis.IconURL != "" {
 								iconPath = data.Analysis.IconURL
 							}
@@ -235,7 +235,7 @@ func isPriceFresh(itemID int) bool {
 		return false
 	}
 	scope := market.CurrentScope()
-	data, exists := marketCacheEntry(scope, buildMarketHashName(config))
+	data, exists := marketCacheEntry(scope, config)
 	if !exists || data.Analysis.UpdatedAt.IsZero() {
 		return false
 	}
@@ -253,7 +253,7 @@ func isIconAvailable(itemID int) bool {
 		iconPath = path
 	} else {
 		scope := market.CurrentScope()
-		data, exists := marketCacheEntry(scope, marketHashName)
+		data, exists := marketCacheEntry(scope, config)
 		if !exists || data.Analysis.IconURL == "" {
 			return true // No icon URL specified, treat as available so we don't block
 		}
@@ -308,7 +308,7 @@ func inventoryNotificationItemPrice(itemID int) (string, bool) {
 		return tr("notification.price_updating"), false
 	}
 	scope := market.CurrentScope()
-	data, exists := marketCacheEntry(scope, buildMarketHashName(config))
+	data, exists := marketCacheEntry(scope, config)
 	if !exists || data.Analysis.UpdatedAt.IsZero() {
 		return tr("notification.price_updating"), false
 	}
@@ -332,7 +332,7 @@ func inventoryNotificationItemIcon(itemID int) uintptr {
 		return cachedNotificationIcon(iconPath)
 	}
 	scope := market.CurrentScope()
-	data, exists := marketCacheEntry(scope, marketHashName)
+	data, exists := marketCacheEntry(scope, config)
 	if !exists || data.Analysis.IconURL == "" {
 		return 0
 	}

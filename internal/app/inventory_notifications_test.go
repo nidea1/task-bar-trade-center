@@ -18,7 +18,7 @@ func TestRecordMarketableInventoryItemsSeedsThenDetectsNewItems(t *testing.T) {
 	applyDisplayLanguagePreference("en-US")
 	market.SetScope(market.DefaultScope().Currency.Code, market.DefaultScope().Region.CountryCode)
 
-	emerald := catalog.ItemConfig{ID: 200, Name: map[string]string{"en-US": "Emerald"}, Grade: "RARE", Marketable: true}
+	emerald := resolvedTestItem(catalog.ItemConfig{ID: 200, Name: map[string]string{"en-US": "Emerald"}, Grade: "RARE", Marketable: true})
 	scope := market.CurrentScope()
 	activeApp = &App{
 		allItemMap: map[int]catalog.ItemConfig{
@@ -30,7 +30,7 @@ func TestRecordMarketableInventoryItemsSeedsThenDetectsNewItems(t *testing.T) {
 		},
 		priceCache: map[string]market.MarketData{
 			market.CacheKey(scope, buildMarketHashName(emerald)): {
-				Analysis: market.MarketAnalysis{
+				Analysis: market.MarketAnalysis{SteamDefinitionID: emerald.SteamDefinitionID,
 					UpdatedAt:      time.Now(),
 					PricePrefix:    "$",
 					SuggestedPrice: 12.5,
@@ -116,8 +116,8 @@ func TestProcessNewMarketableInventoryItems(t *testing.T) {
 	originalScope := market.CurrentScope()
 
 	scope := market.CurrentScope()
-	ruby := catalog.ItemConfig{ID: 100, Name: map[string]string{"en-US": "Ruby"}, Grade: "COMMON", Marketable: true}
-	emerald := catalog.ItemConfig{ID: 200, Name: map[string]string{"en-US": "Emerald"}, Grade: "RARE", Marketable: true}
+	ruby := resolvedTestItem(catalog.ItemConfig{ID: 100, Name: map[string]string{"en-US": "Ruby"}, Grade: "COMMON", Marketable: true})
+	emerald := resolvedTestItem(catalog.ItemConfig{ID: 200, Name: map[string]string{"en-US": "Emerald"}, Grade: "RARE", Marketable: true})
 
 	activeApp = &App{
 		appHWND:       1,
@@ -132,7 +132,7 @@ func TestProcessNewMarketableInventoryItems(t *testing.T) {
 		},
 		priceCache: map[string]market.MarketData{
 			market.CacheKey(scope, buildMarketHashName(ruby)): {
-				Analysis: market.MarketAnalysis{
+				Analysis: market.MarketAnalysis{SteamDefinitionID: ruby.SteamDefinitionID,
 					UpdatedAt:      time.Now(),
 					PricePrefix:    "$",
 					SuggestedPrice: 5.0,
@@ -153,7 +153,7 @@ func TestProcessNewMarketableInventoryItems(t *testing.T) {
 		if itemID == 200 {
 			activeApp.priceCacheMu.Lock()
 			activeApp.priceCache[market.CacheKey(scope, buildMarketHashName(emerald))] = market.MarketData{
-				Analysis: market.MarketAnalysis{
+				Analysis: market.MarketAnalysis{SteamDefinitionID: emerald.SteamDefinitionID,
 					UpdatedAt:      time.Now(),
 					PricePrefix:    "$",
 					SuggestedPrice: 12.50,
@@ -216,9 +216,9 @@ func TestNotificationRarityFilter(t *testing.T) {
 	applyDisplayLanguagePreference("en-US")
 	market.SetScope(market.DefaultScope().Currency.Code, market.DefaultScope().Region.CountryCode)
 
-	ruby := catalog.ItemConfig{ID: 100, Name: map[string]string{"en-US": "Ruby"}, Grade: "COMMON", Marketable: true}
-	emerald := catalog.ItemConfig{ID: 200, Name: map[string]string{"en-US": "Emerald"}, Grade: "RARE", Marketable: true}
-	legendaryItem := catalog.ItemConfig{ID: 300, Name: map[string]string{"en-US": "Crown"}, Grade: "LEGENDARY", Marketable: true}
+	ruby := resolvedTestItem(catalog.ItemConfig{ID: 100, Name: map[string]string{"en-US": "Ruby"}, Grade: "COMMON", Marketable: true})
+	emerald := resolvedTestItem(catalog.ItemConfig{ID: 200, Name: map[string]string{"en-US": "Emerald"}, Grade: "RARE", Marketable: true})
+	legendaryItem := resolvedTestItem(catalog.ItemConfig{ID: 300, Name: map[string]string{"en-US": "Crown"}, Grade: "LEGENDARY", Marketable: true})
 
 	activeApp = &App{
 		allItemMap: map[int]catalog.ItemConfig{
@@ -280,7 +280,7 @@ func TestProcessNewMarketableInventoryItems_StalePrice(t *testing.T) {
 	originalScope := market.CurrentScope()
 
 	scope := market.CurrentScope()
-	ruby := catalog.ItemConfig{ID: 100, Name: map[string]string{"en-US": "Ruby"}, Grade: "COMMON", Marketable: true}
+	ruby := resolvedTestItem(catalog.ItemConfig{ID: 100, Name: map[string]string{"en-US": "Ruby"}, Grade: "COMMON", Marketable: true})
 
 	activeApp = &App{
 		appHWND:       1,
@@ -293,7 +293,7 @@ func TestProcessNewMarketableInventoryItems_StalePrice(t *testing.T) {
 		},
 		priceCache: map[string]market.MarketData{
 			market.CacheKey(scope, buildMarketHashName(ruby)): {
-				Analysis: market.MarketAnalysis{
+				Analysis: market.MarketAnalysis{SteamDefinitionID: ruby.SteamDefinitionID,
 					// Update time is 6 minutes ago (stale!)
 					UpdatedAt:      time.Now().Add(-6 * time.Minute),
 					PricePrefix:    "$",
@@ -317,7 +317,7 @@ func TestProcessNewMarketableInventoryItems_StalePrice(t *testing.T) {
 			fetchUncachedItemPriceCalled = true
 			activeApp.priceCacheMu.Lock()
 			activeApp.priceCache[market.CacheKey(scope, buildMarketHashName(ruby))] = market.MarketData{
-				Analysis: market.MarketAnalysis{
+				Analysis: market.MarketAnalysis{SteamDefinitionID: ruby.SteamDefinitionID,
 					UpdatedAt:      time.Now(),
 					PricePrefix:    "$",
 					SuggestedPrice: 6.50, // Updated price
@@ -380,7 +380,7 @@ func TestProcessNewMarketableInventoryItems_MissingIcon(t *testing.T) {
 	originalScope := market.CurrentScope()
 
 	scope := market.CurrentScope()
-	ruby := catalog.ItemConfig{ID: 100, Name: map[string]string{"en-US": "Ruby"}, Grade: "COMMON", Marketable: true}
+	ruby := resolvedTestItem(catalog.ItemConfig{ID: 100, Name: map[string]string{"en-US": "Ruby"}, Grade: "COMMON", Marketable: true})
 
 	activeApp = &App{
 		appHWND:       1,
@@ -393,7 +393,7 @@ func TestProcessNewMarketableInventoryItems_MissingIcon(t *testing.T) {
 		},
 		priceCache: map[string]market.MarketData{
 			market.CacheKey(scope, buildMarketHashName(ruby)): {
-				Analysis: market.MarketAnalysis{
+				Analysis: market.MarketAnalysis{SteamDefinitionID: ruby.SteamDefinitionID,
 					UpdatedAt:      time.Now(), // Fresh price!
 					PricePrefix:    "$",
 					SuggestedPrice: 5.0,
@@ -464,4 +464,3 @@ func TestProcessNewMarketableInventoryItems_MissingIcon(t *testing.T) {
 		t.Fatalf("receivedIcon = %v, want 42 (fallback to appIconSmall)", receivedIcon)
 	}
 }
-

@@ -2,19 +2,15 @@ package catalog
 
 import "testing"
 
-func TestMarketVariantUsesEquipmentLevel(t *testing.T) {
+func TestMarketDefinitionID(t *testing.T) {
 	for _, tc := range []struct {
-		item ItemConfig
-		want string
+		id   int
+		want int
 	}{
-		{ItemConfig{ID: 516193, Type: "GEAR", Level: 80}, "A"},
-		{ItemConfig{Type: "GEAR", Level: 89}, "A"},
-		{ItemConfig{ID: 516191, Type: "GEAR", Level: 90}, "C"},
-		{ItemConfig{Type: "GEAR", Level: 100}, "C"},
-		{ItemConfig{Type: "MATERIAL", Level: 100}, "A"},
+		{516193, 516193900}, {516173, 516173900}, {110001900, 110001900}, {0, 0}, {-1, 0}, {1000000, 0}, {1000000000, 0},
 	} {
-		if got := tc.item.MarketVariant(); got != tc.want {
-			t.Errorf("item %+v variant = %q, want %q", tc.item, got, tc.want)
+		if got, ok := MarketDefinitionID(tc.id); got != tc.want || ok != (tc.want != 0) {
+			t.Errorf("item %d definition = %d (%v), want %d", tc.id, got, ok, tc.want)
 		}
 	}
 }

@@ -151,7 +151,7 @@ func TestMarketScopeURLBuilders(t *testing.T) {
 			}
 			assertMarketURLScope(t, itemOrdersHistogramURL("12345", scope), scope, tt.wantID)
 			assertMarketURLHasNoScope(t, priceHistoryURL("Minor Ruby"))
-			assertMarketURLScope(t, steamMarketListingURLForScope(catalog.ItemConfig{Name: map[string]string{"en-US": "Minor Ruby"}}, scope), scope, tt.wantID)
+			assertMarketURLScope(t, steamMarketListingURLForScope(resolvedTestItem(catalog.ItemConfig{Name: map[string]string{"en-US": "Minor Ruby"}}), scope), scope, tt.wantID)
 		})
 	}
 }
@@ -281,6 +281,10 @@ func TestMarketSettingsPersistScope(t *testing.T) {
 }
 
 func TestPriceOverlayIgnoresStaleMarketScope(t *testing.T) {
+	originalApp := activeApp
+	config := resolvedTestItem(catalog.ItemConfig{ID: 42, Name: map[string]string{"en-US": "Ruby"}})
+	activeApp = &App{itemMap: map[int]catalog.ItemConfig{42: config}}
+	defer func() { activeApp = originalApp }()
 	originalScope := market.CurrentScope()
 	originalItemID := activeApp.activeItemID.Load()
 	originalPriceText := getCurrentPriceText()
@@ -296,11 +300,11 @@ func TestPriceOverlayIgnoresStaleMarketScope(t *testing.T) {
 	activeApp.activeItemID.Store(42)
 	setCurrentPriceText("current")
 
-	updatePriceOverlay(42, usdUS, market.MarketAnalysis{UpdatedAt: time.Now(), HasSuggested: true, SuggestedPrice: 1})
+	updatePriceOverlay(42, usdUS, market.MarketAnalysis{SteamDefinitionID: config.SteamDefinitionID, MarketHashName: config.MarketHashName, UpdatedAt: time.Now(), HasSuggested: true, SuggestedPrice: 1})
 	if got := getCurrentPriceText(); got != "current" {
 		t.Fatalf("stale request updated overlay to %q", got)
 	}
-	updatePriceOverlay(42, eurDE, market.MarketAnalysis{UpdatedAt: time.Now(), HasSuggested: true, SuggestedPrice: 2})
+	updatePriceOverlay(42, eurDE, market.MarketAnalysis{SteamDefinitionID: config.SteamDefinitionID, MarketHashName: config.MarketHashName, UpdatedAt: time.Now(), HasSuggested: true, SuggestedPrice: 2})
 	analysis, ok := getCurrentMarketAnalysis()
 	if !ok || analysis.SuggestedPrice != 2 {
 		t.Fatalf("current request left analysis at %+v, %v", analysis, ok)

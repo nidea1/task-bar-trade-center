@@ -16,13 +16,13 @@ import (
 func TestInventoryCatalogUsesGlobalIconMetadataAcrossScopes(t *testing.T) {
 	originalApp := activeApp
 	originalScope := market.CurrentScope()
-	item := catalog.ItemConfig{
+	item := resolvedTestItem(catalog.ItemConfig{
 		ID:         100,
 		Name:       map[string]string{"en-US": "Test Sword"},
 		Grade:      "LEGENDARY",
 		Type:       "GEAR",
 		Marketable: true,
-	}
+	})
 	marketHashName := buildMarketHashName(item)
 	activeApp = &App{
 		allItemMap: map[int]catalog.ItemConfig{item.ID: item},

@@ -26,13 +26,13 @@ func TestSetMarketScopeQueuesInventoryRefresh(t *testing.T) {
 	}, nil)
 	queue.SetBaseDelay(0)
 
-	item := catalog.ItemConfig{
+	item := resolvedTestItem(catalog.ItemConfig{
 		ID:         100,
 		Name:       map[string]string{"en-US": "Test Sword"},
 		Grade:      "LEGENDARY",
 		Type:       "GEAR",
 		Marketable: true,
-	}
+	})
 	now := time.Unix(1700000000, 0)
 	snapshot := &playerdata.InventorySnapshot{
 		ReadAt: now,

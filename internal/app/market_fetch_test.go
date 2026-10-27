@@ -14,12 +14,12 @@ func TestEquipmentVariantDoesNotReuseLegacyPrice(t *testing.T) {
 	originalApp := activeApp
 	t.Cleanup(func() { activeApp = originalApp })
 	scope := market.DefaultScope()
-	config := catalog.ItemConfig{ID: 516193, Name: map[string]string{"en-US": "Eternal Armor"}, Grade: "BEYOND", Type: "GEAR", Level: 90, Marketable: true}
+	config := resolvedTestItem(catalog.ItemConfig{ID: 516193, Name: map[string]string{"en-US": "Eternal Armor"}, Grade: "BEYOND", Type: "GEAR", Level: 90, Marketable: true})
 	activeApp = &App{
 		itemMap: map[int]catalog.ItemConfig{config.ID: config},
 		priceCache: map[string]market.MarketData{
 			market.CacheKey(scope, "Eternal Armor (Beyond) A"): {
-				Analysis: market.MarketAnalysis{SuggestedPrice: 7.76, HasSuggested: true, UpdatedAt: time.Now()},
+				Analysis: market.MarketAnalysis{SteamDefinitionID: config.SteamDefinitionID, SuggestedPrice: 7.76, HasSuggested: true, UpdatedAt: time.Now()},
 			},
 		},
 	}
@@ -28,7 +28,7 @@ func TestEquipmentVariantDoesNotReuseLegacyPrice(t *testing.T) {
 		t.Fatalf("current equipment reused legacy variant price: %+v", quote)
 	}
 	activeApp.priceCache[market.CacheKey(scope, "Eternal Armor (Beyond) C")] = market.MarketData{
-		Analysis: market.MarketAnalysis{SuggestedPrice: 0.40, HasSuggested: true, UpdatedAt: time.Now()},
+		Analysis: market.MarketAnalysis{SteamDefinitionID: config.SteamDefinitionID, SuggestedPrice: 0.40, HasSuggested: true, UpdatedAt: time.Now()},
 	}
 	if quote, ok := provider.Quote(config.ID); !ok || quote.Suggested != 0.40 {
 		t.Fatalf("current equipment quote = %+v, ok = %v; want 0.40", quote, ok)
@@ -47,7 +47,7 @@ func TestFetchPriceAndUpdateShowsStaleCacheBeforeRefresh(t *testing.T) {
 
 	scope := market.DefaultScope()
 	market.SetScope(scope.Currency.Code, scope.Region.CountryCode)
-	config := catalog.ItemConfig{ID: 100, Name: map[string]string{"en-US": "Ruby"}, Grade: "IMMORTAL", Marketable: true}
+	config := resolvedTestItem(catalog.ItemConfig{ID: 100, Name: map[string]string{"en-US": "Ruby"}, Grade: "IMMORTAL", Marketable: true})
 	marketHashName := buildMarketHashName(config)
 	staleAt := time.Now().Add(-10 * time.Minute)
 
@@ -58,7 +58,7 @@ func TestFetchPriceAndUpdateShowsStaleCacheBeforeRefresh(t *testing.T) {
 			market.CacheKey(scope, marketHashName): {
 				CachedAt:      staleAt,
 				OrderCachedAt: staleAt,
-				Analysis: market.MarketAnalysis{
+				Analysis: market.MarketAnalysis{SteamDefinitionID: config.SteamDefinitionID,
 					MarketHashName: marketHashName,
 					UpdatedAt:      staleAt,
 					PricePrefix:    "$",
@@ -79,7 +79,7 @@ func TestFetchPriceAndUpdateShowsStaleCacheBeforeRefresh(t *testing.T) {
 		return market.MarketData{
 			CachedAt:      now,
 			OrderCachedAt: now,
-			Analysis: market.MarketAnalysis{
+			Analysis: market.MarketAnalysis{SteamDefinitionID: config.SteamDefinitionID,
 				MarketHashName: marketHashName,
 				UpdatedAt:      now,
 				PricePrefix:    "$",
@@ -122,7 +122,7 @@ func TestFetchMarketDataDeduplicatesInFlightRequests(t *testing.T) {
 
 	scope := market.DefaultScope()
 	market.SetScope(scope.Currency.Code, scope.Region.CountryCode)
-	config := catalog.ItemConfig{ID: 100, Name: map[string]string{"en-US": "Ruby"}, Grade: "IMMORTAL", Marketable: true}
+	config := resolvedTestItem(catalog.ItemConfig{ID: 100, Name: map[string]string{"en-US": "Ruby"}, Grade: "IMMORTAL", Marketable: true})
 	marketHashName := buildMarketHashName(config)
 	activeApp = &App{}
 
@@ -136,7 +136,7 @@ func TestFetchMarketDataDeduplicatesInFlightRequests(t *testing.T) {
 		<-releaseFetch
 		return market.MarketData{
 			CachedAt: now,
-			Analysis: market.MarketAnalysis{
+			Analysis: market.MarketAnalysis{SteamDefinitionID: config.SteamDefinitionID,
 				MarketHashName: marketHashName,
 				UpdatedAt:      now,
 			},
@@ -183,8 +183,8 @@ func TestScheduleHoveredPriceFetchDebouncesPreviousHover(t *testing.T) {
 	market.SetScope(scope.Currency.Code, scope.Region.CountryCode)
 	hoverPriceFetchDebounce = 20 * time.Millisecond
 
-	ruby := catalog.ItemConfig{ID: 100, Name: map[string]string{"en-US": "Ruby"}, Grade: "IMMORTAL", Marketable: true}
-	emerald := catalog.ItemConfig{ID: 200, Name: map[string]string{"en-US": "Emerald"}, Grade: "IMMORTAL", Marketable: true}
+	ruby := resolvedTestItem(catalog.ItemConfig{ID: 100, Name: map[string]string{"en-US": "Ruby"}, Grade: "IMMORTAL", Marketable: true})
+	emerald := resolvedTestItem(catalog.ItemConfig{ID: 200, Name: map[string]string{"en-US": "Emerald"}, Grade: "IMMORTAL", Marketable: true})
 	activeApp = &App{
 		allItemMap: map[int]catalog.ItemConfig{100: ruby, 200: emerald},
 		itemMap:    map[int]catalog.ItemConfig{100: ruby, 200: emerald},
@@ -197,7 +197,7 @@ func TestScheduleHoveredPriceFetchDebouncesPreviousHover(t *testing.T) {
 		fetched <- config.ID
 		return market.MarketData{
 			CachedAt: now,
-			Analysis: market.MarketAnalysis{
+			Analysis: market.MarketAnalysis{SteamDefinitionID: config.SteamDefinitionID,
 				MarketHashName: marketHashName,
 				UpdatedAt:      now,
 			},

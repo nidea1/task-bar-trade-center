@@ -45,7 +45,7 @@ func TestFetchValveSSRListingWithoutFallbackRequests(t *testing.T) {
 		return testHTTPResponse(http.StatusOK, string(body)), nil
 	})
 	scope, _ := marketScopeFor("USD", "TR")
-	config := catalog.ItemConfig{Grade: "LEGENDARY", Type: "GEAR", Name: map[string]string{"en-US": "War Boots"}}
+	config := resolvedTestItem(catalog.ItemConfig{ID: 533111, Level: 40, Grade: "LEGENDARY", Type: "GEAR", Name: map[string]string{"en-US": "War Boots"}})
 	data, err := FetchDataWithPriority(config, BuildHashName(config), time.Unix(1792691084, 0), scope, RequestPriorityHigh)
 	if err != nil {
 		t.Fatal(err)
@@ -105,11 +105,11 @@ func TestLoaderDataListingSkipsLegacyMarketJSONEndpoints(t *testing.T) {
 	if !ok {
 		t.Fatal("expected USD/US scope")
 	}
-	config := catalog.ItemConfig{
+	config := resolvedTestItem(catalog.ItemConfig{
 		ID:   116002,
 		Type: "MATERIAL",
 		Name: map[string]string{"en-US": "Astral Diamond"},
-	}
+	})
 	data, err := fetchDataForScope(config, "Astral Diamond", time.Unix(1700000000, 0), scope, RequestPriorityHigh)
 	if err != nil {
 		t.Fatalf("fetchDataForScope returned error: %v", err)
@@ -147,7 +147,8 @@ func TestScopedListingOrderBookSkipsPricehistory(t *testing.T) {
 		resetSteamRequestLimiterForTest()
 		switch {
 		case strings.Contains(request.URL.Path, "/market/listings/"):
-			body := fmt.Sprintf(`<script>JSON.parse("{\"state\":{\"data\":{\"amtMaxBuyOrder\":2,\"amtMinSellOrder\":3,\"eCurrency\":%d,\"cBuyOrders\":4,\"cSellOrders\":5,\"rgCompactBuyOrders\":[2,6],\"rgCompactSellOrders\":[3,7]},\"queryKey\":[\"market\",\"orderbook\",3678970,\"Astral Diamond\"]}}")</script>`, scope.Currency.SteamCurrencyID)
+			body := fmt.Sprintf(`<script>JSON.parse("{\"state\":{\"data\":{\"amtMaxBuyOrder\":2,\"amtMinSellOrder\":3,\"eCurrency\":%d,\"cBuyOrders\":4,\"cSellOrders\":5,\"rgCompactBuyOrders\":[2,6],\"rgCompactSellOrders\":[3,7]}},\"queryKey\":[\"market\",\"orderbook\",3678970,\"Astral Diamond\"]}")</script>`, scope.Currency.SteamCurrencyID)
+			body += `<script>` + testDescriptionQuery("Astral Diamond") + `</script>`
 			return testHTTPResponse(http.StatusOK, body), nil
 		case strings.Contains(request.URL.Path, "/market/pricehistory/"):
 			t.Fatalf("pricehistory should not be requested when scoped listing has order book data")
@@ -161,11 +162,11 @@ func TestScopedListingOrderBookSkipsPricehistory(t *testing.T) {
 		}
 	})
 
-	config := catalog.ItemConfig{
+	config := resolvedTestItem(catalog.ItemConfig{
 		ID:   116002,
 		Type: "MATERIAL",
 		Name: map[string]string{"en-US": "Astral Diamond"},
-	}
+	})
 	data, err := fetchDataForScope(config, "Astral Diamond", time.Unix(1700000000, 0), scope, RequestPriorityHigh)
 	if err != nil {
 		t.Fatalf("fetchDataForScope returned error: %v", err)
@@ -209,11 +210,11 @@ func TestScopedSuggestedPriceMergesUSDFallbackDetails(t *testing.T) {
 		return testHTTPResponse(http.StatusNotFound, ""), nil
 	})
 
-	config := catalog.ItemConfig{
+	config := resolvedTestItem(catalog.ItemConfig{
 		ID:   116002,
 		Type: "MATERIAL",
 		Name: map[string]string{"en-US": "Astral Diamond"},
-	}
+	})
 	data, err := FetchDataWithPriority(config, "Astral Diamond", time.Unix(1700000100, 0), scope, RequestPriorityHigh)
 	if err != nil {
 		t.Fatalf("FetchDataWithPriority returned error: %v", err)
@@ -267,11 +268,11 @@ func TestListingWithoutMarketDataUsesOnlyHTMLSearchFallback(t *testing.T) {
 	if !ok {
 		t.Fatal("expected GBP/GB scope")
 	}
-	config := catalog.ItemConfig{
+	config := resolvedTestItem(catalog.ItemConfig{
 		ID:   116002,
 		Type: "MATERIAL",
 		Name: map[string]string{"en-US": "Astral Diamond"},
-	}
+	})
 	_, err := fetchDataForScope(config, "Astral Diamond", time.Unix(1700000000, 0), scope, RequestPriorityHigh)
 	if err == nil {
 		t.Fatal("fetchDataForScope returned nil error")
@@ -309,7 +310,7 @@ func TestListingShellFallsBackToSearchHTMLPrice(t *testing.T) {
 		}
 	})
 
-	config := catalog.ItemConfig{ID: 116002, Type: "MATERIAL", Name: map[string]string{"en-US": "Astral Diamond"}}
+	config := resolvedTestItem(catalog.ItemConfig{ID: 116002, Type: "MATERIAL", Name: map[string]string{"en-US": "Astral Diamond"}})
 	data, err := fetchDataForScope(config, "Astral Diamond", time.Unix(1_700_000_000, 0), defaultMarketScope(), RequestPriorityHigh)
 	if err != nil {
 		t.Fatalf("fetchDataForScope returned error: %v", err)
@@ -417,6 +418,7 @@ func loaderDataListingFixture(currencyID int, highestBuyCents int, lowestSellCen
 			SteamAppID,
 		)
 	}
+	queries += "," + testDescriptionQuery("Astral Diamond")
 	dehydratedState := `{"queries":[` + queries + `]}`
 	loaderEntry, _ := json.Marshal(map[string]any{"dehydratedState": dehydratedState})
 	loaderData, _ := json.Marshal([]string{string(loaderEntry)})
@@ -425,12 +427,13 @@ func loaderDataListingFixture(currencyID int, highestBuyCents int, lowestSellCen
 
 func loaderDataSearchFixture(marketHashName string, appID int, currencyID int, formattedPrice string, sellOrders int) string {
 	dehydratedState := fmt.Sprintf(
-		`{"queries":[{"state":{"data":{"pages":[{"start":0,"total_count":1,"results":[{"strHash":%q,"cSellOrders":%d,"cBuyOrders":0,"eCurrency":%d,"strMinSellSubtotal":%q,"asset_description":{"appid":%d}}]}]}}}]}`,
+		`{"queries":[{"queryKey":["market","search"],"state":{"data":{"pages":[{"start":0,"total_count":1,"results":[{"strHash":%q,"cSellOrders":%d,"cBuyOrders":0,"eCurrency":%d,"strMinSellSubtotal":%q,"asset_description":{"appid":%d,"market_hash_name":%q,"marketable":true,"tags":[{"category":"type","internal_name":"material"},{"category":"rarity","internal_name":"common"}]}}]}]}}}]}`,
 		marketHashName,
 		sellOrders,
 		currencyID,
 		formattedPrice,
 		appID,
+		marketHashName,
 	)
 	loaderEntry, _ := json.Marshal(map[string]any{"searchState": dehydratedState})
 	loaderData, _ := json.Marshal([]string{string(loaderEntry)})

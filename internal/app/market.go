@@ -1,11 +1,11 @@
 package app
 
 import (
-	"github.com/nidea1/task-bar-trade-center/internal/catalog"
-
+	"errors"
 	"sort"
 	"time"
 
+	"github.com/nidea1/task-bar-trade-center/internal/catalog"
 	"github.com/nidea1/task-bar-trade-center/internal/market"
 )
 
@@ -46,7 +46,7 @@ func fetchPriceAndUpdateWithOptions(config catalog.ItemConfig, useCache bool, sc
 	cacheKey := market.CacheKey(scope, marketHashName)
 	now := time.Now()
 
-	existingCache, hasExistingCache := marketCacheEntry(scope, marketHashName)
+	existingCache, hasExistingCache := marketCacheEntry(scope, config)
 	if useCache && hasExistingCache {
 		needsRefresh := !market.IsFreshCache(existingCache, now) || market.RequiresUSDFallbackRefresh(scope, existingCache.Analysis)
 		if showExistingCache {
@@ -71,6 +71,10 @@ func fetchPriceAndUpdateWithOptions(config catalog.ItemConfig, useCache bool, sc
 
 	data, err := fetchMarketDataWithPriority(config, marketHashName, now, scope, priority)
 	if err != nil {
+		if errors.Is(err, market.ErrIdentityMismatch) || errors.Is(err, market.ErrIdentityUnavailable) {
+			invalidateMarketPrice(config, scope)
+			existingCache, hasExistingCache = market.MarketData{}, false
+		}
 		if analysis, ok := market.StaleAnalysis(existingCache, hasExistingCache); ok {
 			logMarketPrice(config, scope, marketHashName, analysis, "stale-cache")
 			logPrintf("[MARKET:error] Steam market analysis failed, using stale cache: %v\n", err)
@@ -79,6 +83,7 @@ func fetchPriceAndUpdateWithOptions(config catalog.ItemConfig, useCache bool, sc
 		}
 
 		analysis := market.UnavailableAnalysis(marketHashName, now, scope.Currency)
+		analysis.SteamDefinitionID = config.SteamDefinitionID
 		logMarketPrice(config, scope, marketHashName, analysis, "error")
 		logPrintf("[MARKET:error] Steam market analysis failed: %v\n", err)
 		updatePriceOverlay(config.ID, scope, analysis)
@@ -109,6 +114,9 @@ func fetchMarketData(config catalog.ItemConfig, marketHashName string, now time.
 }
 
 func fetchMarketDataWithPriority(config catalog.ItemConfig, marketHashName string, now time.Time, scope market.MarketScope, priority market.RequestPriority) (market.MarketData, error) {
+	if marketHashName == "" || marketHashName != buildMarketHashName(config) {
+		return market.MarketData{}, market.ErrIdentityUnavailable
+	}
 	cacheKey := market.CacheKey(scope, marketHashName)
 
 	activeApp.marketFetchMu.Lock()
@@ -139,16 +147,31 @@ func fetchMarketDataWithPriority(config catalog.ItemConfig, marketHashName strin
 	return call.data, call.err
 }
 
-func marketCacheEntry(scope market.MarketScope, marketHashName string) (market.MarketData, bool) {
+func marketCacheEntry(scope market.MarketScope, config catalog.ItemConfig) (market.MarketData, bool) {
+	marketHashName := buildMarketHashName(config)
+	if marketHashName == "" {
+		return market.MarketData{}, false
+	}
 	activeApp.priceCacheMu.RLock()
 	defer activeApp.priceCacheMu.RUnlock()
 	data, exists := activeApp.priceCache[market.CacheKey(scope, marketHashName)]
-	return data, exists
+	return data, exists && data.Analysis.SteamDefinitionID == config.SteamDefinitionID
+}
+
+func invalidateMarketPrice(config catalog.ItemConfig, scope market.MarketScope) {
+	activeApp.priceCacheMu.Lock()
+	delete(activeApp.priceCache, market.CacheKey(scope, buildMarketHashName(config)))
+	schedulePriceCacheWriteLocked()
+	activeApp.priceCacheMu.Unlock()
+	analysis := market.UnavailableAnalysis(buildMarketHashName(config), time.Now(), scope.Currency)
+	analysis.SteamDefinitionID = config.SteamDefinitionID
+	updatePriceOverlay(config.ID, scope, analysis)
+	requestInventoryDashboardRebuild("market-identity-unavailable")
 }
 
 func showCachedPriceOverlay(config catalog.ItemConfig, scope market.MarketScope) cachedPriceOverlayState {
 	marketHashName := buildMarketHashName(config)
-	existingCache, hasExistingCache := marketCacheEntry(scope, marketHashName)
+	existingCache, hasExistingCache := marketCacheEntry(scope, config)
 	analysis, ok := market.StaleAnalysis(existingCache, hasExistingCache)
 	if !ok {
 		logTooltipCacheMetric(config, scope, marketHashName, "miss", true, -1)
@@ -222,6 +245,10 @@ func logMarketPrice(config catalog.ItemConfig, scope market.MarketScope, marketH
 
 func updatePriceOverlay(itemID int, scope market.MarketScope, analysis market.MarketAnalysis) {
 	if activeApp.activeItemID.Load() != int32(itemID) || market.CurrentScope() != scope {
+		return
+	}
+	config, exists := marketCatalogItems()[itemID]
+	if !exists || analysis.SteamDefinitionID != config.SteamDefinitionID || analysis.MarketHashName != buildMarketHashName(config) {
 		return
 	}
 	setCurrentMarketAnalysis(analysis)

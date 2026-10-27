@@ -33,7 +33,7 @@ type installedCache struct {
 	Items       []ItemConfig `json:"items"`
 }
 
-const installedCacheVersion = 2
+const installedCacheVersion = 3
 
 func LoadCached(path string, base []ItemConfig) ([]ItemConfig, Status, error) {
 	b, err := os.ReadFile(path)
@@ -196,7 +196,7 @@ func mergeGameCSV(raw []byte, names map[string]map[string]string, base []ItemCon
 		if exists {
 			previous = items[index]
 		}
-		item := ItemConfig{ID: id, Grade: get("GRADE"), Type: get("ITEMTYPE"), MarketHashName: previous.MarketHashName, Marketable: previous.Marketable, Name: previous.Name}
+		item := ItemConfig{ID: id, Grade: get("GRADE"), Type: get("ITEMTYPE"), Marketable: previous.Marketable, Name: previous.Name}
 		if level := get("Level"); level != "" {
 			item.Level, err = strconv.Atoi(level)
 			if err != nil || item.Level < 0 {
@@ -234,22 +234,8 @@ func mergeGameCSV(raw []byte, names map[string]map[string]string, base []ItemCon
 		if item.Grade == "" {
 			return nil, fmt.Errorf("missing grade for item %d", id)
 		}
-		// Display names can change independently of existing Steam listings.
-		// Preserve the previously verified listing name when refreshing labels.
-		if previous.Marketable && previous.Name["en-US"] != "" && previous.Name["en-US"] != item.Name["en-US"] && item.MarketHashName == "" {
-			item.MarketHashName = previous.Name["en-US"]
-			if previous.Type != "MATERIAL" {
-				item.MarketHashName += " (" + strings.ToUpper(previous.Grade[:1]) + strings.ToLower(previous.Grade[1:]) + ") " + previous.MarketVariant()
-			}
-		}
 		if item.Name["en-US"] == "" {
 			item.Marketable = false
-		}
-		if item.MarketHashName == "" && item.Type == "MATERIAL" {
-			switch item.Name["en-US"] {
-			case "Plague Fruit", "Contaminated Reliquary", "Contaminated Relic":
-				item.MarketHashName = item.Name["en-US"] + " (" + strings.ToUpper(item.Grade[:1]) + strings.ToLower(item.Grade[1:]) + ")"
-			}
 		}
 		if exists {
 			items[index] = item
@@ -263,21 +249,6 @@ func mergeGameCSV(raw []byte, names map[string]map[string]string, base []ItemCon
 	}
 	if len(base) > 100 && len(seen) < len(base)*9/10 {
 		return nil, fmt.Errorf("game item table is unexpectedly incomplete: %d rows", len(seen))
-	}
-	families := map[string]map[string]bool{}
-	for _, item := range items {
-		if item.Marketable && item.Type == "MATERIAL" && item.Name["en-US"] != "" {
-			name := item.Name["en-US"]
-			if families[name] == nil {
-				families[name] = map[string]bool{}
-			}
-			families[name][item.Grade] = true
-		}
-	}
-	for _, item := range items {
-		if item.Marketable && item.Type == "MATERIAL" && item.MarketHashName == "" && len(families[item.Name["en-US"]]) > 1 {
-			return nil, fmt.Errorf("Steam market naming needs verification for material %s", item.Name["en-US"])
-		}
 	}
 	if err := validateCatalog(items, base); err != nil {
 		return nil, err
@@ -301,6 +272,9 @@ func validateCatalog(items, base []ItemConfig) error {
 			return fmt.Errorf("invalid catalog item %d", item.ID)
 		}
 		seen[item.ID] = true
+		if item.SteamDefinitionID != 0 && !item.HasMarketIdentity() {
+			return fmt.Errorf("invalid Steam identity for catalog item %d", item.ID)
+		}
 		if item.Level < 0 || (item.Type == "GEAR" && item.Marketable && item.Level == 0) {
 			return fmt.Errorf("invalid level for catalog item %d", item.ID)
 		}
@@ -324,4 +298,30 @@ func validateCatalog(items, base []ItemConfig) error {
 		}
 	}
 	return nil
+}
+
+// SaveMarketIdentities retains the source fingerprint when SDK names are refreshed.
+func SaveMarketIdentities(path string, items []ItemConfig) error {
+	if path == "" {
+		return nil
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	if len(b) > 32<<20 {
+		return fmt.Errorf("catalog cache exceeds size limit")
+	}
+	var cache installedCache
+	if err := json.Unmarshal(b, &cache); err != nil {
+		return err
+	}
+	if cache.Version != installedCacheVersion || cache.Fingerprint == "" {
+		return fmt.Errorf("unsupported catalog cache")
+	}
+	if err := validateCatalog(items, cache.Items); err != nil {
+		return err
+	}
+	cache.Items = items
+	return storage.WriteJSONAtomic(path, cache)
 }

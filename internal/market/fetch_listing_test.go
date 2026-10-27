@@ -40,7 +40,7 @@ func TestListing429DoesNotCascadeToLegacyEndpoints(t *testing.T) {
 	})
 
 	name := "Issue Eight Item"
-	config := catalog.ItemConfig{ID: 1, Type: "MATERIAL", Name: map[string]string{"en-US": name}}
+	config := resolvedTestItem(catalog.ItemConfig{ID: 1, Type: "MATERIAL", Name: map[string]string{"en-US": name}})
 	_, err := fetchDataForScope(config, name, time.Unix(1_700_000_000, 0), defaultMarketScope(), RequestPriorityHigh)
 	if err == nil || !strings.Contains(err.Error(), "429") {
 		t.Fatalf("listing rate limit error = %v, want 429", err)
@@ -66,13 +66,14 @@ func TestScopedListingAcceptsUSDSSRAndConvertsLocally(t *testing.T) {
 		if !strings.Contains(request.URL.Path, "/market/listings/") {
 			t.Fatalf("USD SSR should avoid fallback endpoints: %s", request.URL.String())
 		}
-		body := `<script>JSON.parse("{\"state\":{\"data\":{\"amtMaxBuyOrder\":80,\"amtMinSellOrder\":101,\"eCurrency\":1,\"cBuyOrders\":4,\"cSellOrders\":5,\"rgCompactBuyOrders\":[80,6],\"rgCompactSellOrders\":[101,7]},\"queryKey\":[\"market\",\"orderbook\",3678970,\"Astral Diamond\"]}}")</script>
-<script>JSON.parse("{\"state\":{\"data\":{\"history\":[{\"time\":1700000000,\"price_median\":1.00,\"purchases\":3}]},\"queryKey\":[\"market\",\"pricehistory\",3678970,\"Astral Diamond\"]}}")</script>`
+		body := `<script>JSON.parse("{\"state\":{\"data\":{\"amtMaxBuyOrder\":80,\"amtMinSellOrder\":101,\"eCurrency\":1,\"cBuyOrders\":4,\"cSellOrders\":5,\"rgCompactBuyOrders\":[80,6],\"rgCompactSellOrders\":[101,7]}},\"queryKey\":[\"market\",\"orderbook\",3678970,\"Astral Diamond\"]}")</script>
+<script>JSON.parse("{\"state\":{\"data\":{\"history\":[{\"time\":1700000000,\"price_median\":1.00,\"purchases\":3}]}},\"queryKey\":[\"market\",\"pricehistory\",3678970,\"Astral Diamond\"]}")</script>`
+		body += `<script>` + testDescriptionQuery("Astral Diamond") + `</script>`
 		return testHTTPResponse(http.StatusOK, body), nil
 	})
 
 	scope, _ := marketScopeFor("GBP", "GB")
-	config := catalog.ItemConfig{ID: 116002, Type: "MATERIAL", Name: map[string]string{"en-US": "Astral Diamond"}}
+	config := resolvedTestItem(catalog.ItemConfig{ID: 116002, Type: "MATERIAL", Name: map[string]string{"en-US": "Astral Diamond"}})
 	data, err := FetchDataWithPriority(config, "Astral Diamond", now, scope, RequestPriorityHigh)
 	if err != nil {
 		t.Fatalf("FetchDataWithPriority failed: %v", err)

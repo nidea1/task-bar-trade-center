@@ -6,6 +6,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.3] - 2026-10-28
+
+### Added
+- Integrated Steam client SDK adapter (`steamdefs`) to query item definition IDs, verified market names, marketability flags, and identifying metadata tags directly via `ISteamInventory::GetItemDefinitionProperty` during catalog refresh.
+- Linked game item keys to Steam market definition IDs using the native `ItemKey * 1000 + 900` definition convention.
+- Added strict response verification (`verifiedListingSources`, `verifiedSearchSources`) checking matching AppID (3678970), canonical `market_hash_name`, and item tags on Steam Community Market SSR listing and search data.
+
+### Changed
+- Replaced the temporary level-based equipment variant guessing rule with verified Steam market identity resolution. Equipment sharing identical levels (such as level-80 `A` and `C` variants) are now resolved distinctly from Steam's definition inventory.
+- Bound the price cache and market analysis model to Steam definition IDs. Items without a verified identity or with conflicting definitions are marked as unavailable rather than falling back to guessed names or stale cross-variant prices.
+- Bumped installed catalog cache format to version 3, automatically invalidating legacy guessed-variant entries.
+
+### Fixed
+- Fixed cross-variant price bleed where prices from an obsolete variant could display for a different variant of the same gear.
+- Added immediate overlay HUD invalidation when catalog definitions update or when an identity mismatch occurs during fetch.
+
+### Tests
+- Added regression tests for Steam SDK definition extraction, catalog identity binding, old-variant overlay rejection, legacy cache invalidation, and mismatch error handling.
+
 ## [0.14.2] - 2026-10-27
 
 ### Fixed

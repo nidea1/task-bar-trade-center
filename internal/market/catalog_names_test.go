@@ -2,6 +2,8 @@ package market
 
 import (
 	"net/url"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/nidea1/task-bar-trade-center/internal/catalog"
@@ -20,7 +22,8 @@ func TestCatalogMarketHashNames(t *testing.T) {
 		110001: "Minor Ruby",
 		638111: "Emerald Bracer (Divine) A",
 		303193: "Eternal Sword (Legendary) C",
-		516173: "Dimensional Armor (Beyond) A",
+		516171: "Dimensional Armor (Beyond) A",
+		516173: "Dimensional Armor (Beyond) C",
 		516193: "Eternal Armor (Beyond) C",
 		150103: "Plague Fruit (Rare)",
 		150107: "Plague Fruit (Beyond)",
@@ -36,6 +39,15 @@ func TestCatalogMarketHashNames(t *testing.T) {
 			t.Errorf("missing item %d", id)
 			continue
 		}
+		if BuildHashName(item) != "" {
+			t.Fatalf("unresolved item %d guessed a name", id)
+		}
+		definitionID, _ := catalog.MarketDefinitionID(id)
+		tags := map[string]string{"type": strings.ToLower(item.Type), "rarity": strings.ToLower(item.Grade)}
+		if item.Type == "GEAR" {
+			tags["level"] = strconv.Itoa(item.Level)
+		}
+		item = catalog.ApplyMarketDefinitions([]catalog.ItemConfig{item}, map[int]catalog.MarketDefinition{definitionID: {AppID: SteamAppID, ID: definitionID, Name: want, Marketable: true, Tags: tags}})[0]
 		if got := BuildHashName(item); got != want {
 			t.Errorf("item %d market name = %q, want %q", id, got, want)
 		}

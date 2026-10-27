@@ -79,12 +79,13 @@ type App struct {
 	gameReady               atomic.Bool
 
 	// Caches and databases
-	catalogMu     sync.RWMutex
-	catalogStatus catalog.Status
-	allItemMap    map[int]catalog.ItemConfig
-	itemMap       map[int]catalog.ItemConfig
-	priceCache    map[string]market.MarketData
-	priceCacheMu  sync.RWMutex
+	catalogMu        sync.RWMutex
+	catalogRefreshMu sync.Mutex
+	catalogStatus    catalog.Status
+	allItemMap       map[int]catalog.ItemConfig
+	itemMap          map[int]catalog.ItemConfig
+	priceCache       map[string]market.MarketData
+	priceCacheMu     sync.RWMutex
 
 	iconMetadata   map[string]iconMetadataEntry
 	iconMetadataMu sync.RWMutex

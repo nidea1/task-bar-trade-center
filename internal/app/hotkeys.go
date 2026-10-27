@@ -78,6 +78,9 @@ func openActiveItemMarketLink() {
 	}
 
 	marketURL := steamMarketListingURLForScope(config, market.CurrentScope())
+	if marketURL == "" {
+		return
+	}
 	fmt.Printf("Opening Steam market listing for %s: %s\n", config.Name["en-US"], marketURL)
 	openURLInBrowser(marketURL)
 }

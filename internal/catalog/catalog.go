@@ -11,22 +11,16 @@ import (
 var embeddedItemsJSON []byte
 
 type ItemConfig struct {
-	ID             int               `json:"id"`
-	Name           map[string]string `json:"name"`
-	Grade          string            `json:"grade"`
-	Type           string            `json:"type"`
-	Level          int               `json:"level,omitempty"`
-	Gear           *string           `json:"gear"`
-	Marketable     bool              `json:"marketable"`
-	MarketHashName string            `json:"market_hash_name,omitempty"`
-}
-
-func (config ItemConfig) MarketVariant() string {
-	// shortcut: this follows the observed level cutoff; update if Steam changes its variant naming.
-	if config.Type == "GEAR" && config.Level >= 90 {
-		return "C"
-	}
-	return "A"
+	ID                int               `json:"id"`
+	Name              map[string]string `json:"name"`
+	Grade             string            `json:"grade"`
+	Type              string            `json:"type"`
+	Level             int               `json:"level,omitempty"`
+	Gear              *string           `json:"gear"`
+	Marketable        bool              `json:"marketable"`
+	MarketHashName    string            `json:"market_hash_name,omitempty"`
+	SteamDefinitionID int               `json:"steam_definition_id,omitempty"`
+	SteamTags         map[string]string `json:"steam_tags,omitempty"`
 }
 
 func LoadItems() ([]ItemConfig, error) {

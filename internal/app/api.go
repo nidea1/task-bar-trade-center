@@ -60,6 +60,7 @@ func ForceRefreshInventoryPrices() (inventory.RefreshStatus, error) {
 	if !runtimeReady() {
 		return currentInventoryRefreshStatus(), fmt.Errorf("runtime is still preparing")
 	}
+	refreshMarketDefinitionsForCurrentGame()
 	state, err := readInventoryDashboardStateLocked()
 	if err != nil {
 		return currentInventoryRefreshStatus(), err
@@ -88,7 +89,7 @@ func freshInventoryDashboardCache(maxAge time.Duration) (inventory.DashboardStat
 
 func OpenMarketListing(itemID int) error {
 	config, exists := marketCatalogItems()[itemID]
-	if !exists {
+	if !exists || buildMarketHashName(config) == "" {
 		return fmt.Errorf("market listing is not available")
 	}
 	openURLInBrowser(steamMarketListingURLForScope(config, market.CurrentScope()))

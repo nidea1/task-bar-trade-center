@@ -16,3 +16,6 @@ frontend/package.json.md5
 *.local.*
 *.syso
 _scratch/
+docs/*rea*.md
+docs/*research*.md
+docs/steam-market-identity-research.md

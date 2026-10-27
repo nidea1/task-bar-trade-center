@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	SteamAppID                    = 3678970
+	SteamAppID                    = catalog.SteamAppID
 	steamRequestTimeout           = 6 * time.Second
 	steamSearchPageRequestTimeout = 15 * time.Second
 	steamRequestSpacing           = 2500 * time.Millisecond
@@ -119,44 +119,28 @@ func FetchDataWithPriority(config catalog.ItemConfig, marketHashName string, now
 }
 
 func BuildHashName(config catalog.ItemConfig) string {
-	if config.MarketHashName != "" {
+	if config.HasMarketIdentity() {
 		return config.MarketHashName
 	}
-	gradeUpper := strings.ToUpper(config.Grade)
-	if strings.ToUpper(config.Type) == "MATERIAL" {
-		return config.Name["en-US"]
-	}
-
-	var gradeFormatted string
-	switch gradeUpper {
-	case "LEGENDARY":
-		gradeFormatted = "Legendary"
-	case "IMMORTAL":
-		gradeFormatted = "Immortal"
-	case "ARCANA":
-		gradeFormatted = "Arcana"
-	case "BEYOND":
-		gradeFormatted = "Beyond"
-	case "CELESTIAL":
-		gradeFormatted = "Celestial"
-	case "DIVINE":
-		gradeFormatted = "Divine"
-	case "COSMIC":
-		gradeFormatted = "Cosmic"
-	default:
-		gradeFormatted = "Immortal"
-	}
-	return fmt.Sprintf("%s (%s) %s", config.Name["en-US"], gradeFormatted, config.MarketVariant())
+	return ""
 }
 
 func ListingURL(config catalog.ItemConfig) string {
-	return fmt.Sprintf("https://steamcommunity.com/market/listings/%d/%s", SteamAppID, url.PathEscape(BuildHashName(config)))
+	name := BuildHashName(config)
+	if name == "" {
+		return ""
+	}
+	return fmt.Sprintf("https://steamcommunity.com/market/listings/%d/%s", SteamAppID, url.PathEscape(name))
 }
 
 func ListingURLForScope(config catalog.ItemConfig, scope MarketScope) string {
+	listing := ListingURL(config)
+	if listing == "" {
+		return ""
+	}
 	return fmt.Sprintf(
 		"%s?country=%s&currency=%d",
-		ListingURL(config),
+		listing,
 		url.QueryEscape(scope.Region.CountryCode),
 		scope.Currency.SteamCurrencyID,
 	)
@@ -190,6 +174,9 @@ func MarketSearchPageURL(marketHashName string) string {
 }
 
 func fetchDataForScope(config catalog.ItemConfig, marketHashName string, now time.Time, scope MarketScope, priority RequestPriority) (MarketData, error) {
+	if marketHashName == "" || marketHashName != BuildHashName(config) {
+		return MarketData{}, fmt.Errorf("%w: item %d", ErrIdentityUnavailable, config.ID)
+	}
 	client := newSteamHTTPClient(steamRequestTimeout)
 	listingURL := ListingURLForScope(config, scope)
 	listingBody, _, err := steamGetWithPriority(client, listingURL, "", priority)
@@ -197,29 +184,41 @@ func fetchDataForScope(config catalog.ItemConfig, marketHashName string, now tim
 		return MarketData{}, fmt.Errorf("listing: %w", err)
 	}
 
-	iconURL := ParseIconURL(listingBody)
-	data, listingErr := marketDataFromListingSSR(marketHashName, listingBody, iconURL, now, scope)
+	sources, listingErr := verifiedListingSources(config, listingBody)
+	iconURL := ""
 	if listingErr == nil {
-		return data, nil
+		iconURL = ParseIconURL(sources)
+		data, err := marketDataFromListingSSR(marketHashName, sources, iconURL, now, scope)
+		if err == nil {
+			data.Analysis.SteamDefinitionID = config.SteamDefinitionID
+			return data, nil
+		}
+		listingErr = err
 	}
 
 	searchClient := newSteamHTTPClient(steamSearchPageRequestTimeout)
 	searchBody, _, searchErr := steamGetWithPriority(searchClient, MarketSearchPageURL(marketHashName), listingURL, priority)
 	if searchErr != nil {
-		return MarketData{}, fmt.Errorf("%v; market search page: %w", listingErr, searchErr)
+		return MarketData{}, fmt.Errorf("%w; market search page: %w", listingErr, searchErr)
 	}
-	usdData, ok := marketDataFromSearchHTML(marketHashName, searchBody, now, defaultMarketScope().Currency)
+	searchSources, identityErr := verifiedSearchSources(config, searchBody)
+	if identityErr != nil {
+		return MarketData{}, fmt.Errorf("%v; search: %w", listingErr, identityErr)
+	}
+	usdData, ok := marketDataFromSearchHTML(marketHashName, searchSources, now, defaultMarketScope().Currency)
 	if !ok {
 		return MarketData{}, fmt.Errorf("%v; market search page did not contain an exact price match", listingErr)
 	}
 	usdData.Analysis.IconURL = iconURL
+	usdData.Analysis.SteamDefinitionID = config.SteamDefinitionID
 	if scope.Currency.Code == "USD" {
 		return usdData, nil
 	}
 	local := MarketData{CachedAt: now, Analysis: unavailableMarketAnalysis(marketHashName, now, scope.Currency)}
 	local.Analysis.IconURL = iconURL
-	data = mergeMarketDataWithUSDFallback(local, usdData, scope)
+	data := mergeMarketDataWithUSDFallback(local, usdData, scope)
 	data.Analysis.PriceSource = "market-search-html-usd"
+	data.Analysis.SteamDefinitionID = config.SteamDefinitionID
 	return data, nil
 }
 

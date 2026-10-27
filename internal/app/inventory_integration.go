@@ -358,7 +358,7 @@ func inventoryItemCatalog(scope market.MarketScope) map[int]inventory.ItemDescri
 			descriptor.MarketURL = steamMarketListingURLForScope(marketableConfig, scope)
 			if iconPath, ok := marketIconPath(hashName); ok {
 				descriptor.IconURL = steamIconImageURL(iconPath)
-			} else if cacheData, exists := marketCacheEntry(scope, hashName); exists && cacheData.Analysis.IconURL != "" {
+			} else if cacheData, exists := marketCacheEntry(scope, marketableConfig); exists && cacheData.Analysis.IconURL != "" {
 				descriptor.IconURL = steamIconImageURL(cacheData.Analysis.IconURL)
 			}
 		}
@@ -372,7 +372,7 @@ func (provider cacheQuoteProvider) Quote(itemID int) (inventory.PriceQuote, bool
 	if !exists {
 		return inventory.PriceQuote{}, false
 	}
-	data, exists := marketCacheEntry(provider.scope, buildMarketHashName(config))
+	data, exists := marketCacheEntry(provider.scope, config)
 	if !exists || data.Analysis.UpdatedAt.IsZero() {
 		return inventory.PriceQuote{}, false
 	}
@@ -1059,6 +1059,7 @@ func forceRefreshInventoryPricesFromDashboard() {
 		logPrintln("[INVENTORY] force price refresh skipped: runtime is still preparing.")
 		return
 	}
+	refreshMarketDefinitionsForCurrentGame()
 	state, err := readInventoryDashboardState()
 	if err != nil {
 		logPrintf("[INVENTORY] cannot queue force price refresh: %v\n", err)
@@ -1177,6 +1178,9 @@ func fetchInventoryMarketPrice(_ context.Context, itemID int) error {
 	}
 	scope := market.CurrentScope()
 	marketHashName := buildMarketHashName(config)
+	if marketHashName == "" {
+		return nil
+	}
 	now := time.Now()
 	priority := market.RequestPriorityNormal
 	if activeApp.showOverlay.Load() && activeApp.activeItemID.Load() == int32(itemID) {
@@ -1184,6 +1188,11 @@ func fetchInventoryMarketPrice(_ context.Context, itemID int) error {
 	}
 	data, err := fetchMarketDataWithPriority(config, marketHashName, now, scope, priority)
 	if err != nil {
+		if errors.Is(err, market.ErrIdentityMismatch) || errors.Is(err, market.ErrIdentityUnavailable) {
+			invalidateMarketPrice(config, scope)
+			logPrintf("[MARKET] item %d identity rejected: %v\n", itemID, err)
+			return nil
+		}
 		return err
 	}
 	if data.Analysis.IconURL != "" {
