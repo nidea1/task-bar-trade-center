@@ -6,6 +6,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.2] - 2026-10-27
+
+### Fixed
+- Fixed inflated prices for level-90 and higher equipment, including Eternal Armor (Beyond), caused by querying obsolete Steam Market `A` listings and their historical sales instead of the current `C` listings.
+- Kept equipment below level 90 on Steam's `A` variant. Price requests, market links, and price-cache lookups now use the equipment's level to select the variant.
+- Preserved item levels when refreshing the installed-game catalog and rebuilt older catalog caches that omitted this information.
+
+### Temporary workaround
+- Prices come directly from Steam Community Market. This patch follows the currently observed naming rule: level 90 and above uses `C`, and lower-level equipment uses `A`. Future changes to Steam's variant naming will require another update.
+
+### Tests
+- Added regression coverage for the level-90 boundary, correct market links, old-variant price-cache isolation, and catalog cache rebuilding with installed-game data.
+
+### Acknowledgements
+- Thank you to the user who reported the Eternal Armor (Beyond) price discrepancy and helped uncover the incorrect Steam listing lookup.
+
 ## [0.14.1] - 2026-10-23
 
 ### Fixed

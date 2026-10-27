@@ -33,6 +33,8 @@ type installedCache struct {
 	Items       []ItemConfig `json:"items"`
 }
 
+const installedCacheVersion = 2
+
 func LoadCached(path string, base []ItemConfig) ([]ItemConfig, Status, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -45,7 +47,7 @@ func LoadCached(path string, base []ItemConfig) ([]ItemConfig, Status, error) {
 	if err := json.Unmarshal(b, &cache); err != nil {
 		return nil, Status{}, err
 	}
-	if cache.Version != 1 || cache.Fingerprint == "" {
+	if cache.Version != installedCacheVersion || cache.Fingerprint == "" {
 		return nil, Status{}, fmt.Errorf("unsupported catalog cache")
 	}
 	if err := validateCatalog(cache.Items, base); err != nil {
@@ -121,7 +123,7 @@ func RefreshInstalled(dataDir, cachePath string, base []ItemConfig) ([]ItemConfi
 	fingerprint := hex.EncodeToString(h.Sum(nil))
 	if raw, err := os.ReadFile(cachePath); err == nil && len(raw) <= 32<<20 {
 		var cached installedCache
-		if json.Unmarshal(raw, &cached) == nil && cached.Version == 1 && cached.Fingerprint == fingerprint && validateCatalog(cached.Items, base) == nil {
+		if json.Unmarshal(raw, &cached) == nil && cached.Version == installedCacheVersion && cached.Fingerprint == fingerprint && validateCatalog(cached.Items, base) == nil {
 			return cached.Items, Status{State: "cached", ItemCount: len(cached.Items), Added: len(cached.Items) - len(base), UpdatedAt: cached.UpdatedAt}, nil
 		}
 	}
@@ -140,7 +142,7 @@ func RefreshInstalled(dataDir, cachePath string, base []ItemConfig) ([]ItemConfi
 	}
 	stamp := time.Now().UTC().Format(time.RFC3339)
 	if cachePath != "" {
-		if err := storage.WriteJSONAtomic(cachePath, installedCache{1, fingerprint, stamp, items}); err != nil {
+		if err := storage.WriteJSONAtomic(cachePath, installedCache{installedCacheVersion, fingerprint, stamp, items}); err != nil {
 			return base, status, fmt.Errorf("catalog cache: %w", err)
 		}
 	}
@@ -158,7 +160,7 @@ func mergeGameCSV(raw []byte, names map[string]map[string]string, base []ItemCon
 	for i, k := range header {
 		columns[k] = i
 	}
-	for _, key := range []string{"ItemKey", "NameKey", "ITEMTYPE", "GRADE", "GEARTYPE", "IsCanExchangeMarketable", "IsDeletedInServer"} {
+	for _, key := range []string{"ItemKey", "NameKey", "ITEMTYPE", "GRADE", "GEARTYPE", "Level", "IsCanExchangeMarketable", "IsDeletedInServer"} {
 		if _, ok := columns[key]; !ok {
 			return nil, fmt.Errorf("missing ItemInfoData column %s", key)
 		}
@@ -195,6 +197,12 @@ func mergeGameCSV(raw []byte, names map[string]map[string]string, base []ItemCon
 			previous = items[index]
 		}
 		item := ItemConfig{ID: id, Grade: get("GRADE"), Type: get("ITEMTYPE"), MarketHashName: previous.MarketHashName, Marketable: previous.Marketable, Name: previous.Name}
+		if level := get("Level"); level != "" {
+			item.Level, err = strconv.Atoi(level)
+			if err != nil || item.Level < 0 {
+				return nil, fmt.Errorf("invalid level %q for item %d", level, id)
+			}
+		}
 		if gear := get("GEARTYPE"); gear != "" && gear != "NONE" {
 			item.Gear = &gear
 		}
@@ -231,7 +239,7 @@ func mergeGameCSV(raw []byte, names map[string]map[string]string, base []ItemCon
 		if previous.Marketable && previous.Name["en-US"] != "" && previous.Name["en-US"] != item.Name["en-US"] && item.MarketHashName == "" {
 			item.MarketHashName = previous.Name["en-US"]
 			if previous.Type != "MATERIAL" {
-				item.MarketHashName += " (" + strings.ToUpper(previous.Grade[:1]) + strings.ToLower(previous.Grade[1:]) + ") A"
+				item.MarketHashName += " (" + strings.ToUpper(previous.Grade[:1]) + strings.ToLower(previous.Grade[1:]) + ") " + previous.MarketVariant()
 			}
 		}
 		if item.Name["en-US"] == "" {
@@ -293,6 +301,9 @@ func validateCatalog(items, base []ItemConfig) error {
 			return fmt.Errorf("invalid catalog item %d", item.ID)
 		}
 		seen[item.ID] = true
+		if item.Level < 0 || (item.Type == "GEAR" && item.Marketable && item.Level == 0) {
+			return fmt.Errorf("invalid level for catalog item %d", item.ID)
+		}
 		if item.Name["en-US"] == "" && !legacyUnnamed[item.ID] {
 			return fmt.Errorf("English catalog name missing for %d", item.ID)
 		}

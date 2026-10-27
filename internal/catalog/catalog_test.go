@@ -2,6 +2,23 @@ package catalog
 
 import "testing"
 
+func TestMarketVariantUsesEquipmentLevel(t *testing.T) {
+	for _, tc := range []struct {
+		item ItemConfig
+		want string
+	}{
+		{ItemConfig{ID: 516193, Type: "GEAR", Level: 80}, "A"},
+		{ItemConfig{Type: "GEAR", Level: 89}, "A"},
+		{ItemConfig{ID: 516191, Type: "GEAR", Level: 90}, "C"},
+		{ItemConfig{Type: "GEAR", Level: 100}, "C"},
+		{ItemConfig{Type: "MATERIAL", Level: 100}, "A"},
+	} {
+		if got := tc.item.MarketVariant(); got != tc.want {
+			t.Errorf("item %+v variant = %q, want %q", tc.item, got, tc.want)
+		}
+	}
+}
+
 func TestCatalogIDsAreUnique(t *testing.T) {
 	items, err := LoadItems()
 	if err != nil {

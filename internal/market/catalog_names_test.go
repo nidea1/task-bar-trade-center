@@ -1,6 +1,7 @@
 package market
 
 import (
+	"net/url"
 	"testing"
 
 	"github.com/nidea1/task-bar-trade-center/internal/catalog"
@@ -18,7 +19,9 @@ func TestCatalogMarketHashNames(t *testing.T) {
 	for id, want := range map[int]string{
 		110001: "Minor Ruby",
 		638111: "Emerald Bracer (Divine) A",
-		303193: "Eternal Sword (Legendary) A",
+		303193: "Eternal Sword (Legendary) C",
+		516173: "Dimensional Armor (Beyond) A",
+		516193: "Eternal Armor (Beyond) C",
 		150103: "Plague Fruit (Rare)",
 		150107: "Plague Fruit (Beyond)",
 		161001: "Contaminated Reliquary (Common)",
@@ -35,6 +38,9 @@ func TestCatalogMarketHashNames(t *testing.T) {
 		}
 		if got := BuildHashName(item); got != want {
 			t.Errorf("item %d market name = %q, want %q", id, got, want)
+		}
+		if got, err := url.PathUnescape(ListingURL(item)); err != nil || got != "https://steamcommunity.com/market/listings/3678970/"+want {
+			t.Errorf("item %d listing URL = %q, err = %v", id, got, err)
 		}
 	}
 }

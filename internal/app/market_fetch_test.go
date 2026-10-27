@@ -10,6 +10,31 @@ import (
 	"github.com/nidea1/task-bar-trade-center/internal/market"
 )
 
+func TestEquipmentVariantDoesNotReuseLegacyPrice(t *testing.T) {
+	originalApp := activeApp
+	t.Cleanup(func() { activeApp = originalApp })
+	scope := market.DefaultScope()
+	config := catalog.ItemConfig{ID: 516193, Name: map[string]string{"en-US": "Eternal Armor"}, Grade: "BEYOND", Type: "GEAR", Level: 90, Marketable: true}
+	activeApp = &App{
+		itemMap: map[int]catalog.ItemConfig{config.ID: config},
+		priceCache: map[string]market.MarketData{
+			market.CacheKey(scope, "Eternal Armor (Beyond) A"): {
+				Analysis: market.MarketAnalysis{SuggestedPrice: 7.76, HasSuggested: true, UpdatedAt: time.Now()},
+			},
+		},
+	}
+	provider := cacheQuoteProvider{scope: scope}
+	if quote, ok := provider.Quote(config.ID); ok {
+		t.Fatalf("current equipment reused legacy variant price: %+v", quote)
+	}
+	activeApp.priceCache[market.CacheKey(scope, "Eternal Armor (Beyond) C")] = market.MarketData{
+		Analysis: market.MarketAnalysis{SuggestedPrice: 0.40, HasSuggested: true, UpdatedAt: time.Now()},
+	}
+	if quote, ok := provider.Quote(config.ID); !ok || quote.Suggested != 0.40 {
+		t.Fatalf("current equipment quote = %+v, ok = %v; want 0.40", quote, ok)
+	}
+}
+
 func TestFetchPriceAndUpdateShowsStaleCacheBeforeRefresh(t *testing.T) {
 	originalApp := activeApp
 	originalScope := market.CurrentScope()

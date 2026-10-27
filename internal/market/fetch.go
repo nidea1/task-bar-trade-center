@@ -146,7 +146,7 @@ func BuildHashName(config catalog.ItemConfig) string {
 	default:
 		gradeFormatted = "Immortal"
 	}
-	return fmt.Sprintf("%s (%s) A", config.Name["en-US"], gradeFormatted)
+	return fmt.Sprintf("%s (%s) %s", config.Name["en-US"], gradeFormatted, config.MarketVariant())
 }
 
 func ListingURL(config catalog.ItemConfig) string {

@@ -15,9 +15,18 @@ type ItemConfig struct {
 	Name           map[string]string `json:"name"`
 	Grade          string            `json:"grade"`
 	Type           string            `json:"type"`
+	Level          int               `json:"level,omitempty"`
 	Gear           *string           `json:"gear"`
 	Marketable     bool              `json:"marketable"`
 	MarketHashName string            `json:"market_hash_name,omitempty"`
+}
+
+func (config ItemConfig) MarketVariant() string {
+	// shortcut: this follows the observed level cutoff; update if Steam changes its variant naming.
+	if config.Type == "GEAR" && config.Level >= 90 {
+		return "C"
+	}
+	return "A"
 }
 
 func LoadItems() ([]ItemConfig, error) {
