@@ -681,8 +681,8 @@ function App() {
         : totals?.suggested_listing_value;
     const inventoryFill = state?.inventory_fill;
     const formatInventoryFillSeconds = (seconds?: number) => {
-        if (!seconds || seconds <= 0) return "0s";
-        return formatRemainingDuration(seconds, currentLanguage);
+        if (!seconds || seconds <= 0) return `0${t("time.second_short", "s")}`;
+        return formatRemainingDuration(seconds, currentLanguage, t);
     };
     const formatInventoryDropCountdown = (seconds: number | null, ready?: boolean) => {
         if (ready || seconds === 0) {
@@ -768,7 +768,7 @@ function App() {
                     ? "PlagueLands"
                     : inventoryFill.region === "normal"
                         ? t("value.normal", "Normal")
-                        : localizedFallback(currentLanguage, "Bölge algılanamadı", "Region unavailable")}
+                        : t("dashboard.region_unavailable", localizedFallback(currentLanguage, "Bölge algılanamadı", "Region unavailable"))}
             </div>
             {!inventoryFill.has_common_auto_open_rune && !inventoryFill.has_stage_auto_open_rune ? (
                 <div className="tooltip-section pb-1 text-center py-2">
@@ -984,7 +984,7 @@ function App() {
     const compactPriceLabel = priceMode === "instant"
         ? t("dashboard.price_buy_short", localizedFallback(currentLanguage, "Alış", "Buy"))
         : t("dashboard.price_sell_short", localizedFallback(currentLanguage, "Satış", "Sell"));
-    const marketDisplayName = state?.market_scope || "STEAM MARKET OVERLAY";
+    const marketDisplayName = state?.market_scope || t("dashboard.market_overlay", "STEAM MARKET OVERLAY");
     const searchPlaceholder = t("dashboard.search_items", localizedFallback(currentLanguage, "Eşya ara", "Search items"));
     const controlRarityNotifyLabel = t("dashboard.rarity_notify_label", localizedFallback(currentLanguage, "Bildirim", "Notify"));
     const controlRarityNotifyTooltip = t(
@@ -1038,12 +1038,12 @@ function App() {
             const minutes = pad(d.getMinutes());
             const seconds = pad(d.getSeconds());
             const timeStr = `${hours}:${minutes}:${seconds}`;
-            const prefix = localizedFallback(currentLanguage, "Son Senkronizasyon", "Last Sync");
+            const prefix = t("dashboard.last_sync", localizedFallback(currentLanguage, "Son Senkronizasyon", "Last Sync"));
             return `${prefix}: ${timeStr}`;
         } catch {
             return "";
         }
-    }, [state?.snapshot_read_at, state?.updated_at, currentLanguage]);
+    }, [state?.snapshot_read_at, state?.updated_at, currentLanguage, translations]);
 
     const smartRefreshLabel = t(
         "dashboard.smart_refresh_prices",
@@ -1172,16 +1172,16 @@ function App() {
                     <button
                         onClick={handleMinimize}
                         className="themed-tooltip-host p-1 hover:bg-[#1a1410] rounded text-[#9a896f] hover:text-[#ffbe2d] transition-colors cursor-pointer"
-                        aria-label="Minimize"
-                        data-tooltip="Minimize"
+                        aria-label={t("window.minimize", "Minimize")}
+                        data-tooltip={t("window.minimize", "Minimize")}
                     >
                         <Minus className="w-3.5 h-3.5" />
                     </button>
                     <button
                         onClick={handleClose}
                         className="themed-tooltip-host p-1 hover:bg-[#601b18] hover:text-white rounded text-[#9a896f] transition-colors cursor-pointer"
-                        aria-label="Close"
-                        data-tooltip="Close"
+                        aria-label={t("window.close", "Close")}
+                        data-tooltip={t("window.close", "Close")}
                     >
                         <X className="w-3.5 h-3.5" />
                     </button>
@@ -1476,7 +1476,8 @@ function App() {
                                     {formatPricingEtaText(
                                         t("dashboard.estimated_remaining", localizedFallback(currentLanguage, "Tahmini kalan: %s", "ETA %s")),
                                         state.refresh.estimated_remaining_seconds,
-                                        currentLanguage
+                                        currentLanguage,
+                                        t
                                     )}
                                 </span>
                             ) : null}

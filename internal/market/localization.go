@@ -22,9 +22,12 @@ var (
 		return key
 	}
 	localizeSemantic = func(value string) string { return value }
+	displayLanguage  = func() string { return "en-US" }
 )
 
 var englishFallbacks = map[string]string{
+	"hud.buy_short":     "B",
+	"hud.sell_short":    "S",
 	"value.na":          "N/A",
 	"value.units":       "units",
 	"value.wide":        "Wide",
@@ -40,12 +43,15 @@ var englishFallbacks = map[string]string{
 	"time.days_ago":     "%dd ago",
 }
 
-func SetLocalizer(t func(string, ...any) string, semantic func(string) string) {
+func SetLocalizer(t func(string, ...any) string, semantic func(string) string, language func() string) {
 	if t != nil {
 		translate = t
 	}
 	if semantic != nil {
 		localizeSemantic = semantic
+	}
+	if language != nil {
+		displayLanguage = language
 	}
 }
 

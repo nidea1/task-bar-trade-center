@@ -10,8 +10,8 @@ import (
 )
 
 func TestLocalizedMessageCatalogsAreComplete(t *testing.T) {
-	if len(supportedAppLocales) != 18 {
-		t.Fatalf("supported locale count = %d, want 18", len(supportedAppLocales))
+	if len(supportedAppLocales) != 19 {
+		t.Fatalf("supported locale count = %d, want 19", len(supportedAppLocales))
 	}
 	for _, locale := range supportedAppLocales {
 		catalog, ok := localizedMessages[locale.Code]

@@ -25,7 +25,7 @@ var (
 )
 
 func init() {
-	market.SetLocalizer(tr, localizedSemanticValue)
+	market.SetLocalizer(tr, localizedSemanticValue, currentDisplayLanguage)
 }
 
 func tr(key string, args ...any) string {

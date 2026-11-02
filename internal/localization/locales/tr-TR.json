@@ -296,5 +296,16 @@
   "dashboard.stash_value_note": "Önerilen satış fiyatları kullanılır. Fiyatı bulunmayan eşyalar dahil edilmez.",
   "value.inactive": "Etkin değil",
   "value.off": "Kapalı",
-  "value.minutes": "dakika"
+  "value.minutes": "dakika",
+  "time.hour_short": "sa",
+  "time.minute_short": "dk",
+  "time.second_short": "sn",
+  "dashboard.last_sync": "Son Senkronizasyon",
+  "dashboard.region_unavailable": "Bölge algılanamadı",
+  "dashboard.footer_check_updates": "Güncellemeleri denetle",
+  "dashboard.inventory_fill": "Envanter Dolumu",
+  "dashboard.inventory_fill_free": "boş",
+  "dashboard.inventory_fill_slots_per_hour": "slot/sa",
+  "value.today": "Bugün",
+  "value.tomorrow": "Yarın"
 }

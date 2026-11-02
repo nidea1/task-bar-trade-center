@@ -110,6 +110,7 @@ func withCurrentDashboardRuntimeFields(state inventory.DashboardState) inventory
 	state.PriceSuffix = scope.Currency.PriceSuffix
 	state.Refresh = currentInventoryRefreshStatus()
 	state.Translations = currentTranslations()
+	state.DisplayLanguage = currentDisplayLanguage()
 	activeApp.inventoryMu.Lock()
 	snapshot := activeApp.lastSnapshot
 	activeApp.inventoryMu.Unlock()
@@ -169,6 +170,7 @@ func buildInventoryDashboardState(snapshot playerdata.InventorySnapshot) invento
 	state.Translations = currentTranslations()
 	state.Catalog = currentCatalogStatus()
 	state.NotificationTargets = notificationProgress(snapshot)
+	state.DisplayLanguage = currentDisplayLanguage()
 	return state
 }
 

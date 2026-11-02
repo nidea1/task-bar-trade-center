@@ -44,7 +44,7 @@ export function MissingPricesPanel({
                 ) : (
                     items.map((item) => {
                         const meta = rarityMeta(item.grade);
-                        const itemName = item.name || item.market_hash_name || `Item ${item.item_id}`;
+                        const itemName = item.name || item.market_hash_name || `${state?.translations?.["dashboard.item"] || "Item"} ${item.item_id}`;
                         const style = { "--rarity-color": meta.color } as React.CSSProperties;
 
                         return (
