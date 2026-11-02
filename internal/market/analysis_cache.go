@@ -6,6 +6,9 @@ import (
 )
 
 func isFreshMarketCache(data MarketData, now time.Time) bool {
+	if !validRUBConversion(data.Analysis, now) {
+		return false
+	}
 	if data.Analysis.UpdatedAt.IsZero() {
 		return false
 	}
@@ -28,7 +31,7 @@ func isFreshMarketCache(data MarketData, now time.Time) bool {
 }
 
 func staleMarketAnalysis(data MarketData, exists bool) (MarketAnalysis, bool) {
-	if !exists || data.Analysis.UpdatedAt.IsZero() {
+	if !exists || data.Analysis.UpdatedAt.IsZero() || !validRUBConversion(data.Analysis, time.Now()) {
 		return MarketAnalysis{}, false
 	}
 	return data.Analysis, true

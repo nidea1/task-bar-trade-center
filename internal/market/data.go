@@ -25,6 +25,10 @@ func hasCompleteMarketAnalysis(analysis MarketAnalysis) bool {
 }
 
 func requiresUSDFallbackRefresh(scope MarketScope, analysis MarketAnalysis) bool {
+	if scope.Currency.Code == "RUB" && analysis.USDDataFallbackAttempted && !analysis.HasSuggested {
+		_, available := configuredExchangeRate("RUB")
+		return available
+	}
 	if scope == defaultMarketScope() || hasCompleteMarketAnalysis(analysis) {
 		return false
 	}
@@ -69,7 +73,20 @@ func mergeMarketDataWithUSDFallback(local MarketData, usd MarketData, targetScop
 
 	currencyCode := targetScope.Currency.Code
 	rate := 1.0
-	if currencyCode != "USD" {
+	if currencyCode == "RUB" {
+		var ok bool
+		rate, ok = configuredExchangeRate(currencyCode)
+		if !ok {
+			if usdAnalysis.HasSaleHistory && !analysis.HasSaleHistory {
+				copyHistorySignalsWithoutPrices(analysis, usdAnalysis)
+			}
+			normalizeAnalysisCurrencyFormat(analysis, targetScope.Currency)
+			return local
+		}
+		exchangeRateMu.RLock()
+		analysis.ExchangeRateDate = rubExchangeRateDate
+		exchangeRateMu.RUnlock()
+	} else if currencyCode != "USD" {
 		if r, ok := calculateExchangeRate(*analysis, usdAnalysis); ok {
 			rate = r
 			setExchangeRate(currencyCode, rate)
@@ -98,6 +115,10 @@ func mergeMarketDataWithUSDFallback(local MarketData, usd MarketData, targetScop
 			if rate != 1.0 {
 				local.OrderBook.HighestBuyPrice *= rate
 				local.OrderBook.LowestSellPrice *= rate
+			}
+			if currencyCode == "RUB" {
+				local.OrderBook.HighestBuyPrice = roundToMarketIncrement(local.OrderBook.HighestBuyPrice, targetScope.Currency.PriceIncrement)
+				local.OrderBook.LowestSellPrice = roundToMarketIncrement(local.OrderBook.LowestSellPrice, targetScope.Currency.PriceIncrement)
 			}
 			local.OrderBook.PricePrefix = targetScope.Currency.PricePrefix
 			local.OrderBook.PriceSuffix = targetScope.Currency.PriceSuffix
@@ -207,6 +228,18 @@ func normalizeAnalysisCurrencyFormat(analysis *MarketAnalysis, currency MarketCu
 	analysis.PriceSuffix = suffix
 	analysis.PriceIncrement = marketCurrencyPriceIncrement(currency)
 	analysis.MinListingPrice = marketMinListingPrice(currency)
+	if currency.Code == "RUB" && analysis.HasLowestSell && analysis.USDFallbackMetrics&usdFallbackLowestSell == 0 {
+		// Without wallet fee metadata, keep the observed RUB listing instead of guessing an undercut.
+		analysis.MinListingPrice = analysis.LowestSellPrice
+		if analysis.HasSuggested {
+			analysis.SuggestedPrice = roundAnalysisPrice(analysis.LowestSellPrice, *analysis)
+		}
+	}
+	if currency.Code == "RUB" && analysis.PriceIsEstimated {
+		analysis.SuggestedPrice = roundAnalysisPrice(analysis.SuggestedPrice, *analysis)
+		analysis.LowestSellPrice = roundAnalysisPrice(analysis.LowestSellPrice, *analysis)
+		analysis.HighestBuyPrice = roundAnalysisPrice(analysis.HighestBuyPrice, *analysis)
+	}
 	if analysis.HasSuggested && analysis.MinListingPrice > 0 && analysis.SuggestedPrice > 0 && analysis.SuggestedPrice < analysis.MinListingPrice {
 		analysis.SuggestedPrice = roundAnalysisPrice(analysis.MinListingPrice, *analysis)
 	}
@@ -235,13 +268,23 @@ func marketDataFromBaseHistory(marketHashName string, orderBook MarketOrderBook,
 	}
 
 	if rate, ok := baseHistoryConversionRate(marketHashName, orderBook, hasOrderBook, baseHistory, now, currency); ok {
-		return marketDataFromSources(marketHashName, orderBook, hasOrderBook, scaleSaleHistory(baseHistory, rate), now, currency)
+		data := marketDataFromSources(marketHashName, orderBook, hasOrderBook, scaleSaleHistory(baseHistory, rate), now, currency)
+		if currency.Code == "RUB" {
+			data.Analysis.PriceIsEstimated = true
+			data.Analysis.Confidence = "estimated"
+			exchangeRateMu.RLock()
+			data.Analysis.ExchangeRateDate = rubExchangeRateDate
+			exchangeRateMu.RUnlock()
+		}
+		return data
 	}
 
 	data := marketDataFromSources(marketHashName, orderBook, hasOrderBook, nil, now, currency)
 	baseAnalysis := buildMarketAnalysis(marketHashName, MarketOrderBook{}, false, copySaleHistory(baseHistory), now, MarketCurrency{Code: "USD", PricePrefix: "$"})
 	copyHistorySignalsWithoutPrices(&data.Analysis, baseAnalysis)
-	data.History = copySaleHistory(baseHistory)
+	if currency.Code != "RUB" {
+		data.History = copySaleHistory(baseHistory)
+	}
 	data.HistoryCachedAt = now
 	return data
 }
@@ -252,6 +295,9 @@ func baseHistoryConversionRate(marketHashName string, orderBook MarketOrderBook,
 	}
 
 	configured, hasConfigured := configuredExchangeRate(currency.Code)
+	if currency.Code == "RUB" {
+		return configured, hasConfigured
+	}
 	if derived, ok := deriveHistoryRateFromLocalSources(marketHashName, orderBook, hasOrderBook, baseHistory, now, currency); ok {
 		if !hasConfigured || exchangeRateClose(derived, configured) {
 			setExchangeRate(currency.Code, derived)

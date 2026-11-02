@@ -33,6 +33,7 @@ var supportedMarketCurrencies = []MarketCurrency{
 	{Code: "CAD", SteamCurrencyID: 20, DefaultCountry: "CA", PricePrefix: "CDN$ "},
 	{Code: "AUD", SteamCurrencyID: 21, DefaultCountry: "AU", PricePrefix: "A$ "},
 	{Code: "CLP", SteamCurrencyID: 25, DefaultCountry: "CL", PricePrefix: "CLP$ "},
+	{Code: "RUB", SteamCurrencyID: 5, DefaultCountry: "RU", PriceSuffix: " ₽"},
 }
 
 var supportedMarketRegions = []MarketRegion{
@@ -62,6 +63,7 @@ var supportedMarketRegions = []MarketRegion{
 	{CountryCode: "CA", Name: "Canada", CurrencyCode: "CAD"},
 	{CountryCode: "AU", Name: "Australia", CurrencyCode: "AUD"},
 	{CountryCode: "CL", Name: "Chile", CurrencyCode: "CLP"},
+	{CountryCode: "RU", Name: "Russia", CurrencyCode: "RUB"},
 }
 
 var marketSelection = struct {
@@ -120,6 +122,10 @@ func withMarketCurrencyDefaults(currency MarketCurrency) MarketCurrency {
 
 func marketMinListingPrice(currency MarketCurrency) float64 {
 	rate, ok := configuredExchangeRate(currency.Code)
+	if currency.Code == "RUB" && !ok {
+		// Steam reports RUB in kopeks; without a current rate, do not guess its fee floor.
+		return marketCurrencyPriceIncrement(currency)
+	}
 	if !ok && currency.MinListingPrice > 0 {
 		return currency.MinListingPrice
 	}
@@ -303,13 +309,17 @@ var fallbackExchangeRates = map[string]float64{
 }
 
 var (
-	exchangeRateCache = make(map[string]float64)
-	exchangeRateMu    sync.RWMutex
+	exchangeRateCache   = make(map[string]float64)
+	exchangeRateMu      sync.RWMutex
+	rubExchangeRateDate time.Time
 )
 
 func getExchangeRate(currencyCode string) float64 {
 	if rate, ok := configuredExchangeRate(currencyCode); ok {
 		return rate
+	}
+	if strings.EqualFold(strings.TrimSpace(currencyCode), "RUB") {
+		return 0
 	}
 	return 1.0
 }
@@ -321,8 +331,12 @@ func configuredExchangeRate(currencyCode string) (float64, bool) {
 	}
 	exchangeRateMu.RLock()
 	rate, exists := exchangeRateCache[currencyCode]
+	date := rubExchangeRateDate
 	exchangeRateMu.RUnlock()
-	if exists && rate > 0 {
+	if currencyCode == "RUB" && !validRUBRateDate(date, time.Now()) {
+		return 0, false
+	}
+	if exists && validExchangeRate(currencyCode, rate) {
 		return rate, true
 	}
 	if fallbackRate, ok := fallbackExchangeRates[currencyCode]; ok && fallbackRate > 0 {
@@ -332,7 +346,9 @@ func configuredExchangeRate(currencyCode string) (float64, bool) {
 }
 
 func setExchangeRate(currencyCode string, rate float64) {
-	if rate <= 0 {
+	currencyCode = strings.ToUpper(strings.TrimSpace(currencyCode))
+	// RUB rates must include the provider's observation date.
+	if currencyCode == "RUB" || !validExchangeRate(currencyCode, rate) {
 		return
 	}
 	exchangeRateMu.Lock()
@@ -341,6 +357,7 @@ func setExchangeRate(currencyCode string, rate float64) {
 }
 
 func fetchExchangeRatesFromAPI() {
+	defer refreshRUBExchangeRate()
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get("https://api.frankfurter.dev/v1/latest?base=USD")
 	if err != nil {
@@ -362,10 +379,8 @@ func fetchExchangeRatesFromAPI() {
 		return
 	}
 
-	exchangeRateMu.Lock()
 	for currency, rate := range data.Rates {
-		exchangeRateCache[currency] = rate
+		setExchangeRate(currency, rate)
 	}
-	exchangeRateMu.Unlock()
 	fmt.Printf("[CURRENCY] Successfully updated %d exchange rates from Frankfurter\n", len(data.Rates))
 }

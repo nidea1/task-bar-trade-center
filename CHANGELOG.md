@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Added complete Russian (`ru-RU`) localization, Russian Windows locale detection, and independently persisted language and currency selection in the dashboard and tray.
+- Added RUB/Russia market support (Steam currency 5), kopek precision, and Russian Ruble formatting across the dashboard, HUD, and notifications.
+- Added dated Frankfurter v2 USD/RUB fallback rates with timeouts, refresh throttling, response validation, and a seven-day freshness limit. Converted prices remain estimated and are unavailable when no valid rate exists.
+
+### Fixed
+- Respected the declared currency of RUB SSR sale history to avoid converting local prices twice, and retained verified Steam item identity and market-scope cache isolation.
+- Moved remaining dashboard time units and fallback labels into localization catalogs while preserving existing Turkish labels.
+
+### Tests
+- Added Russian catalog coverage and placeholder checks, language/currency persistence tests, mocked RUB market and exchange-rate tests, expired conversion cache checks, and frontend localization and formatting tests.
+
 ## [0.14.3] - 2026-10-28
 
 ### Added

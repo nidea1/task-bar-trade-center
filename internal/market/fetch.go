@@ -102,6 +102,9 @@ func FetchData(config catalog.ItemConfig, marketHashName string, now time.Time, 
 }
 
 func FetchDataWithPriority(config catalog.ItemConfig, marketHashName string, now time.Time, scope MarketScope, priority RequestPriority) (MarketData, error) {
+	if scope.Currency.Code == "RUB" {
+		refreshRUBExchangeRate()
+	}
 	data, err := fetchDataForScope(config, marketHashName, now, scope, priority)
 	if err != nil {
 		return data, err
@@ -244,7 +247,25 @@ func marketDataFromListingSSR(marketHashName string, listingBody []byte, iconURL
 		return MarketData{}, fmt.Errorf("listing SSR did not contain order book or sale history")
 	}
 
-	data := marketDataFromBaseHistory(marketHashName, orderBook, hasOrderBook, history, now, listingCurrency)
+	historyIsLocal := false
+	if listingCurrency.Code == "RUB" {
+		// Current SSR history declares its own currency; RUB history needs no USD conversion.
+		if historyCurrency, ok := ssrHistoryCurrency(listingBody); ok {
+			switch historyCurrency.Code {
+			case "RUB":
+				historyIsLocal = true
+			case "USD":
+			default:
+				history = nil
+			}
+		}
+	}
+	var data MarketData
+	if historyIsLocal {
+		data = marketDataFromSources(marketHashName, orderBook, hasOrderBook, history, now, listingCurrency)
+	} else {
+		data = marketDataFromBaseHistory(marketHashName, orderBook, hasOrderBook, history, now, listingCurrency)
+	}
 	data.Analysis.PriceSource = "listing-ssr"
 	data.Analysis.IconURL = iconURL
 	if listingCurrency.Code == "USD" && scope.Currency.Code != "USD" {

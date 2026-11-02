@@ -155,6 +155,10 @@ func marketCacheEntry(scope market.MarketScope, config catalog.ItemConfig) (mark
 	activeApp.priceCacheMu.RLock()
 	defer activeApp.priceCacheMu.RUnlock()
 	data, exists := activeApp.priceCache[market.CacheKey(scope, marketHashName)]
+	if scope.Currency.Code == "RUB" && data.Analysis.PriceIsEstimated {
+		_, valid := market.StaleAnalysis(data, exists)
+		exists = exists && valid
+	}
 	return data, exists && data.Analysis.SteamDefinitionID == config.SteamDefinitionID
 }
 
