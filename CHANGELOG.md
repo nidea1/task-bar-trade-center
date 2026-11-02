@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added dated Frankfurter v2 USD/RUB fallback rates with timeouts, refresh throttling, response validation, and a seven-day freshness limit. Converted prices remain estimated and are unavailable when no valid rate exists.
 
 ### Fixed
+- Restored USD search fallback when Steam serves a different listing currency and omits search marketability/tags, using the matching class and instance from the fully verified listing description.
+- Let automatic inventory refresh batches finish before periodic polls can re-enqueue already processed items, preventing endlessly growing progress counters.
 - Kept inventory price panels inside their cards when longer item tags wrap onto multiple lines.
 - Respected the declared currency of RUB SSR sale history to avoid converting local prices twice, and retained verified Steam item identity and market-scope cache isolation.
 - Moved remaining dashboard time units and fallback labels into localization catalogs while preserving existing Turkish labels.

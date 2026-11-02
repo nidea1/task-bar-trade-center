@@ -204,7 +204,7 @@ func fetchDataForScope(config catalog.ItemConfig, marketHashName string, now tim
 	if searchErr != nil {
 		return MarketData{}, fmt.Errorf("%w; market search page: %w", listingErr, searchErr)
 	}
-	searchSources, identityErr := verifiedSearchSources(config, searchBody)
+	searchSources, identityErr := verifiedSearchSources(config, searchBody, sources)
 	if identityErr != nil {
 		return MarketData{}, fmt.Errorf("%v; search: %w", listingErr, identityErr)
 	}

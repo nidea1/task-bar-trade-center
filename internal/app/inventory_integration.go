@@ -453,7 +453,7 @@ func monitorInventoryNotifications(processHandle uintptr) {
 			if hasBoxDrop && lastPollErr == nil {
 				logInventoryFillEstimate()
 			}
-			refreshInventoryPricesFromDashboard()
+			queueAutomaticInventoryPriceRefresh(currentInventoryDashboardState())
 			triggerSavePollNow = false
 			triggerSavePollSource = ""
 			triggerSavePollHasBoxDrop = false
@@ -1081,6 +1081,15 @@ func queueInventoryPriceRefresh(state inventory.DashboardState) int {
 	added := currentInventoryPriceQueue().Enqueue(ids)
 	logPrintf("[INVENTORY] queued inventory price refresh: added=%d total_candidates=%d\n", added, len(ids))
 	return added
+}
+
+func queueAutomaticInventoryPriceRefresh(state inventory.DashboardState) int {
+	status := currentInventoryRefreshStatus()
+	// Periodic polls must let the current batch drain instead of re-adding its completed items.
+	if status.Refreshing || status.Queued > 0 {
+		return 0
+	}
+	return queueInventoryPriceRefresh(state)
 }
 
 func queueForceInventoryPriceRefresh(state inventory.DashboardState) int {
