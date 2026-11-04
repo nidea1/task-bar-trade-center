@@ -37,9 +37,8 @@ export function InventoryItemCard({
     const gearLabel = item.gear ? translateGear(item.gear, t, currentLanguage) : "";
     const itemName = item.name || item.market_hash_name || `${t("dashboard.item", "Item")} ${item.item_id}`;
     const hasPrice = itemHasPriceForMode(item, priceMode);
-    const estimatePrefix = item.price_is_estimated && item.price_suffix.trim() === "₽" ? "~" : "";
-    const unitPriceText = hasPrice ? estimatePrefix + formatPrice(itemUnitValue(item, priceMode), state, item) : t("dashboard.missing", "Missing");
-    const totalPriceText = hasPrice ? estimatePrefix + formatPrice(itemTotalValue(item, priceMode), state, item) : t("dashboard.missing", "Missing");
+    const unitPriceText = hasPrice ? formatPrice(itemUnitValue(item, priceMode), state, item) : t("dashboard.missing", "Missing");
+    const totalPriceText = hasPrice ? formatPrice(itemTotalValue(item, priceMode), state, item) : t("dashboard.missing", "Missing");
     const locationText = formatLocation(item.location, state);
     const style = { "--rarity-color": meta.color } as React.CSSProperties;
 

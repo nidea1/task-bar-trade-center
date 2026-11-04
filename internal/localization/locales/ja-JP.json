@@ -281,5 +281,21 @@
   "value.undervalued": "割安",
   "value.units": "個",
   "value.verified": "検証済み",
-  "value.wide": "ワイド"
+  "value.wide": "ワイド",
+  "dashboard.footer_check_updates": "更新を確認",
+  "dashboard.inventory_fill": "インベントリ使用状況",
+  "dashboard.inventory_fill_free": "空き",
+  "dashboard.inventory_fill_slots_per_hour": "スロット/時",
+  "dashboard.region_unavailable": "地域を取得できません",
+  "dashboard.last_sync": "最終同期",
+  "value.today": "今日",
+  "value.tomorrow": "明日",
+  "time.hour_short": "時間",
+  "time.minute_short": "分",
+  "time.second_short": "秒",
+  "dashboard.market_overlay": "STEAMマーケットオーバーレイ",
+  "window.minimize": "最小化",
+  "window.close": "閉じる",
+  "hud.buy_short": "買",
+  "hud.sell_short": "売"
 }

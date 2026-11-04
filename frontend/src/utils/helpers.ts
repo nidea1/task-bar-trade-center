@@ -30,9 +30,9 @@ export function formatPrice(
     if (prefix === "" && suffix === "") {
         prefix = "$";
     }
-    if (suffix.trim() === "₽" && state?.display_language === "ru-RU") {
-        return new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-            .format(value).replace(/[\u00a0\u202f]/g, " ") + " ₽";
+    if (state?.display_language === "ru-RU") {
+        return prefix + new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            .format(value).replace(/[\u00a0\u202f]/g, " ") + suffix;
     }
     return `${prefix}${value.toFixed(2)}${suffix}`;
 }

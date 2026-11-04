@@ -281,5 +281,21 @@
   "value.undervalued": "Sottovalutato",
   "value.units": "unità",
   "value.verified": "Verificato",
-  "value.wide": "Ampio"
+  "value.wide": "Ampio",
+  "dashboard.footer_check_updates": "Controlla aggiornamenti",
+  "dashboard.inventory_fill": "Riempimento dell’inventario",
+  "dashboard.inventory_fill_free": "liberi",
+  "dashboard.inventory_fill_slots_per_hour": "slot/h",
+  "dashboard.region_unavailable": "Regione non disponibile",
+  "dashboard.last_sync": "Ultima sincronizzazione",
+  "value.today": "Oggi",
+  "value.tomorrow": "Domani",
+  "time.hour_short": "h",
+  "time.minute_short": "min",
+  "time.second_short": "s",
+  "dashboard.market_overlay": "OVERLAY DEL MERCATO DI STEAM",
+  "window.minimize": "Riduci a icona",
+  "window.close": "Chiudi",
+  "hud.buy_short": "A",
+  "hud.sell_short": "V"
 }

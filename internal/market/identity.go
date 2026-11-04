@@ -162,6 +162,9 @@ func validateSearchDescription(config catalog.ItemConfig, raw json.RawMessage, l
 		if instanceID == "" {
 			instanceID = "0"
 		}
+		if description.InstanceID == "" {
+			description.InstanceID = "0"
+		}
 		if instanceID != description.InstanceID {
 			continue
 		}

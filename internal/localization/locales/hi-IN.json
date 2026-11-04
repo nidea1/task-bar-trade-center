@@ -281,5 +281,21 @@
   "value.undervalued": "कम मूल्यांकित",
   "value.units": "इकाई",
   "value.verified": "सत्यापित",
-  "value.wide": "विस्तृत"
+  "value.wide": "विस्तृत",
+  "dashboard.footer_check_updates": "अपडेट की जाँच करें",
+  "dashboard.inventory_fill": "इन्वेंट्री भराव",
+  "dashboard.inventory_fill_free": "खाली",
+  "dashboard.inventory_fill_slots_per_hour": "स्लॉट/घंटा",
+  "dashboard.region_unavailable": "क्षेत्र उपलब्ध नहीं है",
+  "dashboard.last_sync": "अंतिम सिंक",
+  "value.today": "आज",
+  "value.tomorrow": "कल",
+  "time.hour_short": "घं",
+  "time.minute_short": "मि",
+  "time.second_short": "से",
+  "dashboard.market_overlay": "स्टीम बाज़ार ओवरले",
+  "window.minimize": "छोटा करें",
+  "window.close": "बंद करें",
+  "hud.buy_short": "ख",
+  "hud.sell_short": "ब"
 }

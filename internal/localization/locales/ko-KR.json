@@ -281,5 +281,21 @@
   "value.undervalued": "저평가됨",
   "value.units": "개",
   "value.verified": "확인됨",
-  "value.wide": "넓음"
+  "value.wide": "넓음",
+  "dashboard.footer_check_updates": "업데이트 확인",
+  "dashboard.inventory_fill": "인벤토리 사용량",
+  "dashboard.inventory_fill_free": "여유",
+  "dashboard.inventory_fill_slots_per_hour": "칸/시간",
+  "dashboard.region_unavailable": "지역 정보 없음",
+  "dashboard.last_sync": "마지막 동기화",
+  "value.today": "오늘",
+  "value.tomorrow": "내일",
+  "time.hour_short": "시간",
+  "time.minute_short": "분",
+  "time.second_short": "초",
+  "dashboard.market_overlay": "STEAM 장터 오버레이",
+  "window.minimize": "최소화",
+  "window.close": "닫기",
+  "hud.buy_short": "구매",
+  "hud.sell_short": "판매"
 }

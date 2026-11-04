@@ -453,7 +453,7 @@ func monitorInventoryNotifications(processHandle uintptr) {
 			if hasBoxDrop && lastPollErr == nil {
 				logInventoryFillEstimate()
 			}
-			queueAutomaticInventoryPriceRefresh(currentInventoryDashboardState())
+			refreshInventoryPricesFromDashboard()
 			triggerSavePollNow = false
 			triggerSavePollSource = ""
 			triggerSavePollHasBoxDrop = false
@@ -1083,15 +1083,6 @@ func queueInventoryPriceRefresh(state inventory.DashboardState) int {
 	return added
 }
 
-func queueAutomaticInventoryPriceRefresh(state inventory.DashboardState) int {
-	status := currentInventoryRefreshStatus()
-	// Periodic polls must let the current batch drain instead of re-adding its completed items.
-	if status.Refreshing || status.Queued > 0 {
-		return 0
-	}
-	return queueInventoryPriceRefresh(state)
-}
-
 func queueForceInventoryPriceRefresh(state inventory.DashboardState) int {
 	ids := dashboardMarketableItemIDs(state)
 	if len(ids) == 0 {
@@ -1121,8 +1112,18 @@ func dashboardMarketableItemIDs(state inventory.DashboardState) []int {
 
 func missingOrStaleDashboardItemIDs(state inventory.DashboardState, maxAge time.Duration) []int {
 	now := time.Now()
+	scope := market.CurrentScope()
+	items := marketCatalogItems()
 	ids := make([]int, 0)
 	for _, item := range state.Items {
+		if config, ok := items[item.ItemID]; ok {
+			if !config.HasMarketIdentity() {
+				continue
+			}
+			if cached, exists := marketCacheEntry(scope, config); exists && !cached.CachedAt.IsZero() && now.Sub(cached.CachedAt) <= maxAge {
+				continue
+			}
+		}
 		if item.MarketHashName == "" || !marketIconMetadataFresh(item.MarketHashName, now) {
 			ids = append(ids, item.ItemID)
 			continue
@@ -1199,12 +1200,13 @@ func fetchInventoryMarketPrice(_ context.Context, itemID int) error {
 	}
 	data, err := fetchMarketDataWithPriority(config, marketHashName, now, scope, priority)
 	if err != nil {
-		if errors.Is(err, market.ErrIdentityMismatch) || errors.Is(err, market.ErrIdentityUnavailable) {
-			invalidateMarketPrice(config, scope)
-			logPrintf("[MARKET] item %d identity rejected: %v\n", itemID, err)
-			return nil
+		if !errors.Is(err, market.ErrIdentityMismatch) && !errors.Is(err, market.ErrIdentityUnavailable) {
+			return err
 		}
-		return err
+		invalidateMarketPrice(config, scope)
+		data = market.MarketData{CachedAt: now, Analysis: market.UnavailableAnalysis(marketHashName, now, scope.Currency)}
+		data.Analysis.SteamDefinitionID = config.SteamDefinitionID
+		logPrintf("[MARKET] item %d identity rejected: %v\n", itemID, err)
 	}
 	if data.Analysis.IconURL != "" {
 		recordMarketIcon(marketHashName, data.Analysis.IconURL, now)

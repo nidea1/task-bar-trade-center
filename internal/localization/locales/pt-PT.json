@@ -281,5 +281,21 @@
   "value.undervalued": "Subvalorizado",
   "value.units": "unidades",
   "value.verified": "Verificado",
-  "value.wide": "Largo"
+  "value.wide": "Largo",
+  "dashboard.footer_check_updates": "Procurar atualizações",
+  "dashboard.inventory_fill": "Ocupação do inventário",
+  "dashboard.inventory_fill_free": "livres",
+  "dashboard.inventory_fill_slots_per_hour": "espaços/h",
+  "dashboard.region_unavailable": "Região indisponível",
+  "dashboard.last_sync": "Última sincronização",
+  "value.today": "Hoje",
+  "value.tomorrow": "Amanhã",
+  "time.hour_short": "h",
+  "time.minute_short": "min",
+  "time.second_short": "s",
+  "dashboard.market_overlay": "SOBREPOSIÇÃO DO MERCADO STEAM",
+  "window.minimize": "Minimizar",
+  "window.close": "Fechar",
+  "hud.buy_short": "C",
+  "hud.sell_short": "V"
 }

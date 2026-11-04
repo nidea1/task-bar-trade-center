@@ -123,18 +123,4 @@ func TestRussianRUBOverlayAndNotifications(t *testing.T) {
 	if got := inventoryNotificationItemName(item.ID); got != "Astral Diamond" {
 		t.Fatalf("canonical item name changed: %q", got)
 	}
-	analysis.PriceIsEstimated = true
-	analysis.ExchangeRateDate = time.Now()
-	activeApp.priceCache[market.CacheKey(scope, item.MarketHashName)] = market.MarketData{Analysis: analysis}
-	if got, ok := inventoryNotificationItemPrice(item.ID); !ok || got != "12 345,67 ₽ (Оценка)" {
-		t.Fatalf("converted RUB notification is not marked estimated: %q", got)
-	}
-	analysis.ExchangeRateDate = time.Now().Add(-8 * 24 * time.Hour)
-	activeApp.priceCache[market.CacheKey(scope, item.MarketHashName)] = market.MarketData{Analysis: analysis}
-	if _, ok := (cacheQuoteProvider{scope: scope}).Quote(item.ID); ok {
-		t.Fatal("expired RUB conversion leaked into inventory valuation")
-	}
-	if _, ok := inventoryNotificationItemPrice(item.ID); ok {
-		t.Fatal("expired RUB conversion leaked into notifications")
-	}
 }

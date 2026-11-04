@@ -109,11 +109,11 @@ func ssrHistoryCurrency(body []byte) (MarketCurrency, bool) {
 			Currency int `json:"ecurrency"`
 		}
 		if json.Unmarshal(query.State.Data, &data) == nil && data.Currency > 0 {
-			currency, _ := marketCurrencyForSteamID(data.Currency)
-			return currency, true
+			return marketCurrencyForSteamID(data.Currency)
 		}
 	}
-	return MarketCurrency{}, false
+	// Older listing history omitted the currency and used USD.
+	return marketCurrencyForCode("USD")
 }
 
 func parseSSRPriceHistory(body []byte) []MarketSalePoint {

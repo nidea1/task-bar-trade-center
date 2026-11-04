@@ -122,10 +122,6 @@ func withMarketCurrencyDefaults(currency MarketCurrency) MarketCurrency {
 
 func marketMinListingPrice(currency MarketCurrency) float64 {
 	rate, ok := configuredExchangeRate(currency.Code)
-	if currency.Code == "RUB" && !ok {
-		// Steam reports RUB in kopeks; without a current rate, do not guess its fee floor.
-		return marketCurrencyPriceIncrement(currency)
-	}
 	if !ok && currency.MinListingPrice > 0 {
 		return currency.MinListingPrice
 	}
@@ -306,20 +302,17 @@ var fallbackExchangeRates = map[string]float64{
 	"CAD": 1.37,
 	"AUD": 1.50,
 	"CLP": 940.0,
+	"RUB": 80.0,
 }
 
 var (
-	exchangeRateCache   = make(map[string]float64)
-	exchangeRateMu      sync.RWMutex
-	rubExchangeRateDate time.Time
+	exchangeRateCache = make(map[string]float64)
+	exchangeRateMu    sync.RWMutex
 )
 
 func getExchangeRate(currencyCode string) float64 {
 	if rate, ok := configuredExchangeRate(currencyCode); ok {
 		return rate
-	}
-	if strings.EqualFold(strings.TrimSpace(currencyCode), "RUB") {
-		return 0
 	}
 	return 1.0
 }
@@ -331,12 +324,8 @@ func configuredExchangeRate(currencyCode string) (float64, bool) {
 	}
 	exchangeRateMu.RLock()
 	rate, exists := exchangeRateCache[currencyCode]
-	date := rubExchangeRateDate
 	exchangeRateMu.RUnlock()
-	if currencyCode == "RUB" && !validRUBRateDate(date, time.Now()) {
-		return 0, false
-	}
-	if exists && validExchangeRate(currencyCode, rate) {
+	if exists && rate > 0 && !math.IsNaN(rate) && !math.IsInf(rate, 0) {
 		return rate, true
 	}
 	if fallbackRate, ok := fallbackExchangeRates[currencyCode]; ok && fallbackRate > 0 {
@@ -347,8 +336,7 @@ func configuredExchangeRate(currencyCode string) (float64, bool) {
 
 func setExchangeRate(currencyCode string, rate float64) {
 	currencyCode = strings.ToUpper(strings.TrimSpace(currencyCode))
-	// RUB rates must include the provider's observation date.
-	if currencyCode == "RUB" || !validExchangeRate(currencyCode, rate) {
+	if rate <= 0 || math.IsNaN(rate) || math.IsInf(rate, 0) {
 		return
 	}
 	exchangeRateMu.Lock()
@@ -357,9 +345,8 @@ func setExchangeRate(currencyCode string, rate float64) {
 }
 
 func fetchExchangeRatesFromAPI() {
-	defer refreshRUBExchangeRate()
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get("https://api.frankfurter.dev/v1/latest?base=USD")
+	resp, err := client.Get("https://api.frankfurter.dev/v2/rates?base=USD")
 	if err != nil {
 		fmt.Printf("[CURRENCY] Failed to fetch exchange rates from Frankfurter: %v\n", err)
 		return
@@ -371,16 +358,23 @@ func fetchExchangeRatesFromAPI() {
 		return
 	}
 
-	var data struct {
-		Rates map[string]float64 `json:"rates"`
+	var data []struct {
+		Base  string  `json:"base"`
+		Quote string  `json:"quote"`
+		Rate  float64 `json:"rate"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		fmt.Printf("[CURRENCY] Failed to decode exchange rates: %v\n", err)
 		return
 	}
 
-	for currency, rate := range data.Rates {
-		setExchangeRate(currency, rate)
+	updated := 0
+	for _, row := range data {
+		if row.Base != "USD" || row.Quote == "" || row.Rate <= 0 || math.IsNaN(row.Rate) || math.IsInf(row.Rate, 0) {
+			continue
+		}
+		setExchangeRate(row.Quote, row.Rate)
+		updated++
 	}
-	fmt.Printf("[CURRENCY] Successfully updated %d exchange rates from Frankfurter\n", len(data.Rates))
+	fmt.Printf("[CURRENCY] Successfully updated %d exchange rates from Frankfurter\n", updated)
 }

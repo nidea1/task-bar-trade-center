@@ -12,7 +12,7 @@ import (
 )
 
 func TestRUBFallbackUsesVerifiedListingClassForSparseSteamSearch(t *testing.T) {
-	withRUBRate(t, 80, time.Now())
+	withExchangeRateCache(t, map[string]float64{"RUB": 80})
 	listing, err := os.ReadFile("testdata/silver-ingot-eur-listing.html")
 	if err != nil {
 		t.Fatal(err)
@@ -67,6 +67,16 @@ func TestSparseSearchCannotBorrowAnotherListingIdentity(t *testing.T) {
 	valid := `{"appid":3678970,"classid":"8507174885","market_hash_name":"Silver Ingot","tags":[]}`
 	if err := validateSearchDescription(config, []byte(valid), verified); err != nil {
 		t.Fatalf("matching class was rejected: %v", err)
+	}
+	for _, listingInstance := range []string{`"instanceid":"0"`, `"instanceid":""`} {
+		anchor := []byte(strings.ReplaceAll(string(verified), `"instanceid":"0"`, listingInstance))
+		if err := validateSearchDescription(config, []byte(valid), anchor); err != nil {
+			t.Fatalf("default listing instance was rejected: %v", err)
+		}
+	}
+	withoutInstance := []byte(strings.ReplaceAll(string(verified), `"instanceid":"0",`, ""))
+	if err := validateSearchDescription(config, []byte(valid), withoutInstance); err != nil {
+		t.Fatalf("omitted default listing instance was rejected: %v", err)
 	}
 	for _, test := range []struct {
 		name, search string

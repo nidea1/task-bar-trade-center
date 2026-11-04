@@ -42,13 +42,13 @@ func formatAnalysisPrice(price float64, ok bool, analysis MarketAnalysis) string
 	if prefix == "" && suffix == "" {
 		prefix = "$"
 	}
-	if strings.TrimSpace(suffix) == "₽" && displayLanguage() == "ru-RU" {
+	if displayLanguage() == "ru-RU" {
 		raw := strings.Split(fmt.Sprintf("%.2f", price), ".")
 		integer := raw[0]
 		for index := len(integer) - 3; index > 0; index -= 3 {
 			integer = integer[:index] + " " + integer[index:]
 		}
-		return integer + "," + raw[1] + " ₽"
+		return prefix + integer + "," + raw[1] + suffix
 	}
 	return fmt.Sprintf("%s%.2f%s", prefix, price, suffix)
 }

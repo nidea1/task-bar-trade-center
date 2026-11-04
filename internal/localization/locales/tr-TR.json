@@ -307,5 +307,10 @@
   "dashboard.inventory_fill_free": "boş",
   "dashboard.inventory_fill_slots_per_hour": "slot/sa",
   "value.today": "Bugün",
-  "value.tomorrow": "Yarın"
+  "value.tomorrow": "Yarın",
+  "dashboard.market_overlay": "STEAM PAZAR KATMANI",
+  "window.minimize": "Simge durumuna küçült",
+  "window.close": "Kapat",
+  "hud.buy_short": "A",
+  "hud.sell_short": "S"
 }

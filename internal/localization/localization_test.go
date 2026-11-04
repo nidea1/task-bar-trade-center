@@ -69,7 +69,7 @@ func TestRussianRawCatalogCoverageAndPlaceholders(t *testing.T) {
 	}
 }
 
-func TestBestItemsDashboardTranslationsExistInRawLocaleFiles(t *testing.T) {
+func TestDashboardAndHUDTranslationsExistInRawLocaleFiles(t *testing.T) {
 	keys := []string{
 		"dashboard.best_items_to_sell_now",
 		"dashboard.weekly_avg",
@@ -87,6 +87,22 @@ func TestBestItemsDashboardTranslationsExistInRawLocaleFiles(t *testing.T) {
 		"hud.estimated_local_price",
 		"hud.steam_median",
 		"hud.steam_volume",
+		"dashboard.footer_check_updates",
+		"dashboard.inventory_fill",
+		"dashboard.inventory_fill_free",
+		"dashboard.inventory_fill_slots_per_hour",
+		"dashboard.region_unavailable",
+		"dashboard.last_sync",
+		"value.today",
+		"value.tomorrow",
+		"time.hour_short",
+		"time.minute_short",
+		"time.second_short",
+		"dashboard.market_overlay",
+		"window.minimize",
+		"window.close",
+		"hud.buy_short",
+		"hud.sell_short",
 	}
 
 	for _, locale := range SupportedLocales {
@@ -109,6 +125,9 @@ func TestBestItemsDashboardTranslationsExistInRawLocaleFiles(t *testing.T) {
 				}
 				if strings.TrimSpace(value) == "" {
 					t.Errorf("empty value for key %q", key)
+				}
+				if strings.HasPrefix(key, "hud.") && strings.HasSuffix(key, "_short") && value != strings.TrimSpace(value) {
+					t.Errorf("surrounding whitespace in %q", key)
 				}
 			}
 		})

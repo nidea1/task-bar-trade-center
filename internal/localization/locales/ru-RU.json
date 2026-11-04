@@ -311,6 +311,6 @@
   "dashboard.market_overlay": "ПАНЕЛЬ ЦЕН STEAM",
   "window.minimize": "Свернуть",
   "window.close": "Закрыть",
-  "hud.buy_short": " пок.",
-  "hud.sell_short": " прод."
+  "hud.buy_short": "пок.",
+  "hud.sell_short": "прод."
 }

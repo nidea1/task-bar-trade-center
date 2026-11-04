@@ -102,9 +102,6 @@ func FetchData(config catalog.ItemConfig, marketHashName string, now time.Time, 
 }
 
 func FetchDataWithPriority(config catalog.ItemConfig, marketHashName string, now time.Time, scope MarketScope, priority RequestPriority) (MarketData, error) {
-	if scope.Currency.Code == "RUB" {
-		refreshRUBExchangeRate()
-	}
 	data, err := fetchDataForScope(config, marketHashName, now, scope, priority)
 	if err != nil {
 		return data, err
@@ -248,16 +245,18 @@ func marketDataFromListingSSR(marketHashName string, listingBody []byte, iconURL
 	}
 
 	historyIsLocal := false
-	if listingCurrency.Code == "RUB" {
-		// Current SSR history declares its own currency; RUB history needs no USD conversion.
+	if listingCurrency.Code != "USD" {
+		// History can declare a different currency from the order book.
 		if historyCurrency, ok := ssrHistoryCurrency(listingBody); ok {
 			switch historyCurrency.Code {
-			case "RUB":
+			case listingCurrency.Code:
 				historyIsLocal = true
 			case "USD":
 			default:
 				history = nil
 			}
+		} else {
+			history = nil
 		}
 	}
 	var data MarketData

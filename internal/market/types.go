@@ -41,7 +41,6 @@ type MarketAnalysis struct {
 	MinListingPrice   float64
 	PriceSource       string
 	UpdatedAt         time.Time
-	ExchangeRateDate  time.Time `json:"ExchangeRateDate,omitzero"`
 
 	SuggestedPrice     float64
 	LowestSellPrice    float64

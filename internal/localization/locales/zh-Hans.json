@@ -281,5 +281,21 @@
   "value.undervalued": "低估",
   "value.units": "个",
   "value.verified": "已验证",
-  "value.wide": "宽"
+  "value.wide": "宽",
+  "dashboard.footer_check_updates": "检查更新",
+  "dashboard.inventory_fill": "背包占用",
+  "dashboard.inventory_fill_free": "空闲",
+  "dashboard.inventory_fill_slots_per_hour": "格/小时",
+  "dashboard.region_unavailable": "地区不可用",
+  "dashboard.last_sync": "上次同步",
+  "value.today": "今天",
+  "value.tomorrow": "明天",
+  "time.hour_short": "时",
+  "time.minute_short": "分",
+  "time.second_short": "秒",
+  "dashboard.market_overlay": "STEAM 市场浮层",
+  "window.minimize": "最小化",
+  "window.close": "关闭",
+  "hud.buy_short": "买",
+  "hud.sell_short": "卖"
 }

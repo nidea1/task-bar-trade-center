@@ -313,15 +313,11 @@ func inventoryNotificationItemPrice(itemID int) (string, bool) {
 		return tr("notification.price_updating"), false
 	}
 	analysis := data.Analysis
-	estimateNote := ""
-	if scope.Currency.Code == "RUB" && analysis.PriceIsEstimated {
-		estimateNote = " (" + tr("value.estimated") + ")"
-	}
 	if analysis.HasSuggested {
-		return market.FormatAnalysisPrice(analysis.SuggestedPrice, true, analysis) + estimateNote, true
+		return market.FormatAnalysisPrice(analysis.SuggestedPrice, true, analysis), true
 	}
 	if analysis.HasHighestBuy {
-		return market.FormatAnalysisPrice(analysis.HighestBuyPrice, true, analysis) + estimateNote, true
+		return market.FormatAnalysisPrice(analysis.HighestBuyPrice, true, analysis), true
 	}
 	return tr("notification.price_updating"), false
 }

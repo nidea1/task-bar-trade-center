@@ -18,7 +18,7 @@ const [helpers, translations] = await Promise.all(compiled.outputFiles.map(file 
 const russian = JSON.parse(await readFile('../internal/localization/locales/ru-RU.json', 'utf8'));
 const t = (key, fallback) => russian[key] || fallback;
 
-test('Russian RUB prices use decimal commas and spaces without changing other combinations', () => {
+test('Russian prices use decimal commas and spaces for every currency', () => {
     const state = { display_language: 'ru-RU', price_prefix: '', price_suffix: ' ₽', translations: russian };
     for (const [value, expected] of [[125.5, '125,50 ₽'], [1250, '1 250,00 ₽'], [12345.67, '12 345,67 ₽']]) {
         assert.equal(helpers.formatPrice(value, state), expected);
@@ -26,8 +26,8 @@ test('Russian RUB prices use decimal commas and spaces without changing other co
     for (const language of ['en-US', 'tr-TR']) {
         assert.equal(helpers.formatPrice(125.5, { ...state, display_language: language }), '125.50 ₽');
     }
-    assert.equal(helpers.formatPrice(125.5, { ...state, price_prefix: '$', price_suffix: '' }), '$125.50');
-    assert.equal(helpers.formatPrice(125.5, { ...state, price_suffix: '€' }), '125.50€');
+    assert.equal(helpers.formatPrice(125.5, { ...state, price_prefix: '$', price_suffix: '' }), '$125,50');
+    assert.equal(helpers.formatPrice(125.5, { ...state, price_suffix: '€' }), '125,50€');
     assert.equal(helpers.formatPrice(undefined, state), 'Н/Д');
     assert.equal(helpers.formatPrice(Infinity, state), 'Н/Д');
 });
