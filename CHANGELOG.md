@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.4] - 2026-11-05
+
 ### Added
 - Added complete Russian (`ru-RU`) localization, Russian Windows locale detection, and independently persisted language and currency selection in the dashboard and tray.
 - Added RUB/Russia market support (Steam currency 5), kopek precision, and Russian Ruble formatting across the dashboard, HUD, and notifications.
