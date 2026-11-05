@@ -201,7 +201,7 @@ func fetchDataForScope(config catalog.ItemConfig, marketHashName string, now tim
 	if searchErr != nil {
 		return MarketData{}, fmt.Errorf("%w; market search page: %w", listingErr, searchErr)
 	}
-	searchSources, identityErr := verifiedSearchSources(config, searchBody)
+	searchSources, identityErr := verifiedSearchSources(config, searchBody, sources)
 	if identityErr != nil {
 		return MarketData{}, fmt.Errorf("%v; search: %w", listingErr, identityErr)
 	}
@@ -244,7 +244,27 @@ func marketDataFromListingSSR(marketHashName string, listingBody []byte, iconURL
 		return MarketData{}, fmt.Errorf("listing SSR did not contain order book or sale history")
 	}
 
-	data := marketDataFromBaseHistory(marketHashName, orderBook, hasOrderBook, history, now, listingCurrency)
+	historyIsLocal := false
+	if listingCurrency.Code != "USD" {
+		// History can declare a different currency from the order book.
+		if historyCurrency, ok := ssrHistoryCurrency(listingBody); ok {
+			switch historyCurrency.Code {
+			case listingCurrency.Code:
+				historyIsLocal = true
+			case "USD":
+			default:
+				history = nil
+			}
+		} else {
+			history = nil
+		}
+	}
+	var data MarketData
+	if historyIsLocal {
+		data = marketDataFromSources(marketHashName, orderBook, hasOrderBook, history, now, listingCurrency)
+	} else {
+		data = marketDataFromBaseHistory(marketHashName, orderBook, hasOrderBook, history, now, listingCurrency)
+	}
 	data.Analysis.PriceSource = "listing-ssr"
 	data.Analysis.IconURL = iconURL
 	if listingCurrency.Code == "USD" && scope.Currency.Code != "USD" {

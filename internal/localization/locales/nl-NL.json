@@ -281,5 +281,21 @@
   "value.undervalued": "Ondergewaardeerd",
   "value.units": "stuks",
   "value.verified": "Geverifieerd",
-  "value.wide": "Breed"
+  "value.wide": "Breed",
+  "dashboard.footer_check_updates": "Controleren op updates",
+  "dashboard.inventory_fill": "Inventarisvulling",
+  "dashboard.inventory_fill_free": "vrij",
+  "dashboard.inventory_fill_slots_per_hour": "vakken/u",
+  "dashboard.region_unavailable": "Regio niet beschikbaar",
+  "dashboard.last_sync": "Laatste synchronisatie",
+  "value.today": "Vandaag",
+  "value.tomorrow": "Morgen",
+  "time.hour_short": "u",
+  "time.minute_short": "min",
+  "time.second_short": "s",
+  "dashboard.market_overlay": "STEAM-MARKTOVERLAY",
+  "window.minimize": "Minimaliseren",
+  "window.close": "Sluiten",
+  "hud.buy_short": "K",
+  "hud.sell_short": "V"
 }

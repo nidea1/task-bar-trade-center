@@ -110,6 +110,7 @@ func withCurrentDashboardRuntimeFields(state inventory.DashboardState) inventory
 	state.PriceSuffix = scope.Currency.PriceSuffix
 	state.Refresh = currentInventoryRefreshStatus()
 	state.Translations = currentTranslations()
+	state.DisplayLanguage = currentDisplayLanguage()
 	activeApp.inventoryMu.Lock()
 	snapshot := activeApp.lastSnapshot
 	activeApp.inventoryMu.Unlock()
@@ -169,6 +170,7 @@ func buildInventoryDashboardState(snapshot playerdata.InventorySnapshot) invento
 	state.Translations = currentTranslations()
 	state.Catalog = currentCatalogStatus()
 	state.NotificationTargets = notificationProgress(snapshot)
+	state.DisplayLanguage = currentDisplayLanguage()
 	return state
 }
 
@@ -1110,8 +1112,18 @@ func dashboardMarketableItemIDs(state inventory.DashboardState) []int {
 
 func missingOrStaleDashboardItemIDs(state inventory.DashboardState, maxAge time.Duration) []int {
 	now := time.Now()
+	scope := market.CurrentScope()
+	items := marketCatalogItems()
 	ids := make([]int, 0)
 	for _, item := range state.Items {
+		if config, ok := items[item.ItemID]; ok {
+			if !config.HasMarketIdentity() {
+				continue
+			}
+			if cached, exists := marketCacheEntry(scope, config); exists && !cached.CachedAt.IsZero() && now.Sub(cached.CachedAt) <= maxAge {
+				continue
+			}
+		}
 		if item.MarketHashName == "" || !marketIconMetadataFresh(item.MarketHashName, now) {
 			ids = append(ids, item.ItemID)
 			continue
@@ -1188,12 +1200,13 @@ func fetchInventoryMarketPrice(_ context.Context, itemID int) error {
 	}
 	data, err := fetchMarketDataWithPriority(config, marketHashName, now, scope, priority)
 	if err != nil {
-		if errors.Is(err, market.ErrIdentityMismatch) || errors.Is(err, market.ErrIdentityUnavailable) {
-			invalidateMarketPrice(config, scope)
-			logPrintf("[MARKET] item %d identity rejected: %v\n", itemID, err)
-			return nil
+		if !errors.Is(err, market.ErrIdentityMismatch) && !errors.Is(err, market.ErrIdentityUnavailable) {
+			return err
 		}
-		return err
+		invalidateMarketPrice(config, scope)
+		data = market.MarketData{CachedAt: now, Analysis: market.UnavailableAnalysis(marketHashName, now, scope.Currency)}
+		data.Analysis.SteamDefinitionID = config.SteamDefinitionID
+		logPrintf("[MARKET] item %d identity rejected: %v\n", itemID, err)
 	}
 	if data.Analysis.IconURL != "" {
 		recordMarketIcon(marketHashName, data.Analysis.IconURL, now)

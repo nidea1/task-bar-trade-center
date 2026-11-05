@@ -2,6 +2,7 @@ package market
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -33,13 +34,21 @@ func buildMarketOverlayText(analysis MarketAnalysis) string {
 }
 
 func formatAnalysisPrice(price float64, ok bool, analysis MarketAnalysis) string {
-	if !ok || price <= 0 {
+	if !ok || price <= 0 || math.IsNaN(price) || math.IsInf(price, 0) {
 		return tr("value.na")
 	}
 	prefix := analysis.PricePrefix
 	suffix := analysis.PriceSuffix
 	if prefix == "" && suffix == "" {
 		prefix = "$"
+	}
+	if displayLanguage() == "ru-RU" {
+		raw := strings.Split(fmt.Sprintf("%.2f", price), ".")
+		integer := raw[0]
+		for index := len(integer) - 3; index > 0; index -= 3 {
+			integer = integer[:index] + " " + integer[index:]
+		}
+		return prefix + integer + "," + raw[1] + suffix
 	}
 	return fmt.Sprintf("%s%.2f%s", prefix, price, suffix)
 }
@@ -84,7 +93,7 @@ func formatOrderCounts(buyCount int, sellCount int, hasOrderBook bool) string {
 	if !hasOrderBook {
 		return tr("value.na")
 	}
-	return fmt.Sprintf("%sB / %sS", formatIntWithCommas(buyCount), formatIntWithCommas(sellCount))
+	return fmt.Sprintf("%s%s / %s%s", formatIntWithCommas(buyCount), tr("hud.buy_short"), formatIntWithCommas(sellCount), tr("hud.sell_short"))
 }
 
 func formatRelativeTime(updatedAt time.Time, now time.Time) string {

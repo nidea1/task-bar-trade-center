@@ -15,7 +15,7 @@ interface BestItemsToSellNowContentProps {
 
 function formatSellThroughDays(item: DashboardItem, t: (key: string, fallback: string) => string): string {
     if (!item.has_sell_through || !Number.isFinite(item.sell_through_days) || item.sell_through_days <= 0) {
-        return "N/A";
+        return t("value.na", "N/A");
     }
     const daysSuffix = t("dashboard.days_short", "d");
     if (item.sell_through_days < 1) {
@@ -41,15 +41,15 @@ export function BestItemsToSellNowContent({
             ) : (
                 items.map((item) => {
                     const meta = rarityMeta(item.grade);
-                    const itemName = item.name || item.market_hash_name || `Item ${item.item_id}`;
+                    const itemName = item.name || item.market_hash_name || `${t("dashboard.item", "Item")} ${item.item_id}`;
                     const score = Math.round(item.sell_score || 0);
-                    const spreadText = item.has_spread ? `${item.spread_percent.toFixed(1)}%` : "N/A";
-                    const dailySalesText = item.has_daily_sales ? formatNumber(item.daily_sales_volume) : "N/A";
-                    const steamVolumeText = item.has_steam_volume ? formatNumber(item.steam_volume) : "N/A";
-                    const buyOrdersText = item.has_order_book ? formatNumber(item.buy_order_count) : "N/A";
+                    const spreadText = item.has_spread ? `${item.spread_percent.toFixed(1)}%` : t("value.na", "N/A");
+                    const dailySalesText = item.has_daily_sales ? formatNumber(item.daily_sales_volume) : t("value.na", "N/A");
+                    const steamVolumeText = item.has_steam_volume ? formatNumber(item.steam_volume) : t("value.na", "N/A");
+                    const buyOrdersText = item.has_order_book ? formatNumber(item.buy_order_count) : t("value.na", "N/A");
                     const sellThroughText = formatSellThroughDays(item, t);
-                    const weeklyAverageText = item.has_weekly_average ? formatPrice(item.weekly_average_price, state, item) : "N/A";
-                    const steamMedianText = item.has_steam_median ? formatPrice(item.steam_median_price, state, item) : "N/A";
+                    const weeklyAverageText = item.has_weekly_average ? formatPrice(item.weekly_average_price, state, item) : t("value.na", "N/A");
+                    const steamMedianText = item.has_steam_median ? formatPrice(item.steam_median_price, state, item) : t("value.na", "N/A");
                     const unitPriceText = formatPrice(itemUnitValue(item, priceMode), state, item);
                     const displayedPrice = item.price_is_estimated
                         ? `${unitPriceText} (${t("value.estimated", "Estimated")})`

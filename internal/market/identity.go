@@ -23,6 +23,8 @@ type listingQuery struct {
 
 type itemDescription struct {
 	AppID      int    `json:"appid"`
+	ClassID    string `json:"classid"`
+	InstanceID string `json:"instanceid"`
 	HashName   string `json:"market_hash_name"`
 	Marketable bool   `json:"marketable"`
 	Tags       []struct {
@@ -99,7 +101,7 @@ func verifiedListingSources(config catalog.ItemConfig, body []byte) ([]byte, err
 	}{sources})
 }
 
-func verifiedSearchSources(config catalog.ItemConfig, body []byte) ([]byte, error) {
+func verifiedSearchSources(config catalog.ItemConfig, body []byte, listingSources []byte) ([]byte, error) {
 	for _, query := range listingQueries(body) {
 		var page struct {
 			Pages []struct {
@@ -118,7 +120,7 @@ func verifiedSearchSources(config catalog.ItemConfig, body []byte) ([]byte, erro
 				if json.Unmarshal(raw, &result) != nil || result.Name != config.MarketHashName {
 					continue
 				}
-				if err := validateDescription(config, result.Description); err != nil {
+				if err := validateSearchDescription(config, result.Description, listingSources); err != nil {
 					return nil, err
 				}
 				return raw, nil
@@ -126,6 +128,64 @@ func verifiedSearchSources(config catalog.ItemConfig, body []byte) ([]byte, erro
 		}
 	}
 	return nil, fmt.Errorf("%w: search has no verified result for item %d", ErrIdentityMismatch, config.ID)
+}
+
+func validateSearchDescription(config catalog.ItemConfig, raw json.RawMessage, listingSources []byte) error {
+	validationErr := validateDescription(config, raw)
+	if validationErr == nil {
+		return nil
+	}
+	var search itemDescription
+	if json.Unmarshal(raw, &search) != nil || search.AppID != SteamAppID || search.HashName != config.MarketHashName || search.ClassID == "" {
+		return validationErr
+	}
+	var listing struct {
+		Queries []listingQuery `json:"queries"`
+	}
+	if json.Unmarshal(listingSources, &listing) != nil {
+		return validationErr
+	}
+	for _, query := range listing.Queries {
+		if len(query.QueryKey) != 4 || string(query.QueryKey[0]) != `"market"` || string(query.QueryKey[1]) != `"description"` {
+			continue
+		}
+		var appID int
+		var name string
+		if json.Unmarshal(query.QueryKey[2], &appID) != nil || appID != SteamAppID || json.Unmarshal(query.QueryKey[3], &name) != nil || name != config.MarketHashName || validateDescription(config, query.State.Data) != nil {
+			continue
+		}
+		var description itemDescription
+		if json.Unmarshal(query.State.Data, &description) != nil || description.ClassID != search.ClassID {
+			continue
+		}
+		instanceID := search.InstanceID
+		if instanceID == "" {
+			instanceID = "0"
+		}
+		if description.InstanceID == "" {
+			description.InstanceID = "0"
+		}
+		if instanceID != description.InstanceID {
+			continue
+		}
+		// Steam search omits marketability and tags; only borrow them from the same fully verified asset class.
+		var fields, verified map[string]json.RawMessage
+		if json.Unmarshal(raw, &fields) != nil || json.Unmarshal(query.State.Data, &verified) != nil {
+			return validationErr
+		}
+		if _, exists := fields["marketable"]; !exists {
+			fields["marketable"] = verified["marketable"]
+		}
+		if len(search.Tags) == 0 {
+			fields["tags"] = verified["tags"]
+		}
+		enriched, err := json.Marshal(fields)
+		if err != nil {
+			return validationErr
+		}
+		return validateDescription(config, enriched)
+	}
+	return validationErr
 }
 
 func listingQueries(body []byte) []listingQuery {

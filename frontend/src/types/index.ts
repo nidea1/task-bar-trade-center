@@ -145,6 +145,7 @@ export interface DashboardState {
     snapshot_read_at: string;
     market_scope: string;
     currency_code: string;
+    display_language?: string;
     price_prefix: string;
     price_suffix: string;
     gold: number;

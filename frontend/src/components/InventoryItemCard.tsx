@@ -35,7 +35,7 @@ export function InventoryItemCard({
     const rarityLabel = translateRarity(item.grade, t, currentLanguage);
     const typeLabel = translateItemType(item.type, t, currentLanguage);
     const gearLabel = item.gear ? translateGear(item.gear, t, currentLanguage) : "";
-    const itemName = item.name || item.market_hash_name || `Item ${item.item_id}`;
+    const itemName = item.name || item.market_hash_name || `${t("dashboard.item", "Item")} ${item.item_id}`;
     const hasPrice = itemHasPriceForMode(item, priceMode);
     const unitPriceText = hasPrice ? formatPrice(itemUnitValue(item, priceMode), state, item) : t("dashboard.missing", "Missing");
     const totalPriceText = hasPrice ? formatPrice(itemTotalValue(item, priceMode), state, item) : t("dashboard.missing", "Missing");

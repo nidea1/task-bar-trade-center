@@ -91,6 +91,31 @@ func isSSRListingForScope(body []byte, scope MarketScope) bool {
 	return ok && currency.SteamCurrencyID == scope.Currency.SteamCurrencyID
 }
 
+func ssrHistoryCurrency(body []byte) (MarketCurrency, bool) {
+	var verified struct {
+		Queries []listingQuery `json:"queries"`
+	}
+	var queries []listingQuery
+	if json.Unmarshal(body, &verified) == nil {
+		queries = verified.Queries
+	} else {
+		queries = listingQueries(body)
+	}
+	for _, query := range queries {
+		if len(query.QueryKey) < 2 || string(query.QueryKey[1]) != `"pricehistory"` {
+			continue
+		}
+		var data struct {
+			Currency int `json:"ecurrency"`
+		}
+		if json.Unmarshal(query.State.Data, &data) == nil && data.Currency > 0 {
+			return marketCurrencyForSteamID(data.Currency)
+		}
+	}
+	// Older listing history omitted the currency and used USD.
+	return marketCurrencyForCode("USD")
+}
+
 func parseSSRPriceHistory(body []byte) []MarketSalePoint {
 	text := searchableListingText(body)
 	matches := ssrPriceHistoryPattern.FindAllStringSubmatch(text, -1)

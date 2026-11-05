@@ -11,6 +11,22 @@ import (
 	"github.com/nidea1/task-bar-trade-center/internal/steamdefs"
 )
 
+func TestLiveRUBListingAndVerifiedSearchFallback(t *testing.T) {
+	if os.Getenv("TBTC_TEST_STEAM_MARKET") != "1" {
+		t.Skip("set TBTC_TEST_STEAM_MARKET=1 for live RUB pricing integration")
+	}
+	config := resolvedTestItem(catalog.ItemConfig{ID: 142001, Name: map[string]string{"en-US": "Silver Ingot"}, Grade: "RARE", Type: "MATERIAL"})
+	scope, _ := ScopeFor("RUB", "RU")
+	data, err := FetchData(config, config.MarketHashName, time.Now(), scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !data.Analysis.HasSuggested || data.Analysis.SuggestedPrice <= 0 || data.Analysis.PriceSuffix != " ₽" || data.Analysis.SteamDefinitionID != config.SteamDefinitionID {
+		t.Fatalf("missing or unverified RUB quote: %+v", data.Analysis)
+	}
+	t.Logf("Silver Ingot: %.2f RUB, estimated=%t, source=%s", data.Analysis.SuggestedPrice, data.Analysis.PriceIsEstimated, data.Analysis.PriceSource)
+}
+
 func TestLiveSDKIdentityAndListingPrices(t *testing.T) {
 	root := os.Getenv("TBTC_TEST_GAME_DATA")
 	if root == "" || os.Getenv("TBTC_TEST_STEAM_MARKET") != "1" {

@@ -180,6 +180,7 @@ type DashboardState struct {
 	SnapshotReadAt      string                       `json:"snapshot_read_at"`
 	MarketScope         string                       `json:"market_scope"`
 	CurrencyCode        string                       `json:"currency_code"`
+	DisplayLanguage     string                       `json:"display_language"`
 	PricePrefix         string                       `json:"price_prefix"`
 	PriceSuffix         string                       `json:"price_suffix"`
 	Gold                uint64                       `json:"gold"`

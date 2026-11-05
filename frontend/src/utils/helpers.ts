@@ -24,11 +24,15 @@ export function formatPrice(
     state?: DashboardState | null,
     item?: DashboardItem
 ): string {
-    if (value === undefined || Number.isNaN(value)) return "N/A";
+    if (value === undefined || !Number.isFinite(value)) return state?.translations?.["value.na"] || "N/A";
     let prefix = state?.price_prefix ?? item?.price_prefix ?? "$";
     let suffix = state?.price_suffix ?? item?.price_suffix ?? "";
     if (prefix === "" && suffix === "") {
         prefix = "$";
+    }
+    if (state?.display_language === "ru-RU") {
+        return prefix + new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            .format(value).replace(/[\u00a0\u202f]/g, " ") + suffix;
     }
     return `${prefix}${value.toFixed(2)}${suffix}`;
 }
@@ -37,18 +41,23 @@ export function formatPricingUpdateText(template: string, completed: number, que
     return template.replace("%d", String(completed)).replace("%d", String(queued));
 }
 
-export function formatPricingEtaText(template: string, seconds: number, currentLanguage: string): string {
-    return template.replace("%s", formatRemainingDuration(seconds, currentLanguage));
+export function formatPricingEtaText(template: string, seconds: number, currentLanguage: string, t?: (key: string, fallback: string) => string): string {
+    return template.replace("%s", formatRemainingDuration(seconds, currentLanguage, t));
 }
 
-export function formatRemainingDuration(seconds: number, currentLanguage: string): string {
+export function formatRemainingDuration(seconds: number, currentLanguage: string, t?: (key: string, fallback: string) => string): string {
     const total = Math.max(1, Math.ceil(seconds));
     const hours = Math.floor(total / 3600);
     const minutes = Math.floor((total % 3600) / 60);
     const remainingSeconds = total % 60;
-    const units = isTurkishLanguage(currentLanguage)
+    const fallbackUnits = isTurkishLanguage(currentLanguage)
         ? { hour: "sa", minute: "dk", second: "sn" }
         : { hour: "h", minute: "m", second: "s" };
+    const units = {
+        hour: t?.("time.hour_short", fallbackUnits.hour) || fallbackUnits.hour,
+        minute: t?.("time.minute_short", fallbackUnits.minute) || fallbackUnits.minute,
+        second: t?.("time.second_short", fallbackUnits.second) || fallbackUnits.second,
+    };
 
     if (hours > 0) {
         return `${hours}${units.hour} ${minutes}${units.minute}`;

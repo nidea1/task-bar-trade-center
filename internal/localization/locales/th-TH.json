@@ -281,5 +281,21 @@
   "value.undervalued": "ราคาต่ำเกินไป",
   "value.units": "หน่วย",
   "value.verified": "ยืนยันแล้ว",
-  "value.wide": "กว้าง"
+  "value.wide": "กว้าง",
+  "dashboard.footer_check_updates": "ตรวจสอบการอัปเดต",
+  "dashboard.inventory_fill": "การใช้พื้นที่ช่องเก็บของ",
+  "dashboard.inventory_fill_free": "ว่าง",
+  "dashboard.inventory_fill_slots_per_hour": "ช่อง/ชม.",
+  "dashboard.region_unavailable": "ไม่พบภูมิภาค",
+  "dashboard.last_sync": "ซิงค์ล่าสุด",
+  "value.today": "วันนี้",
+  "value.tomorrow": "พรุ่งนี้",
+  "time.hour_short": "ชม.",
+  "time.minute_short": "น.",
+  "time.second_short": "วิ.",
+  "dashboard.market_overlay": "โอเวอร์เลย์ตลาด STEAM",
+  "window.minimize": "ย่อหน้าต่าง",
+  "window.close": "ปิด",
+  "hud.buy_short": "ซื้อ",
+  "hud.sell_short": "ขาย"
 }

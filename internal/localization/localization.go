@@ -34,6 +34,7 @@ var SupportedLocales = []Locale{
 	{Code: "pt-BR", Name: "Português (Brasil)"},
 	{Code: "pl-PL", Name: "Polski"},
 	{Code: "tr-TR", Name: "Türkçe"},
+	{Code: "ru-RU", Name: "Русский"},
 }
 
 //go:embed locales/*.json

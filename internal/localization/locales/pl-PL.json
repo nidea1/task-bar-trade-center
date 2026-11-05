@@ -281,5 +281,21 @@
   "value.undervalued": "Niedowartościowany",
   "value.units": "szt.",
   "value.verified": "Zweryfikowany",
-  "value.wide": "Szeroki"
+  "value.wide": "Szeroki",
+  "dashboard.footer_check_updates": "Sprawdź aktualizacje",
+  "dashboard.inventory_fill": "Zapełnienie ekwipunku",
+  "dashboard.inventory_fill_free": "wolne",
+  "dashboard.inventory_fill_slots_per_hour": "miejsca/godz.",
+  "dashboard.region_unavailable": "Region niedostępny",
+  "dashboard.last_sync": "Ostatnia synchronizacja",
+  "value.today": "Dzisiaj",
+  "value.tomorrow": "Jutro",
+  "time.hour_short": "godz.",
+  "time.minute_short": "min",
+  "time.second_short": "s",
+  "dashboard.market_overlay": "NAKŁADKA RYNKU STEAM",
+  "window.minimize": "Minimalizuj",
+  "window.close": "Zamknij",
+  "hud.buy_short": "K",
+  "hud.sell_short": "S"
 }

@@ -46,9 +46,12 @@ The application operates on a hybrid architecture designed for minimal system im
   - **Inventory Warning:** Configurable warning threshold (e.g. alert 5 or 10 minutes before the inventory fills up, or turned off) in Dashboard Settings with repeated-alert suppression. See [notifications](docs/notifications.md).
   - **Item Targets:** Stored quantity goals remain tracked across inventory, material stash, stash, and equipped items, alerting you when milestone amounts are collected. See [notifications](docs/notifications.md).
 - **🌐 Localization:**
-  - Supports 18 languages and regional locales (English, German, French, Italian, Spanish, Dutch, Brazilian Portuguese, European Portuguese, Finnish, Japanese, Korean, Simplified Chinese, Hindi, Indonesian, Thai, Vietnamese, Polish, and Turkish).
+  - Supports 19 languages and regional locales (English, German, French, Italian, Spanish, Dutch, Brazilian Portuguese, European Portuguese, Finnish, Japanese, Korean, Simplified Chinese, Hindi, Indonesian, Thai, Vietnamese, Polish, Turkish, and Russian).
+  - Russian Windows locales resolve to Russian automatically. Language and market currency remain independently selectable and are saved across restarts.
 - **⚙️ Tray Shell Companion:**
   - Compact menu to change languages, currency/country pairings, refresh or clear price cache, and check for updates.
+  - Includes **RUB — Russia** (Steam currency 5, country RU). Russian number formatting applies to all currencies in the dashboard, HUD, and notifications, for example `1 250,00 ₽`.
+  - All 17 currencies share the same conversion and price analysis pipeline. Exchange rates load in one [Frankfurter v2](https://frankfurter.dev/) request on startup, with approximate offline fallback rates. Suggested prices retain the shared historical-price cap and minimum-fee calculation.
 
 ---
 

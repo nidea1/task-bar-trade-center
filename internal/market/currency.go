@@ -33,6 +33,7 @@ var supportedMarketCurrencies = []MarketCurrency{
 	{Code: "CAD", SteamCurrencyID: 20, DefaultCountry: "CA", PricePrefix: "CDN$ "},
 	{Code: "AUD", SteamCurrencyID: 21, DefaultCountry: "AU", PricePrefix: "A$ "},
 	{Code: "CLP", SteamCurrencyID: 25, DefaultCountry: "CL", PricePrefix: "CLP$ "},
+	{Code: "RUB", SteamCurrencyID: 5, DefaultCountry: "RU", PriceSuffix: " ₽"},
 }
 
 var supportedMarketRegions = []MarketRegion{
@@ -62,6 +63,7 @@ var supportedMarketRegions = []MarketRegion{
 	{CountryCode: "CA", Name: "Canada", CurrencyCode: "CAD"},
 	{CountryCode: "AU", Name: "Australia", CurrencyCode: "AUD"},
 	{CountryCode: "CL", Name: "Chile", CurrencyCode: "CLP"},
+	{CountryCode: "RU", Name: "Russia", CurrencyCode: "RUB"},
 }
 
 var marketSelection = struct {
@@ -300,6 +302,7 @@ var fallbackExchangeRates = map[string]float64{
 	"CAD": 1.37,
 	"AUD": 1.50,
 	"CLP": 940.0,
+	"RUB": 80.0,
 }
 
 var (
@@ -322,7 +325,7 @@ func configuredExchangeRate(currencyCode string) (float64, bool) {
 	exchangeRateMu.RLock()
 	rate, exists := exchangeRateCache[currencyCode]
 	exchangeRateMu.RUnlock()
-	if exists && rate > 0 {
+	if exists && rate > 0 && !math.IsNaN(rate) && !math.IsInf(rate, 0) {
 		return rate, true
 	}
 	if fallbackRate, ok := fallbackExchangeRates[currencyCode]; ok && fallbackRate > 0 {
@@ -332,7 +335,8 @@ func configuredExchangeRate(currencyCode string) (float64, bool) {
 }
 
 func setExchangeRate(currencyCode string, rate float64) {
-	if rate <= 0 {
+	currencyCode = strings.ToUpper(strings.TrimSpace(currencyCode))
+	if rate <= 0 || math.IsNaN(rate) || math.IsInf(rate, 0) {
 		return
 	}
 	exchangeRateMu.Lock()
@@ -342,7 +346,7 @@ func setExchangeRate(currencyCode string, rate float64) {
 
 func fetchExchangeRatesFromAPI() {
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get("https://api.frankfurter.dev/v1/latest?base=USD")
+	resp, err := client.Get("https://api.frankfurter.dev/v2/rates?base=USD")
 	if err != nil {
 		fmt.Printf("[CURRENCY] Failed to fetch exchange rates from Frankfurter: %v\n", err)
 		return
@@ -354,18 +358,23 @@ func fetchExchangeRatesFromAPI() {
 		return
 	}
 
-	var data struct {
-		Rates map[string]float64 `json:"rates"`
+	var data []struct {
+		Base  string  `json:"base"`
+		Quote string  `json:"quote"`
+		Rate  float64 `json:"rate"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		fmt.Printf("[CURRENCY] Failed to decode exchange rates: %v\n", err)
 		return
 	}
 
-	exchangeRateMu.Lock()
-	for currency, rate := range data.Rates {
-		exchangeRateCache[currency] = rate
+	updated := 0
+	for _, row := range data {
+		if row.Base != "USD" || row.Quote == "" || row.Rate <= 0 || math.IsNaN(row.Rate) || math.IsInf(row.Rate, 0) {
+			continue
+		}
+		setExchangeRate(row.Quote, row.Rate)
+		updated++
 	}
-	exchangeRateMu.Unlock()
-	fmt.Printf("[CURRENCY] Successfully updated %d exchange rates from Frankfurter\n", len(data.Rates))
+	fmt.Printf("[CURRENCY] Successfully updated %d exchange rates from Frankfurter\n", updated)
 }

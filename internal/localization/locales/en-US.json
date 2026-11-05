@@ -296,5 +296,21 @@
   "dashboard.stash_value_note": "Suggested listing prices. Items without a price are excluded.",
   "value.inactive": "Inactive",
   "value.off": "Off",
-  "value.minutes": "minutes"
+  "value.minutes": "minutes",
+  "dashboard.footer_check_updates": "Check for updates",
+  "dashboard.inventory_fill": "Inventory Fill",
+  "dashboard.inventory_fill_free": "free",
+  "dashboard.inventory_fill_slots_per_hour": "slots/h",
+  "dashboard.region_unavailable": "Region unavailable",
+  "dashboard.last_sync": "Last Sync",
+  "value.today": "Today",
+  "value.tomorrow": "Tomorrow",
+  "time.hour_short": "h",
+  "time.minute_short": "m",
+  "time.second_short": "s",
+  "dashboard.market_overlay": "STEAM MARKET OVERLAY",
+  "window.minimize": "Minimize",
+  "window.close": "Close",
+  "hud.buy_short": "B",
+  "hud.sell_short": "S"
 }

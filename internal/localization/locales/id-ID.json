@@ -281,5 +281,21 @@
   "value.undervalued": "Terlalu murah",
   "value.units": "unit",
   "value.verified": "Terverifikasi",
-  "value.wide": "Lebar"
+  "value.wide": "Lebar",
+  "dashboard.footer_check_updates": "Periksa pembaruan",
+  "dashboard.inventory_fill": "Keterisian inventaris",
+  "dashboard.inventory_fill_free": "kosong",
+  "dashboard.inventory_fill_slots_per_hour": "slot/jam",
+  "dashboard.region_unavailable": "Wilayah tidak tersedia",
+  "dashboard.last_sync": "Sinkronisasi terakhir",
+  "value.today": "Hari ini",
+  "value.tomorrow": "Besok",
+  "time.hour_short": "j",
+  "time.minute_short": "m",
+  "time.second_short": "d",
+  "dashboard.market_overlay": "OVERLAY PASAR STEAM",
+  "window.minimize": "Minimalkan",
+  "window.close": "Tutup",
+  "hud.buy_short": "B",
+  "hud.sell_short": "J"
 }

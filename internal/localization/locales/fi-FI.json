@@ -281,5 +281,21 @@
   "value.undervalued": "Aliarvostettu",
   "value.units": "kpl",
   "value.verified": "Vahvistettu",
-  "value.wide": "Leveä"
+  "value.wide": "Leveä",
+  "dashboard.footer_check_updates": "Tarkista päivitykset",
+  "dashboard.inventory_fill": "Inventaarion täyttö",
+  "dashboard.inventory_fill_free": "vapaana",
+  "dashboard.inventory_fill_slots_per_hour": "paikkaa/h",
+  "dashboard.region_unavailable": "Alue ei ole saatavilla",
+  "dashboard.last_sync": "Viimeisin synkronointi",
+  "value.today": "Tänään",
+  "value.tomorrow": "Huomenna",
+  "time.hour_short": "h",
+  "time.minute_short": "min",
+  "time.second_short": "s",
+  "dashboard.market_overlay": "STEAM-KAUPPAPAIKAN PEITTOKUVA",
+  "window.minimize": "Pienennä",
+  "window.close": "Sulje",
+  "hud.buy_short": "O",
+  "hud.sell_short": "M"
 }

@@ -281,5 +281,21 @@
   "value.undervalued": "Định giá thấp",
   "value.units": "đơn vị",
   "value.verified": "Đã xác minh",
-  "value.wide": "Rộng"
+  "value.wide": "Rộng",
+  "dashboard.footer_check_updates": "Kiểm tra cập nhật",
+  "dashboard.inventory_fill": "Mức đầy túi đồ",
+  "dashboard.inventory_fill_free": "trống",
+  "dashboard.inventory_fill_slots_per_hour": "ô/giờ",
+  "dashboard.region_unavailable": "Không có thông tin khu vực",
+  "dashboard.last_sync": "Đồng bộ lần cuối",
+  "value.today": "Hôm nay",
+  "value.tomorrow": "Ngày mai",
+  "time.hour_short": "g",
+  "time.minute_short": "ph",
+  "time.second_short": "gi",
+  "dashboard.market_overlay": "LỚP PHỦ CHỢ STEAM",
+  "window.minimize": "Thu nhỏ",
+  "window.close": "Đóng",
+  "hud.buy_short": "M",
+  "hud.sell_short": "B"
 }
